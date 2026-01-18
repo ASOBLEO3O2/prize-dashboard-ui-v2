@@ -424,6 +424,25 @@ a{ color:inherit; }
 .legend{
   max-width: 100%;
 }
+/* === Mid cards layout fix === */
+
+/* カード群：3列固定をやめて、自動で詰める */
+.midCards{
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+/* 数字や「円」を改行させない（これが一番効く） */
+.metric .value,
+.kpiValue{
+  white-space: nowrap;
+}
+
+/* カード内の2カラム：狭い時は1カラムに落とす */
+@media (max-width: 900px){
+  .metricGrid{
+    grid-template-columns: 1fr;
+  }
+}
 
 /* legendItemが横に伸びすぎないように */
 .legendItem{
