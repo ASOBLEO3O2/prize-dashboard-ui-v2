@@ -408,3 +408,24 @@ a{ color:inherit; }
 @media (max-width: 560px){
   .midCards{ grid-template-columns: 1fr; }
 }
+/* === Donut panel overflow fix === */
+.donutPanel{
+  overflow: visible;         /* 念のため */
+  align-items: center;
+}
+
+/* 凡例側がちゃんと縮んで折り返す */
+.donutMeta{
+  min-width: 0;              /* flexの“はみ出し”定番対策 */
+  flex: 1 1 auto;
+}
+
+/* 凡例は折り返しで収める */
+.legend{
+  max-width: 100%;
+}
+
+/* legendItemが横に伸びすぎないように */
+.legendItem{
+  max-width: 100%;
+}
