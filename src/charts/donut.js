@@ -1,4 +1,19 @@
-import { el, clear } from "../utils/dom.js";
+// src/charts/donut.js
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svgEl(tag, attrs = {}, text = null) {
+  const n = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null) continue;
+    n.setAttribute(k, String(v));
+  }
+  if (text != null) n.textContent = String(text);
+  return n;
+}
+
+function clear(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
 
 function polarToCartesian(cx, cy, r, angleDeg) {
   const a = (angleDeg - 90) * Math.PI / 180.0;
@@ -26,20 +41,10 @@ function arcPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
 export function renderDonut(container, opts) {
   // opts: { title, values: [{key,label,value,color}], onPick(key|null), pickedKey }
 
-  // ✅ ここが“壊さずに必ず出す”肝
-  // 親のCSSで高さ0 / overflow hidden になっても、ここで描画領域を強制する
-  try {
-    container.style.minWidth = "170px";
-    container.style.minHeight = "170px";
-    container.style.width = container.style.width || "170px";
-    container.style.height = container.style.height || "170px";
-    container.style.display = container.style.display || "flex";
-    container.style.alignItems = container.style.alignItems || "center";
-    container.style.justifyContent = container.style.justifyContent || "center";
-    container.style.overflow = "visible";
-  } catch (_) {
-    // styleが触れない環境でも描画自体は続ける
-  }
+  // 描画領域を“ここだけ”確保（UIを壊さない範囲で最小）
+  container.style.minWidth = "170px";
+  container.style.minHeight = "170px";
+  container.style.overflow = "visible";
 
   clear(container);
 
@@ -49,93 +54,89 @@ export function renderDonut(container, opts) {
   const rOuter = 74;
   const rInner = 48;
 
-  const total = (opts.values || []).reduce((a, b) => a + (Number(b.value) || 0), 0);
+  const values = Array.isArray(opts?.values) ? opts.values : [];
+  const total = values.reduce((a, b) => a + (Number(b?.value) || 0), 0);
 
-  const svg = el("svg", {
-    width: String(size),
-    height: String(size),
+  const svg = svgEl("svg", {
+    width: size,
+    height: size,
     viewBox: `0 0 ${size} ${size}`,
     role: "img",
-    "aria-label": opts.title,
-    style: "display:block; overflow:visible;",
+    "aria-label": opts?.title ?? "",
+    style: "display:block; overflow:visible;"
   });
 
   // 背景リング
-  svg.appendChild(el("circle", {
-    cx: String(cx), cy: String(cy), r: String(rOuter),
+  svg.appendChild(svgEl("circle", {
+    cx, cy, r: rOuter,
     fill: "none",
     stroke: "rgba(34,49,66,.65)",
-    "stroke-width": String(rOuter - rInner),
+    "stroke-width": (rOuter - rInner),
   }));
 
-  // total=0 のときは “空” 表示
   if (!total) {
-    svg.appendChild(el("text", {
-      x: String(cx),
-      y: String(cy + 4),
+    svg.appendChild(svgEl("text", {
+      x: cx,
+      y: cy + 4,
       "text-anchor": "middle",
       fill: "rgba(159,176,194,.95)",
-      "font-size": "12",
-      "font-weight": "800",
-    }, ["データなし"]));
+      "font-size": 12,
+      "font-weight": 800,
+    }, "データなし"));
     container.appendChild(svg);
     return;
   }
 
   let angle = 0;
 
-  for (const seg of opts.values) {
-    const v = Math.max(0, Number(seg.value) || 0);
-    const pct = v / total;
-    const sweep = pct * 360;
+  for (const seg of values) {
+    const v = Math.max(0, Number(seg?.value) || 0);
+    const sweep = (v / total) * 360;
 
-    // 小さいセグメントでも消えないように gap を動的に
-    const dynamicGap = Math.min(2.0, Math.max(0.2, sweep * 0.15)); // 0.2〜2deg
-    const start = angle + dynamicGap / 2;
-    const end   = angle + sweep - dynamicGap / 2;
-
+    // 小さすぎるセグメントでも消えないように調整
+    const gap = Math.min(2.0, Math.max(0.2, sweep * 0.15));
+    const start = angle + gap / 2;
+    const end   = angle + sweep - gap / 2;
     angle += sweep;
 
-    // sweepが極小でも最低限見えるようにする
     const safeEnd = Math.max(end, start + 0.6);
 
-    const path = el("path", {
+    const path = svgEl("path", {
       d: arcPath(cx, cy, rOuter, rInner, start, safeEnd),
-      fill: seg.color || "rgba(160,174,192,.9)",
-      opacity: (opts.pickedKey && opts.pickedKey !== seg.key) ? "0.30" : "0.95",
-      cursor: "pointer",
-      stroke: "rgba(10,15,20_toggle,.65)",
-      "stroke-width": "1",
+      fill: seg?.color || "rgba(160,174,192,.9)",
+      opacity: (opts?.pickedKey && opts.pickedKey !== seg?.key) ? 0.30 : 0.95,
+      stroke: "rgba(10,15,20,.65)",
+      "stroke-width": 1,
+      style: "cursor:pointer;"
     });
 
     path.addEventListener("click", (e) => {
       e.preventDefault();
-      const next = (opts.pickedKey === seg.key) ? null : seg.key;
-      opts.onPick?.(next);
+      const next = (opts?.pickedKey === seg?.key) ? null : seg?.key;
+      opts?.onPick?.(next);
     });
 
     svg.appendChild(path);
   }
 
-  // center label
-  const center = el("g", {});
-  center.appendChild(el("text", {
-    x: String(cx),
-    y: String(cy - 2),
+  // 中央ラベル
+  svg.appendChild(svgEl("text", {
+    x: cx,
+    y: cy - 2,
     "text-anchor": "middle",
     fill: "rgba(232,238,246,.95)",
-    "font-size": "12",
-    "font-weight": "800",
-  }, [opts.title]));
-  center.appendChild(el("text", {
-    x: String(cx),
-    y: String(cy + 16),
+    "font-size": 12,
+    "font-weight": 800,
+  }, opts?.title ?? ""));
+
+  svg.appendChild(svgEl("text", {
+    x: cx,
+    y: cy + 16,
     "text-anchor": "middle",
     fill: "rgba(159,176,194,.95)",
-    "font-size": "11",
-    "font-weight": "700",
-  }, ["クリックで強調"]));
-  svg.appendChild(center);
+    "font-size": 11,
+    "font-weight": 700,
+  }, "クリックで強調"));
 
   container.appendChild(svg);
 }
