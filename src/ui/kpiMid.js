@@ -108,16 +108,18 @@ function legend(values, pickedKey, onPick) {
   for (const seg of values) {
     const dim = (pickedKey && pickedKey !== seg.key);
 
-    const item = el("div", {
-      class: "legendItem",
-      style: dim ? "opacity:.35;" : ""
-    }, [
-    el("span", {
-  　class: "legendSwatch",
-  　style: `background-color:${seg.color || "var(--muted)"} !important;`
-　　　}),
-　　 el("span", { text: seg.label }),
-    ]);
+    // swatch（色の四角）
+    const sw = el("span", { class: "legendSwatch" });
+    // ✅ これが最強：CSSより確実に勝つ
+    sw.style.backgroundColor = seg.color || "var(--muted)";
+
+    const label = el("span", { text: seg.label });
+
+    const item = el(
+      "div",
+      { class: "legendItem", style: dim ? "opacity:.35;" : "" },
+      [sw, label]
+    );
 
     item.addEventListener("click", (e) => {
       e.preventDefault();
@@ -130,6 +132,7 @@ function legend(values, pickedKey, onPick) {
 
   return box;
 }
+
 
 function metric(label, value) {
   return el("div", { class: "metric" }, [
