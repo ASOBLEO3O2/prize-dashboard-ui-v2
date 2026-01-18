@@ -128,6 +128,7 @@ a{ color:inherit; }
   font-size: 24px;
   font-weight: 850;
   letter-spacing: .2px;
+  white-space: nowrap;
 }
 .kpiSub{
   margin-top: 6px;
@@ -170,6 +171,7 @@ a{ color:inherit; }
   align-items: stretch;
   flex-wrap: wrap;
 }
+
 .donuts{
   display:grid;
   gap: 12px;
@@ -226,8 +228,13 @@ a{ color:inherit; }
   opacity:.9;
 }
 
-.midCards{
+/* ✅ mount側：余白だけ担当 */
+.midCardsMount{
   padding: 12px 14px 14px;
+}
+
+/* ✅ 本物のカードグリッド */
+.midCards{
   display:grid;
   gap: 12px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -278,6 +285,7 @@ a{ color:inherit; }
 .metric .value{
   font-weight: 850;
   letter-spacing:.2px;
+  white-space: nowrap;
 }
 
 .genreCard.dim{
@@ -379,7 +387,7 @@ a{ color:inherit; }
   overflow: auto;
   display:flex;
   flex-direction: column;
-  gap:  12px;
+  gap: 12px;
 }
 .drawerCard{
   border: 1px solid var(--border);
@@ -407,44 +415,6 @@ a{ color:inherit; }
 }
 @media (max-width: 560px){
   .midCards{ grid-template-columns: 1fr; }
-}
-/* === Donut panel overflow fix === */
-.donutPanel{
-  overflow: visible;         /* 念のため */
-  align-items: center;
-}
-
-/* 凡例側がちゃんと縮んで折り返す */
-.donutMeta{
-  min-width: 0;              /* flexの“はみ出し”定番対策 */
-  flex: 1 1 auto;
-}
-
-/* 凡例は折り返しで収める */
-.legend{
-  max-width: 100%;
-}
-/* === Mid cards layout fix === */
-
-/* カード群：3列固定をやめて、自動で詰める */
-.midCards{
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-
-/* 数字や「円」を改行させない（これが一番効く） */
-.metric .value,
-.kpiValue{
-  white-space: nowrap;
-}
-
-/* カード内の2カラム：狭い時は1カラムに落とす */
-@media (max-width: 900px){
-  .metricGrid{
-    grid-template-columns: 1fr;
-  }
-}
-
-/* legendItemが横に伸びすぎないように */
-.legendItem{
-  max-width: 100%;
+  .donuts{ grid-template-columns: 1fr; }
+  .metricGrid{ grid-template-columns: 1fr; }
 }
