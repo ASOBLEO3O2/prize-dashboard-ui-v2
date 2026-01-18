@@ -1,3 +1,4 @@
+
 // src/charts/donut.js
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -39,13 +40,6 @@ function arcPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
 }
 
 export function renderDonut(container, opts) {
-  // opts: { title, values: [{key,label,value,color}], onPick(key|null), pickedKey }
-
-  // 描画領域を“ここだけ”確保（UIを壊さない範囲で最小）
-  container.style.minWidth = "170px";
-  container.style.minHeight = "170px";
-  container.style.overflow = "visible";
-
   clear(container);
 
   const size = 170;
@@ -93,7 +87,7 @@ export function renderDonut(container, opts) {
     const v = Math.max(0, Number(seg?.value) || 0);
     const sweep = (v / total) * 360;
 
-    // 小さすぎるセグメントでも消えないように調整
+    // 小さすぎるセグメントでも消えない
     const gap = Math.min(2.0, Math.max(0.2, sweep * 0.15));
     const start = angle + gap / 2;
     const end   = angle + sweep - gap / 2;
