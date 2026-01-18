@@ -1,4 +1,3 @@
-
 // src/ui/kpiMid.js
 import { el, clear } from "../utils/dom.js";
 import { fmtYen, fmtPct } from "../utils/format.js";
@@ -9,9 +8,8 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
   // ===== Donuts =====
   clear(donutsMount);
 
-  const donuts = el("div", { class: "donuts" });
+  const donuts = el("div", { class: "donuts", style: "width:100%;" });
 
-  // 売上構成比（%）
   donuts.appendChild(donutPanel({
     title: "売上構成比",
     note: "ジャンル別（%）",
@@ -25,7 +23,6 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
     onPick: actions.onPickGenre,
   }));
 
-  // マシン構成比（%）
   donuts.appendChild(donutPanel({
     title: "マシン構成比",
     note: "ジャンル別（%）",
@@ -44,7 +41,17 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
   // ===== Cards =====
   clear(cardsMount);
 
-  const grid = el("div", { class: "midCards" });
+  // ✅ 親がflexでも縮まないように「幅100%」「flex-basis 100%」を直書き
+  const grid = el("div", {
+    class: "midCards",
+    style: [
+      "width:100%",
+      "flex:1 1 100%",
+      "align-content:start",
+      // ✅ 3列固定ではなく、横幅に応じて自動で並べる
+      "grid-template-columns:repeat(auto-fit, minmax(260px, 1fr))"
+    ].join(";")
+  });
 
   for (const g of GENRES) {
     const d = state.byGenre?.[g.key] || {};
@@ -54,7 +61,9 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
     const isOpen = (state.openDetailGenre === g.key);
 
     const card = el("div", {
-      class: `card genreCard ${isDim ? "dim" : ""} ${isFocus ? "focus" : ""} ${isOpen ? "open" : ""}`
+      class: `card genreCard ${isDim ? "dim" : ""} ${isFocus ? "focus" : ""} ${isOpen ? "open" : ""}`,
+      // ✅ カード自体も潰れない最小幅を保証
+      style: "min-width:260px;"
     });
 
     card.addEventListener("click", () => actions.onToggleDetail(g.key));
@@ -64,7 +73,11 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
       el("div", { class: "smallMeta", text: "クリックで詳細" }),
     ]));
 
-    const mg = el("div", { class: "metricGrid" }, [
+    const mg = el("div", {
+      class: "metricGrid",
+      // ✅ 狭い時は1列になるように（JS側で確実化）
+      style: "grid-template-columns:1fr 1fr;"
+    }, [
       metric("台数", `${d.machines ?? 0}台`),
       metric("売上", fmtYen(d.sales ?? 0)),
       metric("消化額", fmtYen(d.consume ?? 0)),
@@ -83,7 +96,6 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
 function donutPanel({ title, note, values, pickedKey, onPick }) {
   const panel = el("div", { class: "donutPanel" });
 
-  // ✅ ドーナツ描画領域（CSSをいじらず、ここだけ最小限確保）
   const host = el("div", {
     style: "width:170px;height:170px;flex:0 0 170px;display:flex;align-items:center;justify-content:center;overflow:visible;"
   });
@@ -104,16 +116,13 @@ function donutPanel({ title, note, values, pickedKey, onPick }) {
 
 function legend(values, pickedKey, onPick) {
   const box = el("div", { class: "legend" });
-
-  // donut.js と同じ fallback（色が無い場合でも必ず識別できる）
   const fallback = ["#6dd3fb", "#7ee081", "#f2c14e", "#b28dff", "#ff6b6b"];
 
   values.forEach((seg, idx) => {
     const dim = (pickedKey && pickedKey !== seg.key);
 
     const sw = el("span", { class: "legendSwatch" });
-    const color = seg.color || fallback[idx % fallback.length];
-    sw.style.backgroundColor = color; // ✅ これで必ず色が出る
+    sw.style.backgroundColor = seg.color || fallback[idx % fallback.length];
 
     const label = el("span", { text: seg.label });
 
@@ -134,10 +143,10 @@ function legend(values, pickedKey, onPick) {
   return box;
 }
 
-
 function metric(label, value) {
   return el("div", { class: "metric" }, [
     el("div", { class: "label", text: label }),
-    el("div", { class: "value", text: value }),
+    // ✅ 「2,010,800円」が絶対に改行されないように直書き
+    el("div", { class: "value", text: value, style: "white-space:nowrap;" }),
   ]);
 }
