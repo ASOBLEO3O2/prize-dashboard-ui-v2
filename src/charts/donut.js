@@ -11,7 +11,8 @@ function arcPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
   const startInner = polarToCartesian(cx, cy, rInner, startAngle);
   const endInner   = polarToCartesian(cx, cy, rInner, endAngle);
 
-  const largeArc = (endAngle - startAngle) <= 180 ? "0" : "1";
+  const sweep = endAngle - startAngle;
+  const largeArc = sweep <= 180 ? "0" : "1";
 
   return [
     `M ${startOuter.x} ${startOuter.y}`,
@@ -32,7 +33,7 @@ export function renderDonut(container, opts) {
   const rOuter = 74;
   const rInner = 48;
 
-  const total = opts.values.reduce((a, b) => a + (b.value || 0), 0) || 1;
+  const total = opts.values.reduce((a, b) => a + (Number(b.value) || 0), 0);
 
   const svg = el("svg", {
     width: String(size),
@@ -40,36 +41,59 @@ export function renderDonut(container, opts) {
     viewBox: `0 0 ${size} ${size}`,
     role: "img",
     "aria-label": opts.title,
+    style: "display:block; overflow:visible;"
   });
 
-  // background ring
-  const bg = el("circle", {
+  // 背景リング
+  svg.appendChild(el("circle", {
     cx: String(cx), cy: String(cy), r: String(rOuter),
     fill: "none",
     stroke: "rgba(34,49,66,.65)",
     "stroke-width": String(rOuter - rInner),
-  });
-  svg.appendChild(bg);
+  }));
+
+  // total=0 のときは “空” 表示（描画が消えないようにする）
+  if (!total) {
+    // center label
+    svg.appendChild(el("text", {
+      x: String(cx),
+      y: String(cy + 4),
+      "text-anchor": "middle",
+      fill: "rgba(159,176,194,.95)",
+      "font-size": "12",
+      "font-weight": "800",
+    }, ["データなし"]));
+    container.appendChild(svg);
+    return;
+  }
 
   let angle = 0;
-  const gap = 1.2; // degrees
-  for (const seg of opts.values) {
-    const v = Math.max(0, seg.value || 0);
-    const pct = v / total;
-    const sweep = Math.max(0.001, pct * 360);
 
-    const start = angle + gap / 2;
-    const end   = angle + sweep - gap / 2;
+  for (const seg of opts.values) {
+    const v = Math.max(0, Number(seg.value) || 0);
+    const pct = v / total;
+    const sweep = pct * 360;
+
+    // 小さすぎるセグメントで gap が勝って消える問題を根絶
+    const dynamicGap = Math.min(2.0, Math.max(0.2, sweep * 0.15)); // sweepに応じて0.2〜2deg
+    const start = angle + dynamicGap / 2;
+    const end   = angle + sweep - dynamicGap / 2;
 
     angle += sweep;
 
-    if (end <= start) continue;
+    // sweepが極小でも最低限見えるようにする
+    const safeStart = start;
+    const safeEnd = Math.max(end, start + 0.6); // 最低0.6deg
 
     const path = el("path", {
-      d: arcPath(cx, cy, rOuter, rInner, start, end),
+      d: arcPath(cx, cy, rOuter, rInner, safeStart, safeEnd),
       fill: seg.color || "rgba(160,174,192,.9)",
-      opacity: (opts.pickedKey && opts.pickedKey !== seg.key) ? "0.35" : "0.95",
+      // “pickedKey がある時は薄く” を維持
+      opacity: (opts.pickedKey && opts.pickedKey !== seg.key) ? "0.30" : "0.95",
       cursor: "pointer",
+      // 視認性を強制（背景に溶けるケース対策）
+      stroke: "rgba(10,15,20,.65)",
+      "stroke-width": "1",
     });
 
     path.addEventListener("click", (e) => {
