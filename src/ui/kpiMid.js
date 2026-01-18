@@ -105,21 +105,22 @@ function donutPanel({ title, note, values, pickedKey, onPick }) {
 function legend(values, pickedKey, onPick) {
   const box = el("div", { class: "legend" });
 
-  for (const seg of values) {
+  // donut.js と同じ fallback（色が無い場合でも必ず識別できる）
+  const fallback = ["#6dd3fb", "#7ee081", "#f2c14e", "#b28dff", "#ff6b6b"];
+
+  values.forEach((seg, idx) => {
     const dim = (pickedKey && pickedKey !== seg.key);
 
-    // swatch（色の四角）
     const sw = el("span", { class: "legendSwatch" });
-    // ✅ これが最強：CSSより確実に勝つ
-    sw.style.backgroundColor = seg.color || "var(--muted)";
+    const color = seg.color || fallback[idx % fallback.length];
+    sw.style.backgroundColor = color; // ✅ これで必ず色が出る
 
     const label = el("span", { text: seg.label });
 
-    const item = el(
-      "div",
-      { class: "legendItem", style: dim ? "opacity:.35;" : "" },
-      [sw, label]
-    );
+    const item = el("div", {
+      class: "legendItem",
+      style: dim ? "opacity:.35;" : ""
+    }, [sw, label]);
 
     item.addEventListener("click", (e) => {
       e.preventDefault();
@@ -128,7 +129,7 @@ function legend(values, pickedKey, onPick) {
     });
 
     box.appendChild(item);
-  }
+  });
 
   return box;
 }
