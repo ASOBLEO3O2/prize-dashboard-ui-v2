@@ -1,4 +1,3 @@
-
 // src/charts/donut.js
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -27,7 +26,7 @@ function arcPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
   const startInner = polarToCartesian(cx, cy, rInner, startAngle);
   const endInner   = polarToCartesian(cx, cy, rInner, endAngle);
 
-  const sweep = endAngle - startAngle;
+  const sweep = Math.max(0.0001, endAngle - startAngle);
   const largeArc = sweep <= 180 ? "0" : "1";
 
   return [
@@ -37,6 +36,17 @@ function arcPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
     `A ${rInner} ${rInner} 0 ${largeArc} 1 ${endInner.x} ${endInner.y}`,
     "Z"
   ].join(" ");
+}
+
+// valueが [0..1] でも [0..100]（%）でも対応
+function normalizeValues(values) {
+  const raw = values.map(v => Math.max(0, Number(v?.value) || 0));
+  const sum = raw.reduce((a, b) => a + b, 0);
+
+  // もし合計が 1.5 を超えるなら「% or 実数」扱いでそのまま
+  // もし合計が 1.5 以下なら「比率」扱い（そのままでもOK）
+  // => 結局 total は sum で良いが、ここは “全部0に見える”事故を避けるための保険
+  return { raw, total: sum };
 }
 
 export function renderDonut(container, opts) {
@@ -49,7 +59,7 @@ export function renderDonut(container, opts) {
   const rInner = 48;
 
   const values = Array.isArray(opts?.values) ? opts.values : [];
-  const total = values.reduce((a, b) => a + (Number(b?.value) || 0), 0);
+  const { raw, total } = normalizeValues(values);
 
   const svg = svgEl("svg", {
     width: size,
@@ -68,7 +78,7 @@ export function renderDonut(container, opts) {
     "stroke-width": (rOuter - rInner),
   }));
 
-  if (!total) {
+  if (!total || !isFinite(total)) {
     svg.appendChild(svgEl("text", {
       x: cx,
       y: cy + 4,
@@ -81,23 +91,56 @@ export function renderDonut(container, opts) {
     return;
   }
 
+  // セグメント色のフォールバック（seg.colorが無い場合）
+  const fallback = ["#6dd3fb", "#7ee081", "#f2c14e", "#b28dff", "#ff6b6b"];
+
+  // 極小でも見える最小角（度）
+  const MIN_ANGLE = 2.0;
+
+  // gap（隙間）は小さめ
+  const GAP = 1.2;
+
+  // 角度配分を一旦作る（MIN_ANGLE適用）
+  const angles = raw.map(v => (v / total) * 360);
+  const nonZeroIdx = angles.map((a, i) => a > 0 ? i : -1).filter(i => i >= 0);
+
+  // MIN_ANGLE以下を底上げして、総角度を360に再調整
+  let boosted = angles.slice();
+  let need = 0;
+  for (const i of nonZeroIdx) {
+    if (boosted[i] < MIN_ANGLE) {
+      need += (MIN_ANGLE - boosted[i]);
+      boosted[i] = MIN_ANGLE;
+    }
+  }
+  if (need > 0) {
+    // 底上げ分を他から比例配分で引く
+    const bigIdx = nonZeroIdx.filter(i => boosted[i] > MIN_ANGLE);
+    const bigSum = bigIdx.reduce((a, i) => a + (boosted[i] - MIN_ANGLE), 0);
+    if (bigSum > 0) {
+      for (const i of bigIdx) {
+        const take = need * ((boosted[i] - MIN_ANGLE) / bigSum);
+        boosted[i] = Math.max(MIN_ANGLE, boosted[i] - take);
+      }
+    }
+  }
+
   let angle = 0;
 
-  for (const seg of values) {
-    const v = Math.max(0, Number(seg?.value) || 0);
-    const sweep = (v / total) * 360;
+  for (let idx = 0; idx < values.length; idx++) {
+    const seg = values[idx];
+    const sweep = boosted[idx];
+    if (!sweep || sweep <= 0) continue;
 
-    // 小さすぎるセグメントでも消えない
-    const gap = Math.min(2.0, Math.max(0.2, sweep * 0.15));
-    const start = angle + gap / 2;
-    const end   = angle + sweep - gap / 2;
+    const start = angle + GAP / 2;
+    const end = angle + sweep - GAP / 2;
     angle += sweep;
 
     const safeEnd = Math.max(end, start + 0.6);
 
     const path = svgEl("path", {
       d: arcPath(cx, cy, rOuter, rInner, start, safeEnd),
-      fill: seg?.color || "rgba(160,174,192,.9)",
+      fill: seg?.color || fallback[idx % fallback.length],
       opacity: (opts?.pickedKey && opts.pickedKey !== seg?.key) ? 0.30 : 0.95,
       stroke: "rgba(10,15,20,.65)",
       "stroke-width": 1,
