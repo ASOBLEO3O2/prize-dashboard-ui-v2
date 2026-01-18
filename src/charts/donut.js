@@ -25,6 +25,22 @@ function arcPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
 
 export function renderDonut(container, opts) {
   // opts: { title, values: [{key,label,value,color}], onPick(key|null), pickedKey }
+
+  // ✅ ここが“壊さずに必ず出す”肝
+  // 親のCSSで高さ0 / overflow hidden になっても、ここで描画領域を強制する
+  try {
+    container.style.minWidth = "170px";
+    container.style.minHeight = "170px";
+    container.style.width = container.style.width || "170px";
+    container.style.height = container.style.height || "170px";
+    container.style.display = container.style.display || "flex";
+    container.style.alignItems = container.style.alignItems || "center";
+    container.style.justifyContent = container.style.justifyContent || "center";
+    container.style.overflow = "visible";
+  } catch (_) {
+    // styleが触れない環境でも描画自体は続ける
+  }
+
   clear(container);
 
   const size = 170;
@@ -33,7 +49,7 @@ export function renderDonut(container, opts) {
   const rOuter = 74;
   const rInner = 48;
 
-  const total = opts.values.reduce((a, b) => a + (Number(b.value) || 0), 0);
+  const total = (opts.values || []).reduce((a, b) => a + (Number(b.value) || 0), 0);
 
   const svg = el("svg", {
     width: String(size),
@@ -41,7 +57,7 @@ export function renderDonut(container, opts) {
     viewBox: `0 0 ${size} ${size}`,
     role: "img",
     "aria-label": opts.title,
-    style: "display:block; overflow:visible;"
+    style: "display:block; overflow:visible;",
   });
 
   // 背景リング
@@ -52,9 +68,8 @@ export function renderDonut(container, opts) {
     "stroke-width": String(rOuter - rInner),
   }));
 
-  // total=0 のときは “空” 表示（描画が消えないようにする）
+  // total=0 のときは “空” 表示
   if (!total) {
-    // center label
     svg.appendChild(el("text", {
       x: String(cx),
       y: String(cy + 4),
@@ -74,25 +89,22 @@ export function renderDonut(container, opts) {
     const pct = v / total;
     const sweep = pct * 360;
 
-    // 小さすぎるセグメントで gap が勝って消える問題を根絶
-    const dynamicGap = Math.min(2.0, Math.max(0.2, sweep * 0.15)); // sweepに応じて0.2〜2deg
+    // 小さいセグメントでも消えないように gap を動的に
+    const dynamicGap = Math.min(2.0, Math.max(0.2, sweep * 0.15)); // 0.2〜2deg
     const start = angle + dynamicGap / 2;
     const end   = angle + sweep - dynamicGap / 2;
 
     angle += sweep;
 
     // sweepが極小でも最低限見えるようにする
-    const safeStart = start;
-    const safeEnd = Math.max(end, start + 0.6); // 最低0.6deg
+    const safeEnd = Math.max(end, start + 0.6);
 
     const path = el("path", {
-      d: arcPath(cx, cy, rOuter, rInner, safeStart, safeEnd),
+      d: arcPath(cx, cy, rOuter, rInner, start, safeEnd),
       fill: seg.color || "rgba(160,174,192,.9)",
-      // “pickedKey がある時は薄く” を維持
       opacity: (opts.pickedKey && opts.pickedKey !== seg.key) ? "0.30" : "0.95",
       cursor: "pointer",
-      // 視認性を強制（背景に溶けるケース対策）
-      stroke: "rgba(10,15,20,.65)",
+      stroke: "rgba(10,15,20_toggle,.65)",
       "stroke-width": "1",
     });
 
