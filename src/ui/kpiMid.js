@@ -8,8 +8,9 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
   // ===== Donuts =====
   clear(donutsMount);
 
-  const donuts = el("div", { class: "donuts", style: "width:100%;" });
+  const donuts = el("div", { class: "donuts" });
 
+  // 売上構成比（%）
   donuts.appendChild(donutPanel({
     title: "売上構成比",
     note: "ジャンル別（%）",
@@ -23,6 +24,7 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
     onPick: actions.onPickGenre,
   }));
 
+  // マシン構成比（%）
   donuts.appendChild(donutPanel({
     title: "マシン構成比",
     note: "ジャンル別（%）",
@@ -41,17 +43,9 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
   // ===== Cards =====
   clear(cardsMount);
 
-  // ✅ 親がflexでも縮まないように「幅100%」「flex-basis 100%」を直書き
-  const grid = el("div", {
-    class: "midCards",
-    style: [
-      "width:100%",
-      "flex:1 1 100%",
-      "align-content:start",
-      // ✅ 3列固定ではなく、横幅に応じて自動で並べる
-      "grid-template-columns:repeat(auto-fit, minmax(260px, 1fr))"
-    ].join(";")
-  });
+  // ✅ cardsMountは「midCardsMount」(layout.js) になった前提
+  // ここで本物の grid を作る
+  const grid = el("div", { class: "midCards" });
 
   for (const g of GENRES) {
     const d = state.byGenre?.[g.key] || {};
@@ -61,9 +55,7 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
     const isOpen = (state.openDetailGenre === g.key);
 
     const card = el("div", {
-      class: `card genreCard ${isDim ? "dim" : ""} ${isFocus ? "focus" : ""} ${isOpen ? "open" : ""}`,
-      // ✅ カード自体も潰れない最小幅を保証
-      style: "min-width:260px;"
+      class: `card genreCard ${isDim ? "dim" : ""} ${isFocus ? "focus" : ""} ${isOpen ? "open" : ""}`
     });
 
     card.addEventListener("click", () => actions.onToggleDetail(g.key));
@@ -73,11 +65,7 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
       el("div", { class: "smallMeta", text: "クリックで詳細" }),
     ]));
 
-    const mg = el("div", {
-      class: "metricGrid",
-      // ✅ 狭い時は1列になるように（JS側で確実化）
-      style: "grid-template-columns:1fr 1fr;"
-    }, [
+    const mg = el("div", { class: "metricGrid" }, [
       metric("台数", `${d.machines ?? 0}台`),
       metric("売上", fmtYen(d.sales ?? 0)),
       metric("消化額", fmtYen(d.consume ?? 0)),
@@ -96,6 +84,7 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
 function donutPanel({ title, note, values, pickedKey, onPick }) {
   const panel = el("div", { class: "donutPanel" });
 
+  // ドーナツ描画領域（固定）
   const host = el("div", {
     style: "width:170px;height:170px;flex:0 0 170px;display:flex;align-items:center;justify-content:center;overflow:visible;"
   });
@@ -146,7 +135,6 @@ function legend(values, pickedKey, onPick) {
 function metric(label, value) {
   return el("div", { class: "metric" }, [
     el("div", { class: "label", text: label }),
-    // ✅ 「2,010,800円」が絶対に改行されないように直書き
     el("div", { class: "value", text: value, style: "white-space:nowrap;" }),
   ]);
 }
