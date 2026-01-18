@@ -112,11 +112,11 @@ function legend(values, pickedKey, onPick) {
       class: "legendItem",
       style: dim ? "opacity:.35;" : ""
     }, [
-      el("span", {
-        class: "legendSwatch",
-        style: `background:${seg.color || "var(--muted)"};`
-      }),
-      el("span", { text: seg.label }),
+    el("span", {
+  　class: "legendSwatch",
+  　style: `background-color:${seg.color || "var(--muted)"} !important;`
+　　　}),
+　　 el("span", { text: seg.label }),
     ]);
 
     item.addEventListener("click", (e) => {
