@@ -25,7 +25,8 @@ export function mountLayout(root, actions) {
       el("div", { class: "midTop" }, [
         el("div", { class: "donuts", id: "donutsArea" }),
       ]),
-      el("div", { class: "midCards", id: "midCards" }),
+      // ✅ ここがポイント：gridにしない「マウント専用」
+      el("div", { class: "midCardsMount", id: "midCards" }),
     ]),
     el("div", { id: "detailMount" }),
   ]);
