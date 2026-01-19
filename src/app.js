@@ -5,6 +5,7 @@ import { renderTopKpi } from "./ui/kpiTop.js";
 import { renderMidKpi } from "./ui/kpiMid.js";
 import { renderDetail } from "./ui/detail.js";
 import { renderDrawer } from "./ui/drawer.js";
+import { buildByAxis } from "./logic/byAxis.js";
 
 import { MOCK } from "./constants.js";
 import { fmtDate } from "./utils/format.js";
@@ -20,6 +21,13 @@ const initialState = {
   byGenre: structuredClone(MOCK.byGenre),
   details: structuredClone(MOCK.details),
 
+ // ✅ 追加：軸KPI（③の土台）
+  byAxis: {},          // ← buildByAxis(filtered) を入れる
+  midAxis: "ジャンル",  // ← ドロワー未着手なので固定でもOK（後で切替）
+  midSortKey: "sales",
+  midSortDir: "desc",
+  midExpandedParentKey: null,
+  
   // filters (Step Cで本実装)
   filters: {},
 
@@ -46,6 +54,11 @@ const actions = {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
 
+ // ✅ 追加：再描画（stateを変えないと再描画されない実装の場合に備える）
+  requestRender: () => {
+    store.set((s) => ({ ...s }));
+  },
+  
   // 詳細の開閉
   onToggleDetail: (genre) => {
     store.set((s) => {
@@ -113,6 +126,8 @@ async function hydrateFromRaw() {
   const filtered = applyFilters(rows, st.filters);
 
   const vm = buildViewModel(filtered, summary);
+  const axis = buildByAxis(filtered);
+
 
   store.set((s) => ({
     ...s,
@@ -120,6 +135,8 @@ async function hydrateFromRaw() {
     topKpi: vm.topKpi,
     byGenre: vm.byGenre,
     details: vm.details,
+    // ✅ 追加
+    byAxis: axis,
     filters: vm.filters ?? s.filters,
     loadError: null,
     // focusGenre / openDetailGenre / detailSort は維持（ユーザー操作を壊さない）
