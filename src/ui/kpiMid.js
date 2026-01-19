@@ -171,3 +171,35 @@ function metric(label, value) {
     el("div", { class: "value", text: value, style: "white-space:nowrap;" }),
   ]);
 }
+
+function buildGenreParents_(state) {
+  // 親：GENRES（既存）
+  // 子：state.byGenreChildren?.[genreKey] があればカード内展開する
+  return GENRES.map(g => {
+    const d = state.byGenre?.[g.key] || {};
+    const children = state.byGenreChildren?.[g.key] || null; // 任意
+
+    return {
+      key: g.key,
+      label: g.label,
+      machines: d.machines ?? 0,
+      sales: d.sales ?? 0,
+      consume: d.consume ?? 0,
+      costRate: d.costRate ?? 0,
+      children: Array.isArray(children) ? children : null,
+    };
+  });
+}
+
+function sortItems_(items, key, dir) {
+  const k = key;
+  const sign = (dir === "asc") ? 1 : -1;
+
+  return [...items].sort((a, b) => {
+    const av = Number(a?.[k]) || 0;
+    const bv = Number(b?.[k]) || 0;
+    if (av === bv) return 0;
+    return (av < bv ? -1 : 1) * sign;
+  });
+}
+
