@@ -45,12 +45,12 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
 
   const grid = el("div", { class: "midCards" });
 
-  // いまは「ジャンル」だけ既存stateから作れる（将来: axis切替でも使える形）
+  // 親（いまはジャンル固定：後で軸切替に対応してもこの形が流用できます）
   const parents = buildGenreParents_(state);
 
   // 並び替え（ドロワー側で state.midSortKey / midSortDir を更新する想定）
-  const sortKey = state.midSortKey || "sales";     // "sales" | "consume" | "costRate" | "machines"
-  const sortDir = state.midSortDir || "desc";      // "asc" | "desc"
+  const sortKey = state.midSortKey || "sales"; // "sales" | "consume" | "costRate" | "machines"
+  const sortDir = state.midSortDir || "desc"; // "asc" | "desc"
   const sortedParents = sortItems_(parents, sortKey, sortDir);
 
   for (const p of sortedParents) {
@@ -73,15 +73,16 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
       el("div", { style: "display:flex; gap:8px; align-items:center;" }, [
         el("div", { class: "smallMeta", text: "クリックで詳細" }),
 
-        // ✅ 掘り下げ（カード内展開）は右端のボタンで
+        // ✅ 掘り下げ（カード内展開）
         hasChildren ? el("button", {
           class: "btn ghost",
           text: isExpanded ? "▾" : "▸",
           onClick: (e) => {
-            e.stopPropagation(); // カードクリック（詳細開く）を止める
+            e.stopPropagation(); // 詳細開くクリックを止める
             state.midExpandedParentKey = isExpanded ? null : p.key; // 1つだけ展開
-            actions.requestRender?.(); // あれば（無ければ下の行でOK）
-            // actions.onRefreshMid?.(); // こういう再描画フックがあるならそれでもOK
+            // 再描画：この関数が親から呼ばれている前提で、呼び出し元が再描画するなら不要
+            // 最低限ここでは何もしない（状態だけ変える）
+            actions.requestRender?.();
           }
         }) : null,
       ])
@@ -97,7 +98,7 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
 
     // ✅ 子のカード（カード内展開）
     if (hasChildren && isExpanded) {
-      let children = sortItems_(p.children, sortKey, sortDir);
+      const children = sortItems_(p.children, sortKey, sortDir);
 
       card.appendChild(el("div", { class: "childWrap" }, [
         el("div", { class: "childGrid" },
@@ -112,12 +113,17 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
           ]))
         )
       ]));
+    }
 
+    grid.appendChild(card);
+  }
+
+  cardsMount.appendChild(grid);
+}
 
 function donutPanel({ title, note, values, pickedKey, onPick }) {
   const panel = el("div", { class: "donutPanel" });
 
-  // ドーナツ描画領域（固定）
   const host = el("div", {
     style: "width:170px;height:170px;flex:0 0 170px;display:flex;align-items:center;justify-content:center;overflow:visible;"
   });
@@ -174,10 +180,10 @@ function metric(label, value) {
 
 function buildGenreParents_(state) {
   // 親：GENRES（既存）
-  // 子：state.byGenreChildren?.[genreKey] があればカード内展開する
+  // 子：state.byGenreChildren?.[genreKey] があればカード内展開する（未実装ならnullでOK）
   return GENRES.map(g => {
     const d = state.byGenre?.[g.key] || {};
-    const children = state.byGenreChildren?.[g.key] || null; // 任意
+    const children = state.byGenreChildren?.[g.key] || null;
 
     return {
       key: g.key,
@@ -202,4 +208,3 @@ function sortItems_(items, key, dir) {
     return (av < bv ? -1 : 1) * sign;
   });
 }
-
