@@ -43,43 +43,76 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
   // ===== Cards =====
   clear(cardsMount);
 
-  // ✅ cardsMountは「midCardsMount」(layout.js) になった前提
-  // ここで本物の grid を作る
   const grid = el("div", { class: "midCards" });
 
-  for (const g of GENRES) {
-    const d = state.byGenre?.[g.key] || {};
+  // いまは「ジャンル」だけ既存stateから作れる（将来: axis切替でも使える形）
+  const parents = buildGenreParents_(state);
 
-    const isDim = (state.focusGenre && state.focusGenre !== g.key);
-    const isFocus = (state.focusGenre === g.key);
-    const isOpen = (state.openDetailGenre === g.key);
+  // 並び替え（ドロワー側で state.midSortKey / midSortDir を更新する想定）
+  const sortKey = state.midSortKey || "sales";     // "sales" | "consume" | "costRate" | "machines"
+  const sortDir = state.midSortDir || "desc";      // "asc" | "desc"
+  const sortedParents = sortItems_(parents, sortKey, sortDir);
+
+  for (const p of sortedParents) {
+    const isDim = (state.focusGenre && state.focusGenre !== p.key);
+    const isFocus = (state.focusGenre === p.key);
+    const isOpenDetail = (state.openDetailGenre === p.key);
+
+    const isExpanded = (state.midExpandedParentKey === p.key);
+    const hasChildren = Array.isArray(p.children) && p.children.length > 0;
 
     const card = el("div", {
-      class: `card genreCard ${isDim ? "dim" : ""} ${isFocus ? "focus" : ""} ${isOpen ? "open" : ""}`
+      class: `card genreCard ${isDim ? "dim" : ""} ${isFocus ? "focus" : ""} ${isOpenDetail ? "open" : ""}`
     });
 
-    card.addEventListener("click", () => actions.onToggleDetail(g.key));
+    // 既存仕様：カードクリックは詳細（テーブル）を開く
+    card.addEventListener("click", () => actions.onToggleDetail(p.key));
 
     card.appendChild(el("div", { class: "genreCardHeader" }, [
-      el("div", { class: "genreName", text: g.label }),
-      el("div", { class: "smallMeta", text: "クリックで詳細" }),
+      el("div", { class: "genreName", text: p.label }),
+      el("div", { style: "display:flex; gap:8px; align-items:center;" }, [
+        el("div", { class: "smallMeta", text: "クリックで詳細" }),
+
+        // ✅ 掘り下げ（カード内展開）は右端のボタンで
+        hasChildren ? el("button", {
+          class: "btn ghost",
+          text: isExpanded ? "▾" : "▸",
+          onClick: (e) => {
+            e.stopPropagation(); // カードクリック（詳細開く）を止める
+            state.midExpandedParentKey = isExpanded ? null : p.key; // 1つだけ展開
+            actions.requestRender?.(); // あれば（無ければ下の行でOK）
+            // actions.onRefreshMid?.(); // こういう再描画フックがあるならそれでもOK
+          }
+        }) : null,
+      ])
     ]));
 
-    const mg = el("div", { class: "metricGrid" }, [
-      metric("台数", `${d.machines ?? 0}台`),
-      metric("売上", fmtYen(d.sales ?? 0)),
-      metric("消化額", fmtYen(d.consume ?? 0)),
-      metric("原価率", fmtPct(d.costRate ?? 0, 1)),
-      metric("売上構成比", fmtPct(d.salesShare ?? 0, 1)),
-      metric("マシン構成比", fmtPct(d.machineShare ?? 0, 1)),
-    ]);
+    // 親のKPI
+    card.appendChild(el("div", { class: "metricGrid" }, [
+      metric("台数", `${p.machines ?? 0}台`),
+      metric("売上", fmtYen(p.sales ?? 0)),
+      metric("消化額", fmtYen(p.consume ?? 0)),
+      metric("原価率", fmtPct(p.costRate ?? 0, 1)),
+    ]));
 
-    card.appendChild(mg);
-    grid.appendChild(card);
-  }
+    // ✅ 子のカード（カード内展開）
+    if (hasChildren && isExpanded) {
+      let children = sortItems_(p.children, sortKey, sortDir);
 
-  cardsMount.appendChild(grid);
-}
+      card.appendChild(el("div", { class: "childWrap" }, [
+        el("div", { class: "childGrid" },
+          children.map(ch => el("div", { class: "childCard" }, [
+            el("div", { class: "childTitle", text: ch.label }),
+            el("div", { class: "childMeta" }, [
+              el("div", { text: `台数 ${ch.machines ?? 0}台` }),
+              el("div", { text: `売上 ${fmtYen(ch.sales ?? 0)}` }),
+              el("div", { text: `消化額 ${fmtYen(ch.consume ?? 0)}` }),
+              el("div", { text: `原価率 ${fmtPct(ch.costRate ?? 0, 1)}` }),
+            ])
+          ]))
+        )
+      ]));
+
 
 function donutPanel({ title, note, values, pickedKey, onPick }) {
   const panel = el("div", { class: "donutPanel" });
