@@ -20,6 +20,7 @@ const initialState = {
   topKpi: structuredClone(MOCK.topKpi),
   byGenre: structuredClone(MOCK.byGenre),
   details: structuredClone(MOCK.details),
+　midDetail: null, // { axis, parentKey, childLabel }
 
   // ✅ 中段KPI：軸別集計（③の土台）
   byAxis: {},
@@ -63,6 +64,11 @@ const actions = {
     store.set((s) => ({ ...s, midParentKey: keyOrNull }));
   },
 
+　onOpenMidDetail: (payloadOrNull) => {
+  store.set(s => ({ ...s, midDetail: payloadOrNull }));
+},
+
+  
   // ✅ 再描画（stateを変えないと再描画されない場合の逃げ）
   requestRender: () => {
     store.set((s) => ({ ...s }));
