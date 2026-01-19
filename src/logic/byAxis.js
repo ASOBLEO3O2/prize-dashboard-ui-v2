@@ -130,10 +130,14 @@ function pickTounyuuChild(r) {
 
 function pickGenreChild(r) {
   const p = safeKey(r["景品ジャンル"]);
-  if (p === "食品") return safeKey(r["食品ジャンル"]);
-  if (p === "ぬいぐるみ") return safeKey(r["ぬいぐるみジャンル"]);
-  if (p === "雑貨") return safeKey(r["雑貨ジャンル"]);
-  return "";
+
+  let v = "";
+  if (p === "食品") v = safeKey(r["食品ジャンル"]);
+  else if (p === "ぬいぐるみ") v = safeKey(r["ぬいぐるみジャンル"]);
+  else if (p === "雑貨") v = safeKey(r["雑貨ジャンル"]);
+  else v = "";
+
+  return v || "未分類";
 }
 
 function pickCharaChild(r) {
