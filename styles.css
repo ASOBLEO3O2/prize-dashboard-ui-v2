@@ -418,3 +418,33 @@ a{ color:inherit; }
   .donuts{ grid-template-columns: 1fr; }
   .metricGrid{ grid-template-columns: 1fr; }
 }
+
+/* =========================
+   原価率グラデーション表示
+   ========================= */
+
+.costRate{
+  font-weight: 900;
+  letter-spacing: .2px;
+
+  /* 25%〜35% を 0〜1 に正規化 */
+  --t: clamp(0, calc((var(--cost-rate) - 0.25) / 0.10), 1);
+
+  /* 青 → 白 → 赤 */
+  color: color-mix(
+    in srgb,
+    /* 青 → 白 */
+    color-mix(
+      in srgb,
+      var(--accent) calc((1 - min(var(--t), .5) * 2) * 100%),
+      var(--text)   calc(min(var(--t), .5) * 2 * 100%)
+    ),
+    /* 白 → 赤 */
+    var(--danger) calc(max(var(--t) - .5, 0) * 2 * 100%)
+  );
+
+  /* 視認性強化（控えめ） */
+  text-shadow:
+    0 0 6px color-mix(in srgb, currentColor 35%, transparent);
+}
+
