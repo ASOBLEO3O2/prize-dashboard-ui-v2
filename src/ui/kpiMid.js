@@ -94,6 +94,10 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
       metric("売上", fmtYen(p.sales ?? 0)),
       metric("消化額", fmtYen(p.consume ?? 0)),
       metric("原価率", fmtPct(p.costRate ?? 0, 1)),
+
+      // ✅ 構成比を戻す
+      metric("売上構成比", fmtPct(p.salesShare ?? 0, 1)),
+      metric("マシン構成比", fmtPct(p.machineShare ?? 0, 1)),
     ]));
 
     // ✅ 子のカード（カード内展開）
@@ -192,6 +196,11 @@ function buildGenreParents_(state) {
       sales: d.sales ?? 0,
       consume: d.consume ?? 0,
       costRate: d.costRate ?? 0,
+
+      // ✅ 構成比を戻す
+      salesShare: d.salesShare ?? 0,
+      machineShare: d.machineShare ?? 0,
+
       children: Array.isArray(children) ? children : null,
     };
   });
