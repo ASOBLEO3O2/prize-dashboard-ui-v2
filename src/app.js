@@ -21,22 +21,26 @@ const initialState = {
   byGenre: structuredClone(MOCK.byGenre),
   details: structuredClone(MOCK.details),
 
- // ✅ 追加：軸KPI（③の土台）
-  byAxis: {},          // ← buildByAxis(filtered) を入れる
-  midAxis: "ジャンル",  // ← ドロワー未着手なので固定でもOK（後で切替）
-  midSortKey: "sales",
-  midSortDir: "desc",
-  midExpandedParentKey: null,
-  
+  // ✅ 中段KPI：軸別集計（③の土台）
+  byAxis: {},
+
+  // ✅ 中段KPI：表示モード
+  midAxis: "ジャンル",     // 後でドロワーで切替。今はジャンル固定でもOK
+  midParentKey: null,      // null=上層（ジャンル）/ 値あり=下層（内訳）
+
+  // ✅ 中段KPI：並び替え
+  midSortKey: "sales",     // "sales" | "consume" | "costRate" | "machines" | "avgSales"
+  midSortDir: "desc",      // "asc" | "desc"
+
   // filters (Step Cで本実装)
   filters: {},
 
   // UI state
-  focusGenre: null,        // ドーナツクリックで強調（フィルタではない）
-  openDetailGenre: null,   // カードクリックで下に詳細展開
+  focusGenre: null,        // 旧：ドーナツクリックで強調（残してOK）
+  openDetailGenre: null,   // ジャンルカードクリックで下に詳細展開（テーブル）
   drawerOpen: false,
 
-  // 詳細の並び替え（③）
+  // 詳細（テーブル）の並び替え（③）
   detailSortKey: "sales",  // "sales" | "consume" | "count" | "costRate"
   detailSortDir: "desc",   // "asc" | "desc"
 
@@ -49,17 +53,22 @@ const root = document.getElementById("app");
 
 // ===== actions =====
 const actions = {
-  // ドーナツ強調
+  // 旧：ドーナツ強調（残してOK / 今回の「消えるUI」では不要なら後で削除）
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
 
- // ✅ 追加：再描画（stateを変えないと再描画されない実装の場合に備える）
+  // ✅ 中段KPI：上層→下層 / 下層→上層
+  onPickMidParent: (keyOrNull) => {
+    store.set((s) => ({ ...s, midParentKey: keyOrNull }));
+  },
+
+  // ✅ 再描画（stateを変えないと再描画されない場合の逃げ）
   requestRender: () => {
     store.set((s) => ({ ...s }));
   },
-  
-  // 詳細の開閉
+
+  // 詳細（テーブル）の開閉
   onToggleDetail: (genre) => {
     store.set((s) => {
       const next = (s.openDetailGenre === genre) ? null : genre;
@@ -67,7 +76,7 @@ const actions = {
     });
   },
 
-  // 詳細並び替え（③）
+  // 詳細（テーブル）並び替え（③）
   onSetDetailSort: (key, dir) => {
     store.set((s) => ({
       ...s,
@@ -128,17 +137,15 @@ async function hydrateFromRaw() {
   const vm = buildViewModel(filtered, summary);
   const axis = buildByAxis(filtered);
 
-
   store.set((s) => ({
     ...s,
     updatedDate: vm.updatedDate || s.updatedDate,
     topKpi: vm.topKpi,
     byGenre: vm.byGenre,
     details: vm.details,
-    // ✅ 追加
     byAxis: axis,
     filters: vm.filters ?? s.filters,
     loadError: null,
-    // focusGenre / openDetailGenre / detailSort は維持（ユーザー操作を壊さない）
+    // midAxis / midParentKey / 並び替え / 詳細ソート などユーザー操作は維持
   }));
 }
