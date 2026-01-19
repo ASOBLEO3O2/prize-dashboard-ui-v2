@@ -87,7 +87,12 @@ export function renderDetail(mount, state, actions) {
       td(fmtYen(r.sales)),
       td(r.count != null ? String(r.count) : "—"),
       td(fmtYen(r.consume)),
-      td(fmtPct(r.costRate, 1)),
+      el("td", {
+  class: "costRate",
+  style: `--cost-rate:${Number(r.costRate) || 0};`,
+  text: fmtPct(r.costRate, 1)
+}),
+
       td(fmtDate(r.date)),
     ]);
   }
