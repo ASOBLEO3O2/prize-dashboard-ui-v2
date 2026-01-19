@@ -10,7 +10,7 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
 
   const donuts = el("div", { class: "donuts" });
 
-  // 売上構成比（%）
+  // ドーナツは当面ジャンル固定（軸切替は後で。まずカード側を汎用化）
   donuts.appendChild(donutPanel({
     title: "売上構成比",
     note: "ジャンル別（%）",
@@ -24,7 +24,6 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
     onPick: actions.onPickGenre,
   }));
 
-  // マシン構成比（%）
   donuts.appendChild(donutPanel({
     title: "マシン構成比",
     note: "ジャンル別（%）",
@@ -45,62 +44,69 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
 
   const grid = el("div", { class: "midCards" });
 
-  // 親（いまはジャンル固定：後で軸切替に対応してもこの形が流用できます）
-  const parents = buildGenreParents_(state);
+  const axis = state.midAxis || "ジャンル";
 
-  // 並び替え（ドロワー側で state.midSortKey / midSortDir を更新する想定）
+  // 親データ：byAxisがあればそれを使う。無ければ従来ジャンルにフォールバック
+  const parents = buildParents_(state, axis);
+
+  // 並び替え
   const sortKey = state.midSortKey || "sales"; // "sales" | "consume" | "costRate" | "machines"
   const sortDir = state.midSortDir || "desc"; // "asc" | "desc"
   const sortedParents = sortItems_(parents, sortKey, sortDir);
 
   for (const p of sortedParents) {
-    const isDim = (state.focusGenre && state.focusGenre !== p.key);
-    const isFocus = (state.focusGenre === p.key);
-    const isOpenDetail = (state.openDetailGenre === p.key);
+    // ジャンル軸のときだけ既存のフォーカス演出を効かせる（他軸は後で仕様化）
+    const isDim = (axis === "ジャンル" && state.focusGenre && state.focusGenre !== p.key);
+    const isFocus = (axis === "ジャンル" && state.focusGenre === p.key);
+    const isOpenDetail = (axis === "ジャンル" && state.openDetailGenre === p.key);
 
-    const isExpanded = (state.midExpandedParentKey === p.key);
+    const isExpanded = (state.midExpandedParentKey === `${axis}:${p.key}`);
     const hasChildren = Array.isArray(p.children) && p.children.length > 0;
 
     const card = el("div", {
       class: `card genreCard ${isDim ? "dim" : ""} ${isFocus ? "focus" : ""} ${isOpenDetail ? "open" : ""}`
     });
 
-    // 既存仕様：カードクリックは詳細（テーブル）を開く
-    card.addEventListener("click", () => actions.onToggleDetail(p.key));
+    // クリック動作：
+    // - ジャンル軸：従来通り詳細を開く（actions.onToggleDetail(g.key)）
+    // - それ以外：今は何もしない（後でドロワー詳細へ）
+    card.addEventListener("click", () => {
+      if (axis === "ジャンル") actions.onToggleDetail?.(p.key);
+    });
 
     card.appendChild(el("div", { class: "genreCardHeader" }, [
       el("div", { class: "genreName", text: p.label }),
       el("div", { style: "display:flex; gap:8px; align-items:center;" }, [
-        el("div", { class: "smallMeta", text: "クリックで詳細" }),
+        el("div", { class: "smallMeta", text: (axis === "ジャンル") ? "クリックで詳細" : axis }),
 
         // ✅ 掘り下げ（カード内展開）
         hasChildren ? el("button", {
           class: "btn ghost",
           text: isExpanded ? "▾" : "▸",
           onClick: (e) => {
-            e.stopPropagation(); // 詳細開くクリックを止める
-            state.midExpandedParentKey = isExpanded ? null : p.key; // 1つだけ展開
-            // 再描画：この関数が親から呼ばれている前提で、呼び出し元が再描画するなら不要
-            // 最低限ここでは何もしない（状態だけ変える）
+            e.stopPropagation();
+            const key = `${axis}:${p.key}`;
+            state.midExpandedParentKey = isExpanded ? null : key; // 1つだけ
             actions.requestRender?.();
           }
         }) : null,
       ])
     ]));
 
-    // 親のKPI
-    card.appendChild(el("div", { class: "metricGrid" }, [
+    // 親のKPI（構成比は存在する時だけ出す）
+    const mgItems = [
       metric("台数", `${p.machines ?? 0}台`),
       metric("売上", fmtYen(p.sales ?? 0)),
       metric("消化額", fmtYen(p.consume ?? 0)),
       metric("原価率", fmtPct(p.costRate ?? 0, 1)),
+    ];
 
-      // ✅ 構成比を戻す
-      metric("売上構成比", fmtPct(p.salesShare ?? 0, 1)),
-      metric("マシン構成比", fmtPct(p.machineShare ?? 0, 1)),
-    ]));
+    if (p.salesShare != null) mgItems.push(metric("売上構成比", fmtPct(p.salesShare ?? 0, 1)));
+    if (p.machineShare != null) mgItems.push(metric("マシン構成比", fmtPct(p.machineShare ?? 0, 1)));
 
-    // ✅ 子のカード（カード内展開）
+    card.appendChild(el("div", { class: "metricGrid" }, mgItems));
+
+    // 子のカード（カード内展開）
     if (hasChildren && isExpanded) {
       const children = sortItems_(p.children, sortKey, sortDir);
 
@@ -182,9 +188,19 @@ function metric(label, value) {
   ]);
 }
 
+function buildParents_(state, axis) {
+  // ✅ 新方式：byAxis があれば使う
+  const list = state.byAxis?.[axis];
+  if (Array.isArray(list) && list.length) return list;
+
+  // ✅ 旧方式（ジャンルだけは必ず描ける）
+  if (axis === "ジャンル") return buildGenreParents_(state);
+
+  // ✅ 未着手の軸は空（壊さない）
+  return [];
+}
+
 function buildGenreParents_(state) {
-  // 親：GENRES（既存）
-  // 子：state.byGenreChildren?.[genreKey] があればカード内展開する（未実装ならnullでOK）
   return GENRES.map(g => {
     const d = state.byGenre?.[g.key] || {};
     const children = state.byGenreChildren?.[g.key] || null;
@@ -196,11 +212,8 @@ function buildGenreParents_(state) {
       sales: d.sales ?? 0,
       consume: d.consume ?? 0,
       costRate: d.costRate ?? 0,
-
-      // ✅ 構成比を戻す
       salesShare: d.salesShare ?? 0,
       machineShare: d.machineShare ?? 0,
-
       children: Array.isArray(children) ? children : null,
     };
   });
