@@ -443,6 +443,26 @@ a{ color:inherit; }
     var(--danger) calc(max(var(--t) - .5, 0) * 2 * 100%)
   );
 
+  .childWrap{
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(34,49,66,.55);
+}
+
+.childGrid{
+  display:grid;
+  gap:10px;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+}
+
+.childCard{
+  border:1px solid rgba(34,49,66,.65);
+  background: rgba(15,21,29,.45);
+  border-radius:14px;
+  padding:10px;
+}
+
+
   /* 視認性強化（控えめ） */
   text-shadow:
     0 0 6px color-mix(in srgb, currentColor 35%, transparent);
