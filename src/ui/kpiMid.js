@@ -161,8 +161,9 @@ function buildMidView_(state, axis, parentKey) {
   const parentLabel = parent?.label || parentKey;
 
   // byAxis["ジャンル"] は buildByAxis で生成している前提（親配列 + children）
- const parentNode = (Array.isArray(state.byAxis?.["ジャンル"]) ? state.byAxis["ジャンル"] : [])
+const parentNode = (Array.isArray(state.byAxis?.["ジャンル"]) ? state.byAxis["ジャンル"] : [])
   .find(x => x.key === parentKey || x.label === parentLabel);
+
 
 
   const children = Array.isArray(parentNode?.children) ? parentNode.children : [];
