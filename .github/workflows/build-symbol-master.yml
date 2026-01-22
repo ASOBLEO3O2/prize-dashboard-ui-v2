@@ -18,7 +18,7 @@ jobs:
       - name: Build symbol_master.json
         run: |
           mkdir -p data/master
-          node tools/build_symbol_master.mjs "<CSV_URL>" "data/master/symbol_master.json"
+          node tools/build_symbol_master.mjs "https://docs.google.com/spreadsheets/d/e/2PACX-1vSYAO0VSIbTG2fa-9W2Jl1NuG9smC4BOfqNZWiwsb5IHEIYWgcUWgCe_SZTWBPrnFiodfIGdxvKe7Up/pub?output=csv" "data/master/symbol_master.json"
 
       - name: Commit & push if changed
         run: |
