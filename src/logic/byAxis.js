@@ -1,5 +1,10 @@
 // src/logic/byAxis.js
 // rows（1行=1台）から「中段KPIの軸別カード用データ」を作る
+//
+// 修正方針（重要）
+// - 親→子のドリルダウンは「親値に応じた子列」を必ず使う（列混在を避ける）
+// - 子カテゴリは "label" を優先し、code へ逃げず「未分類」に寄せる（親跨ぎ混在の原因になりやすい）
+// - 親・子ともに売上降順で安定ソート（描画差分で「違う」に見えるのを防ぐ）
 
 export function buildByAxis(rows) {
   return {
@@ -44,30 +49,39 @@ function buildHierAxis(rows, { parent, child }) {
   const parents = new Map();
 
   for (const r of rows) {
-    const pKey = safeKey(parent(r));
-    if (!pKey) continue;
+    const pLabel = safeKey(parent(r));
+    if (!pLabel) continue;
 
-    const p = ensureAgg(parents, pKey, pKey);
+    // 親（例：食品）
+    const p = ensureAgg(parents, pLabel, pLabel);
     addRowAgg(p, r);
 
+    // 子（例：スナック）
     const cLabel = safeKey(child(r));
     if (cLabel) {
       if (!p._children) p._children = new Map();
-      const cKey = `${pKey}|${cLabel}`;
+      const cKey = `${pLabel}|${cLabel}`; // 親ごとに必ず分離
       const c = ensureAgg(p._children, cKey, cLabel);
       addRowAgg(c, r);
     }
   }
 
-  return Array.from(parents.values()).map(p => {
+  // 親リスト化 → 子も同様に finalize + ソート
+  const outParents = Array.from(parents.values()).map(p => {
     const out = finalizeAggOne(p);
+
     if (p._children) {
       const children = finalizeAggList(Array.from(p._children.values()));
       if (children.length) out.children = children;
     }
+
     delete out._children;
     return out;
   });
+
+  // 親も売上降順で安定化
+  outParents.sort((a, b) => (b.sales - a.sales) || (b.machines - a.machines) || a.label.localeCompare(b.label, "ja"));
+  return outParents;
 }
 
 function ensureAgg(map, key, label) {
@@ -104,12 +118,16 @@ function finalizeAggOne(a) {
     machines: a.machines,
     sales: a.sales,
     consume: a.consume,
-    costRate: (a._costDen > 0) ? (a._costNum / a._costDen) : 0,
+    // sales=0 の場合は 0 固定にせず null にして「計算不能」を区別（UIで "-" にできる）
+    costRate: (a._costDen > 0) ? (a._costNum / a._costDen) : null,
   };
 }
 
 function finalizeAggList(list) {
-  return list.map(finalizeAggOne);
+  const out = list.map(finalizeAggOne);
+  // 売上降順→台数→ラベルで安定ソート（表示がブレない）
+  out.sort((a, b) => (b.sales - a.sales) || (b.machines - a.machines) || a.label.localeCompare(b.label, "ja"));
+  return out;
 }
 
 function safeKey(v) {
@@ -123,29 +141,35 @@ function safeKey(v) {
 
 function pickTounyuuChild(r) {
   const p = safeKey(r["投入法"]);
-  if (p === "3本爪") return safeKey(r["3本爪"]);
-  if (p === "2本爪") return safeKey(r["2本爪"]);
+  if (p === "3本爪") return safeKey(r["3本爪"]) || "未分類";
+  if (p === "2本爪") return safeKey(r["2本爪"]) || "未分類";
   return "";
 }
 
+/**
+ * 重要：子カテゴリは "label"（日本語ラベル）を優先して統一。
+ * code へフォールバックすると、親切替時に「別親の子が混ざって見える」原因になりやすい。
+ * ここでは label が空なら "未分類" に寄せる。
+ */
 function pickGenreChild(r) {
   const p = safeKey(r["景品ジャンル"]);
 
   if (p === "食品") {
-    return safeKey(r["食品ジャンル"]) || safeKey(r["食品ジャンル_code"]) || "未分類";
+    return safeKey(r["食品ジャンル"]) || "未分類";
   }
   if (p === "ぬいぐるみ") {
-    return safeKey(r["ぬいぐるみジャンル"]) || safeKey(r["ぬいぐるみジャンル_code"]) || "未分類";
+    return safeKey(r["ぬいぐるみジャンル"]) || "未分類";
   }
   if (p === "雑貨") {
-    return safeKey(r["雑貨ジャンル"]) || safeKey(r["雑貨ジャンル_code"]) || "未分類";
+    return safeKey(r["雑貨ジャンル"]) || "未分類";
   }
   return "未分類";
 }
 
-
 function pickCharaChild(r) {
   const p = safeKey(r["キャラ"]);
-  if (p === "ノンキャラ") return safeKey(r["ノンキャラジャンル"]);
-  return safeKey(r["キャラジャンル"]);
+  if (!p) return "";
+
+  if (p === "ノンキャラ") return safeKey(r["ノンキャラジャンル"]) || "未分類";
+  return safeKey(r["キャラジャンル"]) || "未分類";
 }
