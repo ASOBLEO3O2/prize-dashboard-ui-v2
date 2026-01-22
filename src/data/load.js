@@ -6,7 +6,6 @@ async function fetchJson(url) {
 }
 
 export async function loadRawData() {
-  // ここが「実データ接続の唯一の入口」
   const [rows, summary, masterDict] = await Promise.all([
     fetchJson("./data/raw/rows.json"),
     fetchJson("./data/raw/summary.json"),
