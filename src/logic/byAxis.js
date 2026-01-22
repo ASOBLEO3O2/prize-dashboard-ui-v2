@@ -153,33 +153,25 @@ function pickTounyuuChild(r) {
  * code へフォールバックすると、親切替時に「別親の子が混ざって見える」原因になりやすい。
  * ここでは label が空なら "未分類" に寄せる。
  */
+
 function pickGenreChild(r) {
   const p = safeKey(r["景品ジャンル"]);
 
-  // 「ラベル優先 → codeフォールバック → それでも無ければ未分類」
-  // ぬいぐるみ/雑貨で「全部未分類」になるのは、ラベル列が空で code に入ってるケースが多い
+  // 3種類の子列を全部取っておく（ラベル優先→code）
+  const food  = safeKey(r["食品ジャンル"])       || safeKey(r["食品ジャンル_code"]);
+  const plush = safeKey(r["ぬいぐるみジャンル"]) || safeKey(r["ぬいぐるみジャンル_code"]);
+  const goods = safeKey(r["雑貨ジャンル"])       || safeKey(r["雑貨ジャンル_code"]);
 
-  const pick = (labelKey, codeKey) => {
-    const label = safeKey(r[labelKey]);
-    if (label) return label;
+  // 親に応じて「本命列」を最優先
+  // ただし実データが列混在してても未分類固定にならないように、他列へフォールバック
+  if (p === "食品")       return food  || plush || goods || "未分類";
+  if (p === "ぬいぐるみ") return plush || food  || goods || "未分類";
+  if (p === "雑貨")       return goods || food  || plush || "未分類";
 
-    const code = safeKey(r[codeKey]);
-    if (code) return code;       // まずは code でも出す（未分類を回避して原因切り分けできる）
-    return "未分類";
-  };
-
-  if (p === "食品") {
-    return pick("食品ジャンル", "食品ジャンル_code");
-  }
-  if (p === "ぬいぐるみ") {
-    // ここが「全部未分類」になりがち
-    return pick("ぬいぐるみジャンル", "ぬいぐるみジャンル_code");
-  }
-  if (p === "雑貨") {
-    return pick("雑貨ジャンル", "雑貨ジャンル_code");
-  }
-  return "未分類";
+  // 親が想定外/空の場合も、とにかく拾えるものを拾う
+  return plush || food || goods || "未分類";
 }
+
 
 function pickCharaChild(r) {
   const p = safeKey(r["キャラ"]);
