@@ -14,6 +14,7 @@ import { decodeSymbol } from "./logic/decodeSymbol.js";
 import { loadRawData } from "./data/load.js";
 import { applyFilters } from "./logic/filter.js";
 import { buildViewModel } from "./logic/aggregate.js";
+import { decodeSymbol } from "./logic/decodeSymbol.js";
 
 const initialState = {
   // data
@@ -154,23 +155,23 @@ async function hydrateFromRaw() {
     codebook = {};
   }
 
-  // ③ rows をマスタで正規化
-  const normalizedRows = rows.map(r => {
-    const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
-    const m = key ? masterDict?.[key] : null;
+const normalizedRows = rows.map(r => {
+  const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
+  const m = key ? masterDict?.[key] : null;
+  const decoded = key ? decodeSymbol(key, codebook) : {};
 
-    // ※ ここではまだ decodeSymbol を入れていなくてもOK（まず接続を安定させる）
-    return {
-      ...r,
-      ...(m || {}),
-      // key系と数値系は r を正とする
-      symbol_raw: r.symbol_raw,
-      raw: r.raw,
-      sales: r.sales,
-      claw: r.claw,
-      cost_rate: r.cost_rate,
-    };
-  });
+  return {
+    ...r,
+    ...(m || {}),
+    ...decoded,
+    symbol_raw: r.symbol_raw,
+    raw: r.raw,
+    sales: r.sales,
+    claw: r.claw,
+    cost_rate: r.cost_rate,
+  };
+});
+
 
   // ④ フィルタ
   const st = store.get();
