@@ -27,7 +27,6 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
     })),
     pickedKey: null,
     onPick: (k) => {
-      // クリックでドリル（上層のときだけ）
       if (view.level === "parent") actions.onPickMidParent?.(k);
     },
   }));
@@ -54,7 +53,7 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
 
   const grid = el("div", { class: "midCards" });
 
-  // 下層表示のときは戻るUI（カード群の先頭に出す）
+  // 下層表示のときは戻るUI
   if (view.level === "child") {
     grid.appendChild(el("div", { class: "card genreCard", style: "padding:12px; cursor:default;" }, [
       el("div", { style: "display:flex; align-items:center; justify-content:space-between; gap:10px;" }, [
@@ -71,19 +70,18 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
     ]));
   }
 
-  // 並び替え（今は中段用stateを使う。ドロワーは後でOK）
-  const sortKey = state.midSortKey || "sales"; // "sales" | "consume" | "costRate" | "machines" | "avgSales"
-  const sortDir = state.midSortDir || "desc"; // "asc" | "desc"
+  // 並び替え
+  const sortKey = state.midSortKey || "sales";
+  const sortDir = state.midSortDir || "desc";
   const items = sortItems_(view.items, sortKey, sortDir);
 
   for (const it of items) {
     const card = el("div", { class: "card genreCard" });
 
     // 上層：クリックで下層へ
-    // 下層：クリックは今は何もしない（後でドロワー詳細へ）
     card.addEventListener("click", () => {
-  if (view.level === "parent" && it.hasChildren) actions.onPickMidParent?.(it.key);
-});
+      if (view.level === "parent" && it.hasChildren) actions.onPickMidParent?.(it.key);
+    });
 
     card.appendChild(el("div", { class: "genreCardHeader" }, [
       el("div", { class: "genreName", text: it.label }),
@@ -111,10 +109,8 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
    ========================= */
 
 function buildMidView_(state, axis, parentKey) {
-  // 今回の仕様は「ジャンル」のドリルをまず完成させる
-  // axis切替は後で（投入法/年代/キャラ…）同じ形で流用
+  // axis がジャンル以外は現状そのまま（ドリルは後で）
   if (axis !== "ジャンル") {
-    // とりあえずbyAxisをそのまま表示（ドリルは後段）
     const items = (Array.isArray(state.byAxis?.[axis]) ? state.byAxis[axis] : []).map(x => ({
       key: x.key,
       label: x.label,
@@ -123,6 +119,7 @@ function buildMidView_(state, axis, parentKey) {
       consume: x.consume ?? 0,
       costRate: x.costRate ?? 0,
       color: null,
+      hasChildren: false,
     }));
     return normalizeShares_(items, {
       level: "parent",
@@ -132,22 +129,46 @@ function buildMidView_(state, axis, parentKey) {
     });
   }
 
+  // ===== ここから「ジャンル」：必ず byAxis を唯一のソースにする =====
+  const genreTree = Array.isArray(state.byAxis?.["ジャンル"]) ? state.byAxis["ジャンル"] : [];
+
+  // GENRES は色/表示名の補助（key/label どちらでも引けるようにする）
+  const genreMetaByKey = new Map(GENRES.map(g => [String(g.key), g]));
+  const genreMetaByLabel = new Map(GENRES.map(g => [String(g.label), g]));
+
+  const metaOf = (node) => {
+    return genreMetaByKey.get(String(node.key)) ||
+           genreMetaByLabel.get(String(node.label)) ||
+           null;
+  };
+
   // ===== ジャンル：上層 =====
   if (!parentKey) {
-    const items = GENRES.map(g => {
-      const d = state.byGenre?.[g.key] || {};
+    const items = genreTree.map(p => {
+      const meta = metaOf(p);
       return {
-        key: g.key,
-        label: g.label,
-        machines: d.machines ?? 0,
-        sales: d.sales ?? 0,
-        consume: d.consume ?? 0,
-        costRate: d.costRate ?? 0,
-        color: g.color,
+        key: p.key,
+        label: meta?.label || p.label || p.key,
+        machines: p.machines ?? 0,
+        sales: p.sales ?? 0,
+        consume: p.consume ?? 0,
+        costRate: p.costRate ?? 0,
+        color: meta?.color || null,
+        hasChildren: Array.isArray(p.children) && p.children.length > 0,
       };
     });
 
-    // 上層は「全体比」
+    // 可能なら GENRES の順番に寄せる（未知のジャンルは後ろ）
+    items.sort((a, b) => {
+      const ai = GENRES.findIndex(g => String(g.key) === String(a.key) || String(g.label) === String(a.label));
+      const bi = GENRES.findIndex(g => String(g.key) === String(b.key) || String(g.label) === String(b.label));
+      const aa = (ai === -1) ? 9999 : ai;
+      const bb = (bi === -1) ? 9999 : bi;
+      if (aa !== bb) return aa - bb;
+      // 同順位なら売上降順
+      return (b.sales - a.sales);
+    });
+
     return normalizeShares_(items, {
       level: "parent",
       parentLabel: null,
@@ -156,15 +177,12 @@ function buildMidView_(state, axis, parentKey) {
     });
   }
 
-  // ===== ジャンル：下層（byAxis["ジャンル"] の children を使う） =====
-  const parent = GENRES.find(g => g.key === parentKey);
-  const parentLabel = parent?.label || parentKey;
+  // ===== ジャンル：下層 =====
+  // 親は「キー一致」だけで拾う（label一致は誤爆するので禁止）
+  const parentNode = genreTree.find(x => String(x.key) === String(parentKey)) || null;
 
-  // byAxis["ジャンル"] は buildByAxis で生成している前提（親配列 + children）
-const parentNode = (Array.isArray(state.byAxis?.["ジャンル"]) ? state.byAxis["ジャンル"] : [])
-  .find(x => x.key === parentKey || x.label === parentLabel);
-
-
+  const parentMeta = parentNode ? metaOf(parentNode) : null;
+  const parentLabel = parentMeta?.label || parentNode?.label || String(parentKey);
 
   const children = Array.isArray(parentNode?.children) ? parentNode.children : [];
 
@@ -175,10 +193,10 @@ const parentNode = (Array.isArray(state.byAxis?.["ジャンル"]) ? state.byAxis
     sales: ch.sales ?? 0,
     consume: ch.consume ?? 0,
     costRate: ch.costRate ?? 0,
-    color: parent?.color || null,
+    color: parentMeta?.color || null,
+    hasChildren: false,
   }));
 
-  // 下層は「親の中での比率（合計=100%）」にしたいので children 合計で正規化
   return normalizeShares_(items, {
     level: "child",
     parentLabel,
