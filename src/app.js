@@ -14,7 +14,6 @@ import { decodeSymbol } from "./logic/decodeSymbol.js";
 import { loadRawData } from "./data/load.js";
 import { applyFilters } from "./logic/filter.js";
 import { buildViewModel } from "./logic/aggregate.js";
-import { decodeSymbol } from "./logic/decodeSymbol.js";
 
 const initialState = {
   // data
