@@ -9,6 +9,7 @@ import { buildByAxis } from "./logic/byAxis.js";
 
 import { MOCK } from "./constants.js";
 import { fmtDate } from "./utils/format.js";
+import { decodeSymbol } from "./logic/decodeSymbol.js";
 
 import { loadRawData } from "./data/load.js";
 import { applyFilters } from "./logic/filter.js";
@@ -135,29 +136,35 @@ hydrateFromRaw().catch((e) => {
 
 async function hydrateFromRaw() {
   // ① 生データ取得
- const { rows, summary, masterDict } = await loadRawData();
+// ② 記号解析辞書（codebook）を読む ← 追加
+const codebookRes = await fetch("./data/master/codebook.json", { cache: "no-store" });
+const codebook = codebookRes.ok ? await codebookRes.json() : {};
 
-console.log("[CONNECT] rows:", Array.isArray(rows) ? rows.length : rows);
-console.log("[CONNECT] master keys:", masterDict ? Object.keys(masterDict).length : masterDict);
+// ③ rows を正規化（売上マスタ + 記号解析） ← ここを差し替え
+const normalizedRows = rows.map(r => {
+  const key = String(r.symbol_raw ?? r.raw ?? "").trim();
 
+  // A) 売上マスタ（名前/サイズ/更新日など）
+  const m = key ? masterDict?.[key] : null;
 
-  // ③ rows をマスタで正規化（最重要）
-  const normalizedRows = rows.map(r => {
-    const key = String(r.symbol_raw ?? r.raw ?? "").trim();
-    const m = key ? masterDict[key] : null;
-    if (!m) return r;
+  // B) 記号解析（ジャンル/子ジャンル/投入法/ターゲット/年代/キャラ…）
+  const decoded = key ? decodeSymbol(key, codebook) : {};
 
-    // マスタを「正」として上書き
-    return {
-      ...r,
-      ...m,               // ← ぬいぐるみジャンル / キャラ / 各種ジャンルがここで入る
-      symbol_raw: r.symbol_raw,
-      raw: r.raw,
-      sales: r.sales,
-      claw: r.claw,
-      cost_rate: r.cost_rate,
-    };
-  });
+  // ★ 重要：m が無い場合も decoded は入れる
+  return {
+    ...r,
+    ...(m || {}),
+    ...decoded,
+
+    // ★ key系と数値系は r を正とする（あなたの方針維持）
+    symbol_raw: r.symbol_raw,
+    raw: r.raw,
+    sales: r.sales,
+    claw: r.claw,
+    cost_rate: r.cost_rate,
+  };
+});
+
 
   // ④ フィルタ
   const st = store.get();
