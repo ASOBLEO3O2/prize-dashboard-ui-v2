@@ -136,6 +136,8 @@ hydrateFromRaw().catch((e) => {
 
 async function hydrateFromRaw() {
   // ① 生データ取得
+const { rows, summary, masterDict } = await loadRawData();
+  
 // ② 記号解析辞書（codebook）を読む ← 追加
 const codebookRes = await fetch("./data/master/codebook.json", { cache: "no-store" });
 const codebook = codebookRes.ok ? await codebookRes.json() : {};
