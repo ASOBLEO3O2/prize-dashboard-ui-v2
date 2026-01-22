@@ -443,7 +443,13 @@ a{ color:inherit; }
     var(--danger) calc(max(var(--t) - .5, 0) * 2 * 100%)
   );
 
-  .childWrap{
+  /* 視認性強化（控えめ） */
+  text-shadow:
+    0 0 6px color-mix(in srgb, currentColor 35%, transparent);
+}
+
+/* 子カテゴリ表示（※元のCSSが .costRate の中に入って壊れていたので分離） */
+.childWrap{
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid rgba(34,49,66,.55);
@@ -462,9 +468,67 @@ a{ color:inherit; }
   padding:10px;
 }
 
+/* =========================
+   追加：チャート2枚用
+   ========================= */
 
-  /* 視認性強化（控えめ） */
-  text-shadow:
-    0 0 6px color-mix(in srgb, currentColor 35%, transparent);
+.chartsGrid{
+  display:grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
 }
 
+.chartCard{
+  border:1px solid var(--border);
+  background: rgba(18,26,34,.55);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.chartHeader{
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chartTitle{
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.chartTools{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+}
+
+.chartTools .select{
+  appearance:none;
+  border: 1px solid var(--border);
+  background: rgba(15,21,29,.75);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor:pointer;
+  font-weight: 650;
+}
+
+.chartBody{
+  padding: 10px 12px 12px;
+}
+
+/* canvasのサイズ崩れ防止 */
+.chartBody canvas{
+  display:block;
+  width:100%;
+  height: 220px;
+}
+
+@media (max-width: 980px){
+  .chartsGrid{ grid-template-columns: 1fr; }
+}
