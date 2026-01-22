@@ -1,10 +1,3 @@
-export function buildByAxis(rows) {
-  console.log("[BYAXIS] LOADED v2026-01-22", rows?.length);
-  return {
-    // ...
-  };
-}
-
 
 // src/logic/byAxis.js
 // rows（1行=1台）から「中段KPIの軸別カード用データ」を作る
@@ -15,6 +8,7 @@ export function buildByAxis(rows) {
 // - 親・子ともに売上降順で安定ソート（描画差分で「違う」に見えるのを防ぐ）
 
 export function buildByAxis(rows) {
+  console.log("[BYAXIS] LOADED v2026-01-22", rows?.length);
   return {
     // フラット軸
     年代: buildFlatAxis(rows, r => r["年代"]),
