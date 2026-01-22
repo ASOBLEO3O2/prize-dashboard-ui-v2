@@ -16,6 +16,33 @@ export function mountLayout(root, actions) {
 
   const topKpi = el("div", { class: "kpiTop", id: "topKpi" });
 
+  // ✅ 追加：チャート2枚（原価率分布 / 売上×原価率）
+  const chartsGrid = el("div", { class: "chartsGrid", id: "chartsGrid" }, [
+    el("div", { class: "chartCard" }, [
+      el("div", { class: "chartHeader" }, [
+        el("div", { class: "chartTitle", text: "原価率 分布" }),
+        el("div", { class: "chartTools" }, [
+          el("select", { class: "select", id: "costHistMode" }, [
+            el("option", { value: "count", text: "台数" }),
+            el("option", { value: "sales", text: "売上" }),
+          ])
+        ])
+      ]),
+      el("div", { class: "chartBody" }, [
+        el("canvas", { id: "costHistChart" })
+      ])
+    ]),
+
+    el("div", { class: "chartCard" }, [
+      el("div", { class: "chartHeader" }, [
+        el("div", { class: "chartTitle", text: "売上 × 原価率（マトリクス）" }),
+      ]),
+      el("div", { class: "chartBody" }, [
+        el("canvas", { id: "salesCostScatter" })
+      ])
+    ])
+  ]);
+
   const section = el("div", { class: "section" }, [
     el("div", { class: "sectionHeader" }, [
       el("div", { class: "sectionTitle", text: "中段KPI" }),
@@ -24,6 +51,7 @@ export function mountLayout(root, actions) {
     el("div", { class: "midKpiWrap", id: "midKpiWrap" }, [
       el("div", { class: "midTop" }, [
         el("div", { class: "donuts", id: "donutsArea" }),
+        chartsGrid, // ✅ ここに追加
       ]),
       // ✅ ここがポイント：gridにしない「マウント専用」
       el("div", { class: "midCardsMount", id: "midCards" }),
@@ -49,6 +77,12 @@ export function mountLayout(root, actions) {
     donutsArea: container.querySelector("#donutsArea"),
     midCards: container.querySelector("#midCards"),
     detailMount: container.querySelector("#detailMount"),
+
+    // ✅ 追加：チャートDOM参照（必要なら使う）
+    costHistMode: container.querySelector("#costHistMode"),
+    costHistCanvas: container.querySelector("#costHistChart"),
+    salesCostCanvas: container.querySelector("#salesCostScatter"),
+
     drawer,
     drawerOverlay: overlay,
   };
