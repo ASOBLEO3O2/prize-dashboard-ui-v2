@@ -82,8 +82,8 @@ export function renderMidKpi(donutsMount, cardsMount, state, actions) {
     // 上層：クリックで下層へ
     // 下層：クリックは今は何もしない（後でドロワー詳細へ）
     card.addEventListener("click", () => {
-      if (view.level === "parent") actions.onPickMidParent?.(it.key);
-    });
+  if (view.level === "parent" && it.hasChildren) actions.onPickMidParent?.(it.key);
+});
 
     card.appendChild(el("div", { class: "genreCardHeader" }, [
       el("div", { class: "genreName", text: it.label }),
