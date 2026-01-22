@@ -131,32 +131,18 @@ function pickTounyuuChild(r) {
 function pickGenreChild(r) {
   const p = safeKey(r["景品ジャンル"]);
 
-  // 食品は食品ジャンルが生きてるのでそのまま
   if (p === "食品") {
     return safeKey(r["食品ジャンル"]) || safeKey(r["食品ジャンル_code"]) || "未分類";
   }
-
-  // ぬいぐるみ / 雑貨 は現状「ジャンル列が全件空」なのでキャラ系に寄せる
-  if (p === "ぬいぐるみ" || p === "雑貨") {
-    const charType = safeKey(r["キャラ"]); // 例: ノンキャラ / ポケモン 等
-
-    // ノンキャラの場合はノンキャラジャンルを優先
-    if (charType === "ノンキャラ") {
-      return safeKey(r["ノンキャラジャンル"])
-        || safeKey(r["ノンキャラジャンル_code"])
-        || "ノンキャラ";
-    }
-
-    // それ以外はキャラジャンル優先 → なければキャラ
-    return safeKey(r["キャラジャンル"])
-      || safeKey(r["キャラジャンル_code"])
-      || charType
-      || "未分類";
+  if (p === "ぬいぐるみ") {
+    return safeKey(r["ぬいぐるみジャンル"]) || safeKey(r["ぬいぐるみジャンル_code"]) || "未分類";
   }
-
-  // その他の親ジャンル
+  if (p === "雑貨") {
+    return safeKey(r["雑貨ジャンル"]) || safeKey(r["雑貨ジャンル_code"]) || "未分類";
+  }
   return "未分類";
 }
+
 
 function pickCharaChild(r) {
   const p = safeKey(r["キャラ"]);
