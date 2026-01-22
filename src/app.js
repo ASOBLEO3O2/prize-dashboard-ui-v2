@@ -135,38 +135,42 @@ hydrateFromRaw().catch((e) => {
 });
 
 async function hydrateFromRaw() {
-  // ① 生データ取得
-const { rows, summary, masterDict } = await loadRawData();
-  
-// ② 記号解析辞書（codebook）を読む ← 追加
-const codebookRes = await fetch("./data/master/codebook.json", { cache: "no-store" });
-const codebook = codebookRes.ok ? await codebookRes.json() : {};
+  // ① 生データ取得：rows を必ずローカル変数として確保
+  const raw = await loadRawData();
+  const rows = Array.isArray(raw?.rows) ? raw.rows : [];
+  const summary = raw?.summary ?? null;
+  const masterDict = raw?.masterDict ?? {};
 
-// ③ rows を正規化（売上マスタ + 記号解析） ← ここを差し替え
-const normalizedRows = rows.map(r => {
-  const key = String(r.symbol_raw ?? r.raw ?? "").trim();
+  console.log("[CONNECT] rows:", rows.length);
+  console.log("[CONNECT] master keys:", masterDict ? Object.keys(masterDict).length : 0);
 
-  // A) 売上マスタ（名前/サイズ/更新日など）
-  const m = key ? masterDict?.[key] : null;
+  // ② codebook（無ければ空でOK：404は握りつぶす）
+  let codebook = {};
+  try {
+    const res = await fetch("./data/master/codebook.json", { cache: "no-store" });
+    if (res.ok) codebook = await res.json();
+  } catch (e) {
+    // まだ生成してない段階では何もしない
+    codebook = {};
+  }
 
-  // B) 記号解析（ジャンル/子ジャンル/投入法/ターゲット/年代/キャラ…）
-  const decoded = key ? decodeSymbol(key, codebook) : {};
+  // ③ rows をマスタで正規化
+  const normalizedRows = rows.map(r => {
+    const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
+    const m = key ? masterDict?.[key] : null;
 
-  // ★ 重要：m が無い場合も decoded は入れる
-  return {
-    ...r,
-    ...(m || {}),
-    ...decoded,
-
-    // ★ key系と数値系は r を正とする（あなたの方針維持）
-    symbol_raw: r.symbol_raw,
-    raw: r.raw,
-    sales: r.sales,
-    claw: r.claw,
-    cost_rate: r.cost_rate,
-  };
-});
-
+    // ※ ここではまだ decodeSymbol を入れていなくてもOK（まず接続を安定させる）
+    return {
+      ...r,
+      ...(m || {}),
+      // key系と数値系は r を正とする
+      symbol_raw: r.symbol_raw,
+      raw: r.raw,
+      sales: r.sales,
+      claw: r.claw,
+      cost_rate: r.cost_rate,
+    };
+  });
 
   // ④ フィルタ
   const st = store.get();
@@ -175,33 +179,6 @@ const normalizedRows = rows.map(r => {
   // ⑤ 集計
   const vm = buildViewModel(filtered, summary);
   const axis = buildByAxis(filtered);
-
-  // === DEBUG（ここで見る値が変わる） ===
-  const samplePlush = filtered.find(
-    r => String(r["景品ジャンル"] ?? "").trim() === "ぬいぐるみ"
-  );
-
-  console.log("[DEBUG] plush sample keys:", samplePlush ? Object.keys(samplePlush) : null);
-
-  console.log("[DEBUG] plush sample values:", samplePlush ? {
-    景品ジャンル: samplePlush["景品ジャンル"],
-    ぬいぐるみジャンル: samplePlush["ぬいぐるみジャンル"],
-    ぬいぐるみジャンル_code: samplePlush["ぬいぐるみジャンル_code"],
-    キャラ: samplePlush["キャラ"],
-    キャラジャンル: samplePlush["キャラジャンル"],
-    ノンキャラジャンル: samplePlush["ノンキャラジャンル"],
-  } : null);
-
-  const plushStats = filtered
-    .filter(r => String(r["景品ジャンル"] ?? "").trim() === "ぬいぐるみ")
-    .reduce((a, r) => {
-      if (String(r["ぬいぐるみジャンル"] ?? "").trim()) a.label++;
-      if (String(r["ぬいぐるみジャンル_code"] ?? "").trim()) a.code++;
-      a.total++;
-      return a;
-    }, { total: 0, label: 0, code: 0 });
-
-  console.log("[DEBUG] plush stats:", plushStats);
 
   // ⑥ state 更新
   store.set((s) => ({
@@ -214,4 +191,6 @@ const normalizedRows = rows.map(r => {
     filters: vm.filters ?? s.filters,
     loadError: null,
   }));
+}
+
 }
