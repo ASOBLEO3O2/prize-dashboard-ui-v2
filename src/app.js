@@ -15,12 +15,18 @@ import { loadRawData } from "./data/load.js";
 import { applyFilters } from "./logic/filter.js";
 import { buildViewModel } from "./logic/aggregate.js";
 
+// ✅ 追加：チャート2枚（原価率分布 / 売上×原価率）
+import { renderCharts } from "./ui/charts.js";
+
 const initialState = {
   // data
   updatedDate: MOCK.updatedDate,
   topKpi: structuredClone(MOCK.topKpi),
   byGenre: structuredClone(MOCK.byGenre),
   details: structuredClone(MOCK.details),
+
+  // ✅ 追加：チャート用（フィルタ後rows）
+  filteredRows: [],
 
   // 中段の詳細（将来拡張用）
   midDetail: null, // { axis, parentKey, childLabel }
@@ -119,6 +125,9 @@ function renderAll(state) {
   // 中段（ドーナツ＋カード）
   renderMidKpi(mounts.donutsArea, mounts.midCards, state, actions);
 
+  // ✅ 追加：チャート（原価率分布 / 売上×原価率）
+  renderCharts(mounts, state);
+
   // 詳細
   renderDetail(mounts.detailMount, state, actions);
 
@@ -192,6 +201,10 @@ async function hydrateFromRaw() {
     details: vm.details,
     byAxis: axis,
     filters: vm.filters ?? s.filters,
+
+    // ✅ 追加：チャート用に保持
+    filteredRows: filtered,
+
     loadError: null,
   }));
 }
