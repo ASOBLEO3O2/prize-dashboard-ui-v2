@@ -137,10 +137,6 @@ async function hydrateFromRaw() {
   // ① 生データ取得
   const { rows, summary } = await loadRawData();
 
-  // ② 記号マスタを読み込む（←ここが今まで無かった）
-  const masterRes = await fetch("./data/master/symbol_master.json", { cache: "no-store" });
-  const masterDict = masterRes.ok ? await masterRes.json() : {};
-
   // ③ rows をマスタで正規化（最重要）
   const normalizedRows = rows.map(r => {
     const key = String(r.symbol_raw ?? r.raw ?? "").trim();
