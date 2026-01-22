@@ -1,0 +1,179 @@
+// src/ui/charts.js
+
+let costHistChart = null;
+let salesCostScatter = null;
+
+const COST_BINS = [
+  { label: "〜3%",   min: 0.00, max: 0.03 },
+  { label: "3–5%",  min: 0.03, max: 0.05 },
+  { label: "5–8%",  min: 0.05, max: 0.08 },
+  { label: "8–10%", min: 0.08, max: 0.10 },
+  { label: "10%〜", min: 0.10, max: Infinity },
+];
+
+function toNum(v) {
+  if (v == null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const s = v.trim().replace(/,/g, "");
+    if (!s) return null;
+    // "5.2%" → 0.052
+    if (s.endsWith("%")) {
+      const n = Number(s.slice(0, -1));
+      return Number.isFinite(n) ? n / 100 : null;
+    }
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function ensureCharts(mounts) {
+  const Chart = window.Chart;
+  if (!Chart) return; // Chart.js 未ロード
+
+  const c1 = mounts.costHistCanvas?.getContext?.("2d");
+  const c2 = mounts.salesCostCanvas?.getContext?.("2d");
+  if (!c1 || !c2) return;
+
+  if (!costHistChart) {
+    costHistChart = new Chart(c1, {
+      type: "bar",
+      data: {
+        labels: COST_BINS.map(b => b.label),
+        datasets: [{ label: "台数", data: [0,0,0,0,0] }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  if (!salesCostScatter) {
+    // 補助線（売上=10000 / 原価率=5%）
+    const quadLines = {
+      id: "quadLines",
+      afterDraw(chart) {
+        const { ctx, chartArea, scales } = chart;
+        if (!chartArea) return;
+        const x = scales.x.getPixelForValue(10000);
+        const y = scales.y.getPixelForValue(0.05);
+
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 1;
+
+        // vertical
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+
+        // horizontal
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, y);
+        ctx.lineTo(chartArea.right, y);
+        ctx.stroke();
+
+        ctx.restore();
+      },
+    };
+
+    salesCostScatter = new Chart(c2, {
+      type: "scatter",
+      data: {
+        datasets: [{ label: "マシン", data: [] }],
+      },
+      plugins: [quadLines],
+      options: {
+        responsive: true,
+        parsing: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (c) => {
+                const p = c.raw;
+                const yen = new Intl.NumberFormat("ja-JP").format(Math.round(p.x));
+                const pct = (p.y * 100).toFixed(1);
+                const name = p._name ? ` ${p._name}` : "";
+                return `${yen}円 / ${pct}%${name}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { title: { display: true, text: "売上（円）" }, beginAtZero: true },
+          y: {
+            title: { display: true, text: "原価率" },
+            beginAtZero: true,
+            suggestedMax: 0.2,
+            ticks: { callback: (v) => `${Math.round(v * 100)}%` },
+          },
+        },
+      },
+    });
+  }
+}
+
+function computeCostHistogram(rows, mode) {
+  const arr = COST_BINS.map(() => 0);
+
+  for (const r of rows) {
+    const rate = toNum(r?.cost_rate ?? r?.原価率);
+    const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
+    if (rate == null) continue;
+
+    const idx = COST_BINS.findIndex(b => rate >= b.min && rate < b.max);
+    if (idx < 0) continue;
+
+    arr[idx] += (mode === "sales") ? sales : 1;
+  }
+  return arr;
+}
+
+function computeScatter(rows) {
+  const pts = [];
+  for (const r of rows) {
+    const x = toNum(r?.sales ?? r?.総売上);
+    const y = toNum(r?.cost_rate ?? r?.原価率);
+    if (x == null || y == null) continue;
+
+    pts.push({
+      x,
+      y,
+      _name: r?.machine_ref ?? r?.対応マシン名 ?? r?.booth_id ?? "",
+    });
+  }
+  return pts;
+}
+
+export function renderCharts(mounts, state) {
+  ensureCharts(mounts);
+  if (!costHistChart || !salesCostScatter) return;
+
+  const rows = Array.isArray(state.filteredRows) ? state.filteredRows : [];
+  const mode = mounts.costHistMode?.value || "count";
+
+  // ① 原価率分布
+  const hist = computeCostHistogram(rows, mode);
+  costHistChart.data.datasets[0].data = hist;
+  costHistChart.data.datasets[0].label = (mode === "sales") ? "売上" : "台数";
+  costHistChart.update();
+
+  // ② 売上×原価率（散布）
+  const pts = computeScatter(rows);
+  salesCostScatter.data.datasets[0].data = pts;
+  salesCostScatter.update();
+
+  // mode変更時にも即反映（イベントは1回だけ付ける）
+  if (mounts.costHistMode && !mounts.costHistMode.__bound) {
+    mounts.costHistMode.addEventListener("change", () => renderCharts(mounts, state));
+    mounts.costHistMode.__bound = true;
+  }
+}
