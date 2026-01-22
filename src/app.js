@@ -135,7 +135,11 @@ hydrateFromRaw().catch((e) => {
 
 async function hydrateFromRaw() {
   // ① 生データ取得
-  const { rows, summary } = await loadRawData();
+ const { rows, summary, masterDict } = await loadRawData();
+
+console.log("[CONNECT] rows:", Array.isArray(rows) ? rows.length : rows);
+console.log("[CONNECT] master keys:", masterDict ? Object.keys(masterDict).length : masterDict);
+
 
   // ③ rows をマスタで正規化（最重要）
   const normalizedRows = rows.map(r => {
