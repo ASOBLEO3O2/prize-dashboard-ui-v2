@@ -131,14 +131,26 @@ function pickTounyuuChild(r) {
 function pickGenreChild(r) {
   const p = safeKey(r["景品ジャンル"]);
 
-  let v = "";
-  if (p === "食品") v = safeKey(r["食品ジャンル"]);
-  else if (p === "ぬいぐるみ") v = safeKey(r["ぬいぐるみジャンル"]);
-  else if (p === "雑貨") v = safeKey(r["雑貨ジャンル"]);
-  else v = "";
+  if (p === "食品") {
+    return safeKey(r["食品ジャンル"]) || safeKey(r["食品ジャンル_code"]) || "未分類";
+  }
 
-  return v || "未分類";
+  if (p === "ぬいぐるみ") {
+    // ✅ ラベルが空なら code を採用（A〜G）
+    return safeKey(r["ぬいぐるみジャンル"])
+      || safeKey(r["ぬいぐるみジャンル_code"])
+      || "未分類";
+  }
+
+  if (p === "雑貨") {
+    return safeKey(r["雑貨ジャンル"])
+      || safeKey(r["雑貨ジャンル_code"])
+      || "未分類";
+  }
+
+  return "未分類";
 }
+
 function pickCharaChild(r) {
   const p = safeKey(r["キャラ"]);
   if (p === "ノンキャラ") return safeKey(r["ノンキャラジャンル"]);
