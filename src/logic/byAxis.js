@@ -154,14 +154,27 @@ function pickTounyuuChild(r) {
 function pickGenreChild(r) {
   const p = safeKey(r["景品ジャンル"]);
 
+  // 「ラベル優先 → codeフォールバック → それでも無ければ未分類」
+  // ぬいぐるみ/雑貨で「全部未分類」になるのは、ラベル列が空で code に入ってるケースが多い
+
+  const pick = (labelKey, codeKey) => {
+    const label = safeKey(r[labelKey]);
+    if (label) return label;
+
+    const code = safeKey(r[codeKey]);
+    if (code) return code;       // まずは code でも出す（未分類を回避して原因切り分けできる）
+    return "未分類";
+  };
+
   if (p === "食品") {
-    return safeKey(r["食品ジャンル"]) || "未分類";
+    return pick("食品ジャンル", "食品ジャンル_code");
   }
   if (p === "ぬいぐるみ") {
-    return safeKey(r["ぬいぐるみジャンル"]) || "未分類";
+    // ここが「全部未分類」になりがち
+    return pick("ぬいぐるみジャンル", "ぬいぐるみジャンル_code");
   }
   if (p === "雑貨") {
-    return safeKey(r["雑貨ジャンル"]) || "未分類";
+    return pick("雑貨ジャンル", "雑貨ジャンル_code");
   }
   return "未分類";
 }
