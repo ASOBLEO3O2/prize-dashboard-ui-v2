@@ -1,0 +1,29 @@
+name: Build symbol_master.json
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build symbol_master.json
+        run: |
+          mkdir -p data/master
+          node tools/build_symbol_master.mjs "<CSV_URL>" "data/master/symbol_master.json"
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/master/symbol_master.json
+          git diff --cached --quiet || git commit -m "Update symbol_master.json"
+          git push
