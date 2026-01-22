@@ -134,16 +134,43 @@ hydrateFromRaw().catch((e) => {
 });
 
 async function hydrateFromRaw() {
+  // ① 生データ取得
   const { rows, summary } = await loadRawData();
 
-  const st = store.get();
-  const filtered = applyFilters(rows, st.filters);
+  // ② 記号マスタを読み込む（←ここが今まで無かった）
+  const masterRes = await fetch("./data/master/symbol_master.json", { cache: "no-store" });
+  const masterDict = masterRes.ok ? await masterRes.json() : {};
 
+  // ③ rows をマスタで正規化（最重要）
+  const normalizedRows = rows.map(r => {
+    const key = String(r.symbol_raw ?? r.raw ?? "").trim();
+    const m = key ? masterDict[key] : null;
+    if (!m) return r;
+
+    // マスタを「正」として上書き
+    return {
+      ...r,
+      ...m,               // ← ぬいぐるみジャンル / キャラ / 各種ジャンルがここで入る
+      symbol_raw: r.symbol_raw,
+      raw: r.raw,
+      sales: r.sales,
+      claw: r.claw,
+      cost_rate: r.cost_rate,
+    };
+  });
+
+  // ④ フィルタ
+  const st = store.get();
+  const filtered = applyFilters(normalizedRows, st.filters);
+
+  // ⑤ 集計
   const vm = buildViewModel(filtered, summary);
   const axis = buildByAxis(filtered);
 
-  // === DEBUG: ぬいぐるみ内訳が取れない原因確認 ===
-  const samplePlush = filtered.find(r => String(r["景品ジャンル"] ?? "").trim() === "ぬいぐるみ");
+  // === DEBUG（ここで見る値が変わる） ===
+  const samplePlush = filtered.find(
+    r => String(r["景品ジャンル"] ?? "").trim() === "ぬいぐるみ"
+  );
 
   console.log("[DEBUG] plush sample keys:", samplePlush ? Object.keys(samplePlush) : null);
 
@@ -159,16 +186,15 @@ async function hydrateFromRaw() {
   const plushStats = filtered
     .filter(r => String(r["景品ジャンル"] ?? "").trim() === "ぬいぐるみ")
     .reduce((a, r) => {
-      const v1 = String(r["ぬいぐるみジャンル"] ?? "").trim();
-      const v2 = String(r["ぬいぐるみジャンル_code"] ?? "").trim();
-      if (v1) a.label++;
-      if (v2) a.code++;
+      if (String(r["ぬいぐるみジャンル"] ?? "").trim()) a.label++;
+      if (String(r["ぬいぐるみジャンル_code"] ?? "").trim()) a.code++;
       a.total++;
       return a;
     }, { total: 0, label: 0, code: 0 });
 
   console.log("[DEBUG] plush stats:", plushStats);
 
+  // ⑥ state 更新
   store.set((s) => ({
     ...s,
     updatedDate: vm.updatedDate || s.updatedDate,
