@@ -1,3 +1,11 @@
+export function buildByAxis(rows) {
+  console.log("[BYAXIS] LOADED v2026-01-22", rows?.length);
+  return {
+    // ...
+  };
+}
+
+
 // src/logic/byAxis.js
 // rows（1行=1台）から「中段KPIの軸別カード用データ」を作る
 //
