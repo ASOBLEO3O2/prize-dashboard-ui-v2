@@ -143,6 +143,32 @@ async function hydrateFromRaw() {
   const vm = buildViewModel(filtered, summary);
   const axis = buildByAxis(filtered);
 
+// === DEBUG: ぬいぐるみ内訳が取れない原因確認 ===
+const samplePlush = filtered.find(r => String(r["景品ジャンル"]).trim() === "ぬいぐるみ");
+console.log("[SAMPLE plush row keys]", samplePlush ? Object.keys(samplePlush) : null);
+console.log("[SAMPLE plush values]", samplePlush ? {
+  景品ジャンル: samplePlush["景品ジャンル"],
+  ぬいぐるみジャンル: samplePlush["ぬいぐるみジャンル"],
+  ぬいぐるみジャンル_code: samplePlush["ぬいぐるみジャンル_code"],
+  キャラ: samplePlush["キャラ"],
+  キャラジャンル: samplePlush["キャラジャンル"],
+  ノンキャラジャンル: samplePlush["ノンキャラジャンル"],
+} : null);
+
+const plushStats = filtered
+  .filter(r => String(r["景品ジャンル"]).trim() === "ぬいぐるみ")
+  .reduce((a, r) => {
+    const v1 = String(r["ぬいぐるみジャンル"] ?? "").trim();
+    const v2 = String(r["ぬいぐるみジャンル_code"] ?? "").trim();
+    if (v1) a.label++;
+    if (v2) a.code++;
+    a.total++;
+    return a;
+  }, { total:0, label:0, code:0 });
+
+console.log("[STATS plush genre]", plushStats);
+
+  
   store.set((s) => ({
     ...s,
     updatedDate: vm.updatedDate || s.updatedDate,
