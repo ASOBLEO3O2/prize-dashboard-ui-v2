@@ -139,7 +139,6 @@ function pickGenreChild(r) {
 
   return v || "未分類";
 }
-
 function pickCharaChild(r) {
   const p = safeKey(r["キャラ"]);
   if (p === "ノンキャラ") return safeKey(r["ノンキャラジャンル"]);
