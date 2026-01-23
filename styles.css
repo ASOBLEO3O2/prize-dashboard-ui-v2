@@ -491,7 +491,10 @@ a{ color:inherit; }
   cursor: pointer !important;
 }
 
+
 /* hover / state は今まで通り */
 #midCards .midCards .genreCard:hover{
   border-color: rgba(109,211,251,.35) !important;
 }
+
+body{ outline: 6px solid #ff00ff !important; }
