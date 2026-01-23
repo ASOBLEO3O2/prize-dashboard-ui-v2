@@ -165,7 +165,7 @@ a{ color:inherit; }
 .sectionHint{ font-size:12px; color:var(--muted); }
 
 /* =========================
-   Mid KPI (4-split core)
+   Mid KPI（中段：4分割）
    ========================= */
 
 .midKpiWrap{
@@ -176,24 +176,21 @@ a{ color:inherit; }
   overflow:hidden;
 }
 
-/* ★ 4分割グリッド本体 */
+/* ★ 4分割グリッド本体（ここだけ） */
 .midTop{
   padding:14px;
   border-bottom:1px solid var(--border);
-
   display:grid;
   grid-template-columns:repeat(2, minmax(0,1fr));
   gap:12px;
   align-items:stretch;
 }
 
-/* 入れ子解除（中身だけグリッド参加） */
+/* 中段の入れ子解除：4枚を2×2に乗せる */
 .donuts{ display:contents; }
 .chartsGrid{ display:contents; }
 
-/* =========================
-   Donut Panels
-   ========================= */
+/* ===== Donut Panels ===== */
 
 .donutPanel{
   border:1px solid var(--border);
@@ -203,8 +200,7 @@ a{ color:inherit; }
   gap:12px;
   align-items:center;
   padding:12px;
-
-  height:280px;          /* ★ 4枚の高さを統一 */
+  height:280px;
 }
 
 .donutMeta{
@@ -222,9 +218,7 @@ a{ color:inherit; }
   color:var(--muted);
 }
 
-/* =========================
-   Charts
-   ========================= */
+/* ===== Charts ===== */
 
 .chartCard{
   border:1px solid var(--border);
@@ -232,8 +226,7 @@ a{ color:inherit; }
   border-radius:var(--r);
   box-shadow:var(--shadow);
   overflow:hidden;
-
-  height:280px;          /* ★ ドーナツと同サイズ */
+  height:280px;
   display:flex;
   flex-direction:column;
 }
@@ -273,7 +266,7 @@ a{ color:inherit; }
 }
 
 /* =========================
-   Mid Cards
+   Mid Cards（下段カード：元に戻す）
    ========================= */
 
 .midCardsMount{
@@ -286,43 +279,21 @@ a{ color:inherit; }
   grid-template-columns:repeat(3, minmax(0,1fr));
 }
 
-/* =========================
-   Mid Cards（下部カード）復活＆統一
-   ========================= */
-
-.midCards{
-  display:grid;
-  gap:12px;
-  grid-template-columns:repeat(3, minmax(0,1fr));
-  align-items:stretch; /* 高さ揃え */
-}
-
+/* ※ 下段カードは「元の軽いカード」：border/shadowは付けない */
 .genreCard{
   padding:14px;
-
-  /* “カード感”を復活 */
-  border:1px solid var(--border);
-  border-radius: var(--r);
-  background: rgba(15,21,29,.55);
-  box-shadow: var(--shadow);
-
   cursor:pointer;
   transition: transform .08s ease, border-color .15s ease, background .15s ease, opacity .15s ease;
-
-  /* 高さ揃え（中身が少ないカードも揃う） */
-  height:100%;
-  display:flex;
-  flex-direction:column;
+  background: rgba(15,21,29,.55);
+  border: 1px solid var(--border); /* ← これが元からあったなら残す／無いなら消してOK */
+  border-radius: var(--r);         /* ← 角丸は維持 */
 }
 
 .genreCard:hover{
   border-color: rgba(109,211,251,.35);
 }
-.genreCard:active{
-  transform: scale(.99);
-}
+.genreCard:active{ transform: scale(.99); }
 
-/* 既存の状態クラスはそのまま効かせる */
 .genreCard.dim{ opacity:.35; }
 .genreCard.focus{
   border-color: rgba(109,211,251,.65);
@@ -331,16 +302,6 @@ a{ color:inherit; }
 .genreCard.open{
   border-color: rgba(126,224,129,.65);
   background: rgba(126,224,129,.07);
-}
-
-.genreCard.dim{ opacity:.35; }
-.genreCard.focus{
-  border-color:rgba(109,211,251,.65);
-  background:rgba(109,211,251,.08);
-}
-.genreCard.open{
-  border-color:rgba(126,224,129,.65);
-  background:rgba(126,224,129,.07);
 }
 
 /* =========================
@@ -428,73 +389,3 @@ a{ color:inherit; }
 @media (max-width:560px){
   .midCards{ grid-template-columns:1fr; }
 }
-
-/* =========================
-   FORCE: 下部カードを必ずカード化（末尾に追記）
-   ========================= */
-
-/* まず、下部のカード群は #midCards の配下に出る想定なので、そこに強制指定 */
-#midCards .genreCard{
-  border: 1px solid var(--border) !important;
-  border-radius: var(--r) !important;
-  background: rgba(15,21,29,.55) !important;
-  box-shadow: var(--shadow) !important;
-
-  padding: 14px !important;
-  cursor: pointer !important;
-  transition: transform .08s ease, border-color .15s ease, background .15s ease, opacity .15s ease !important;
-
-  height: 100% !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-#midCards .genreCard:hover{
-  border-color: rgba(109,211,251,.35) !important;
-}
-#midCards .genreCard:active{
-  transform: scale(.99) !important;
-}
-
-/* 高さ揃え（3列グリッド側も強制） */
-#midCards .midCards{
-  display: grid !important;
-  gap: 12px !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  align-items: stretch !important;
-}
-
-/* =========================
-   FIX: 下部カードが揃わない問題の本丸
-   ========================= */
-
-/* 本体グリッドをストレッチさせる */
-#midCards .midCards{
-  display: grid !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  gap: 12px !important;
-  align-items: stretch !important; /* ← これが重要 */
-}
-
-/* 各カードを「高さ100%で伸びる箱」にする */
-#midCards .midCards .genreCard{
-  height: 100% !important;
-  display: flex !important;
-  flex-direction: column !important;
-
-  border: 1px solid var(--border) !important;
-  border-radius: var(--r) !important;
-  background: rgba(15,21,29,.55) !important;
-  box-shadow: var(--shadow) !important;
-
-  padding: 14px !important;
-  cursor: pointer !important;
-}
-
-
-/* hover / state は今まで通り */
-#midCards .midCards .genreCard:hover{
-  border-color: rgba(109,211,251,.35) !important;
-}
-
-body{ outline: 6px solid #ff00ff !important; }
