@@ -286,11 +286,51 @@ a{ color:inherit; }
   grid-template-columns:repeat(3, minmax(0,1fr));
 }
 
+/* =========================
+   Mid Cards（下部カード）復活＆統一
+   ========================= */
+
+.midCards{
+  display:grid;
+  gap:12px;
+  grid-template-columns:repeat(3, minmax(0,1fr));
+  align-items:stretch; /* 高さ揃え */
+}
+
 .genreCard{
   padding:14px;
-  background:rgba(15,21,29,.55);
-  transition:.15s;
+
+  /* “カード感”を復活 */
+  border:1px solid var(--border);
+  border-radius: var(--r);
+  background: rgba(15,21,29,.55);
+  box-shadow: var(--shadow);
+
   cursor:pointer;
+  transition: transform .08s ease, border-color .15s ease, background .15s ease, opacity .15s ease;
+
+  /* 高さ揃え（中身が少ないカードも揃う） */
+  height:100%;
+  display:flex;
+  flex-direction:column;
+}
+
+.genreCard:hover{
+  border-color: rgba(109,211,251,.35);
+}
+.genreCard:active{
+  transform: scale(.99);
+}
+
+/* 既存の状態クラスはそのまま効かせる */
+.genreCard.dim{ opacity:.35; }
+.genreCard.focus{
+  border-color: rgba(109,211,251,.65);
+  background: rgba(109,211,251,.08);
+}
+.genreCard.open{
+  border-color: rgba(126,224,129,.65);
+  background: rgba(126,224,129,.07);
 }
 
 .genreCard.dim{ opacity:.35; }
