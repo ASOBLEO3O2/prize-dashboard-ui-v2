@@ -463,3 +463,35 @@ a{ color:inherit; }
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   align-items: stretch !important;
 }
+
+/* =========================
+   FIX: 下部カードが揃わない問題の本丸
+   ========================= */
+
+/* 本体グリッドをストレッチさせる */
+#midCards .midCards{
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  align-items: stretch !important; /* ← これが重要 */
+}
+
+/* 各カードを「高さ100%で伸びる箱」にする */
+#midCards .midCards .genreCard{
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+
+  border: 1px solid var(--border) !important;
+  border-radius: var(--r) !important;
+  background: rgba(15,21,29,.55) !important;
+  box-shadow: var(--shadow) !important;
+
+  padding: 14px !important;
+  cursor: pointer !important;
+}
+
+/* hover / state は今まで通り */
+#midCards .midCards .genreCard:hover{
+  border-color: rgba(109,211,251,.35) !important;
+}
