@@ -428,3 +428,38 @@ a{ color:inherit; }
 @media (max-width:560px){
   .midCards{ grid-template-columns:1fr; }
 }
+
+/* =========================
+   FORCE: 下部カードを必ずカード化（末尾に追記）
+   ========================= */
+
+/* まず、下部のカード群は #midCards の配下に出る想定なので、そこに強制指定 */
+#midCards .genreCard{
+  border: 1px solid var(--border) !important;
+  border-radius: var(--r) !important;
+  background: rgba(15,21,29,.55) !important;
+  box-shadow: var(--shadow) !important;
+
+  padding: 14px !important;
+  cursor: pointer !important;
+  transition: transform .08s ease, border-color .15s ease, background .15s ease, opacity .15s ease !important;
+
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+#midCards .genreCard:hover{
+  border-color: rgba(109,211,251,.35) !important;
+}
+#midCards .genreCard:active{
+  transform: scale(.99) !important;
+}
+
+/* 高さ揃え（3列グリッド側も強制） */
+#midCards .midCards{
+  display: grid !important;
+  gap: 12px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+}
