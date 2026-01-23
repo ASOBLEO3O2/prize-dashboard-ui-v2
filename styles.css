@@ -279,6 +279,11 @@ a{ color:inherit; }
   grid-template-columns:repeat(3, minmax(0,1fr));
 }
 
+.midCardsMount{
+  padding:12px 14px 14px;
+  display: flow-root;   /* ← 追加：中段のレイアウト影響をここで断ち切る */
+}
+
 /* ※ 下段カードは「元の軽いカード」：border/shadowは付けない */
 .genreCard{
   padding:14px;
