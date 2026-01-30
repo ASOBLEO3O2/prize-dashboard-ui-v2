@@ -15,8 +15,8 @@ import { loadRawData } from "./data/load.js";
 import { applyFilters } from "./logic/filter.js";
 import { buildViewModel } from "./logic/aggregate.js";
 
-// ✅ 追加：チャート2枚（原価率分布 / 売上×原価率）
 import { renderCharts } from "./ui/charts.js";
+import { renderFocusOverlay } from "./ui/focusOverlay.js";
 
 const initialState = {
   // data
@@ -25,20 +25,15 @@ const initialState = {
   byGenre: structuredClone(MOCK.byGenre),
   details: structuredClone(MOCK.details),
 
-  // ✅ 追加：チャート用（フィルタ後rows）
+  // チャート用（フィルタ後rows）
   filteredRows: [],
 
-  // 中段の詳細（将来拡張用）
-  midDetail: null, // { axis, parentKey, childLabel }
-
-  // ✅ 中段KPI：軸別集計（③の土台）
+  // 中段KPI：軸別集計
   byAxis: {},
 
-  // ✅ 中段KPI：表示モード
+  // 下段（無罪：既存）
   midAxis: "ジャンル",
-  midParentKey: null, // null=上層 / 値あり=下層
-
-  // ✅ 中段KPI：並び替え
+  midParentKey: null,
   midSortKey: "sales",
   midSortDir: "desc",
 
@@ -49,6 +44,14 @@ const initialState = {
   focusGenre: null,
   openDetailGenre: null,
   drawerOpen: false,
+
+  // ✅ フォーカス（上層レイヤー）
+  focus: {
+    open: false,
+    kind: null,      // "salesDonut" | "machineDonut" | "costHist" | "scatter"
+    title: "",
+    parentKey: null, // ドーナツ下層（拡大内のみ）
+  },
 
   // 詳細（テーブル）の並び替え
   detailSortKey: "sales",
@@ -67,22 +70,19 @@ const actions = {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
 
-  // ✅ 中段KPI：上層→下層 / 下層→上層
+  // 下段（無罪）
   onPickMidParent: (keyOrNull) => {
     store.set((s) => ({ ...s, midParentKey: keyOrNull }));
   },
 
-  // 将来：中段から詳細を開く（今は未使用でもOK）
   onOpenMidDetail: (payloadOrNull) => {
     store.set((s) => ({ ...s, midDetail: payloadOrNull }));
   },
 
-  // ✅ 再描画（stateを変えないと再描画されない場合の逃げ）
   requestRender: () => {
     store.set((s) => ({ ...s }));
   },
 
-  // 詳細（テーブル）の開閉
   onToggleDetail: (genre) => {
     store.set((s) => {
       const next = (s.openDetailGenre === genre) ? null : genre;
@@ -90,7 +90,6 @@ const actions = {
     });
   },
 
-  // 詳細（テーブル）並び替え
   onSetDetailSort: (key, dir) => {
     store.set((s) => ({
       ...s,
@@ -99,11 +98,40 @@ const actions = {
     }));
   },
 
-  // ドロワー
+  // Drawer
   onOpenDrawer: () => store.set((s) => ({ ...s, drawerOpen: true })),
   onCloseDrawer: () => store.set((s) => ({ ...s, drawerOpen: false })),
 
-  // 更新（本データ再取得）
+  // ✅ フォーカス（上層レイヤー）
+  onOpenFocus: (kind) => {
+    const title =
+      (kind === "salesDonut") ? "売上構成比" :
+      (kind === "machineDonut") ? "マシン構成比" :
+      (kind === "costHist") ? "原価率 分布" :
+      (kind === "scatter") ? "売上 × 原価率（マトリクス）" :
+      "詳細";
+
+    store.set((s) => ({
+      ...s,
+      focus: { open: true, kind, title, parentKey: null }
+    }));
+  },
+
+  onCloseFocus: () => {
+    store.set((s) => ({
+      ...s,
+      focus: { open: false, kind: null, title: "", parentKey: null }
+    }));
+  },
+
+  onSetFocusParentKey: (keyOrNull) => {
+    store.set((s) => ({
+      ...s,
+      focus: { ...s.focus, parentKey: keyOrNull }
+    }));
+  },
+
+  // Refresh
   onRefresh: async () => {
     await hydrateFromRaw();
   },
@@ -122,11 +150,14 @@ function renderAll(state) {
 
   renderTopKpi(mounts.topKpi, state.topKpi);
 
-  // 中段（ドーナツ＋カード）
-  renderMidKpi(mounts.donutsArea, mounts.midCards, state, actions);
+  // 中段（4カード + 下段カード）
+  renderMidKpi(mounts, state, actions);
 
-  // ✅ 追加：チャート（原価率分布 / 売上×原価率）
+  // チャート描画
   renderCharts(mounts, state);
+
+  // フォーカス（上層レイヤー）
+  renderFocusOverlay(mounts.focusOverlay, mounts.focusModal, state, actions);
 
   // 詳細
   renderDetail(mounts.detailMount, state, actions);
@@ -135,27 +166,21 @@ function renderAll(state) {
   renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
 }
 
-// 初回描画（まずはMOCKで表示）
 renderAll(store.get());
 store.subscribe(renderAll);
 
-// 実データで上書き
 hydrateFromRaw().catch((e) => {
   console.error(e);
   store.set((s) => ({ ...s, loadError: String(e?.message || e) }));
 });
 
 async function hydrateFromRaw() {
-  // ① 生データ取得
   const raw = await loadRawData();
   const rows = Array.isArray(raw?.rows) ? raw.rows : [];
   const summary = raw?.summary ?? null;
   const masterDict = raw?.masterDict ?? {};
 
-  console.log("[CONNECT] rows:", rows.length);
-  console.log("[CONNECT] master keys:", masterDict ? Object.keys(masterDict).length : 0);
-
-  // ② codebook（無ければ空でOK：404は握りつぶす）
+  // ② codebook
   let codebook = {};
   try {
     const res = await fetch("./data/master/codebook.json", { cache: "no-store" });
@@ -164,7 +189,7 @@ async function hydrateFromRaw() {
     codebook = {};
   }
 
-  // ③ 正規化（売上マスタ + 記号解析）
+  // ③ 正規化
   const normalizedRows = rows.map((r) => {
     const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
     const m = key ? masterDict?.[key] : null;
@@ -175,7 +200,6 @@ async function hydrateFromRaw() {
       ...(m || {}),
       ...decoded,
 
-      // key系と数値系は r を正とする
       symbol_raw: r.symbol_raw,
       raw: r.raw,
       sales: r.sales,
@@ -201,10 +225,7 @@ async function hydrateFromRaw() {
     details: vm.details,
     byAxis: axis,
     filters: vm.filters ?? s.filters,
-
-    // ✅ 追加：チャート用に保持
     filteredRows: filtered,
-
     loadError: null,
   }));
 }
