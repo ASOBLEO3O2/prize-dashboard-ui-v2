@@ -16,44 +16,29 @@ export function mountLayout(root, actions) {
 
   const topKpi = el("div", { class: "kpiTop", id: "topKpi" });
 
-  // ✅ 追加：チャート2枚（原価率分布 / 売上×原価率）
-  const chartsGrid = el("div", { class: "chartsGrid", id: "chartsGrid" }, [
-    el("div", { class: "chartCard" }, [
-      el("div", { class: "chartHeader" }, [
-        el("div", { class: "chartTitle", text: "原価率 分布" }),
-        el("div", { class: "chartTools" }, [
-          el("select", { class: "select", id: "costHistMode" }, [
-            el("option", { value: "count", text: "台数" }),
-            el("option", { value: "sales", text: "売上" }),
-          ])
-        ])
-      ]),
-      el("div", { class: "chartBody" }, [
-        el("canvas", { id: "costHistChart" })
-      ])
-    ]),
-
-    el("div", { class: "chartCard" }, [
-      el("div", { class: "chartHeader" }, [
-        el("div", { class: "chartTitle", text: "売上 × 原価率（マトリクス）" }),
-      ]),
-      el("div", { class: "chartBody" }, [
-        el("canvas", { id: "salesCostScatter" })
-      ])
-    ])
+  // =========================
+  // 中段：器だけ（4カードのマウントポイント）
+  //  - 役割別（donuts/charts）コンテナは作らない
+  //  - 同一の「カード枠」が4つあるだけ
+  // =========================
+  const midGrid = el("div", { class: "midGrid", id: "midGrid" }, [
+    el("div", { id: "midSlotSalesDonut" }),
+    el("div", { id: "midSlotMachineDonut" }),
+    el("div", { id: "midSlotCostHist" }),
+    el("div", { id: "midSlotScatter" }),
   ]);
 
   const section = el("div", { class: "section" }, [
     el("div", { class: "sectionHeader" }, [
       el("div", { class: "sectionTitle", text: "中段KPI" }),
-      el("div", { class: "sectionHint", text: "ドーナツ → カード強調 / カード → 下に詳細展開" }),
+      el("div", { class: "sectionHint", text: "カードをタップ → 拡大表示（ドーナツは下層へ）" }),
     ]),
     el("div", { class: "midKpiWrap", id: "midKpiWrap" }, [
-      el("div", { class: "midTop" }, [
-        el("div", { class: "donuts", id: "donutsArea" }),
-        chartsGrid, // ✅ ここに追加
+      // ✅ 上段：4カード（2×2 / スマホは縦積み）
+      el("div", { class: "midTop", id: "midTop" }, [
+        midGrid,
       ]),
-      // ✅ ここがポイント：gridにしない「マウント専用」
+      // ✅ 下段（既存の下段カード：無罪・触らない）
       el("div", { class: "midCardsMount", id: "midCards" }),
     ]),
     el("div", { id: "detailMount" }),
@@ -62,8 +47,16 @@ export function mountLayout(root, actions) {
   container.appendChild(topbar);
   container.appendChild(topKpi);
   container.appendChild(section);
-
   root.appendChild(container);
+
+  // =========================
+  // フォーカス（上層レイヤー）
+  //  - 中段カードを拡大表示するための器だけ
+  // =========================
+  const focusOverlay = el("div", { class: "focusOverlay", id: "focusOverlay" });
+  const focusModal = el("div", { class: "focusModal", id: "focusModal" });
+  focusOverlay.appendChild(focusModal);
+  root.appendChild(focusOverlay);
 
   // Drawer mount
   const overlay = el("div", { class: "drawerOverlay", id: "drawerOverlay", onClick: actions.onCloseDrawer });
@@ -74,14 +67,20 @@ export function mountLayout(root, actions) {
   return {
     updatedBadge: container.querySelector("#updatedBadge"),
     topKpi,
-    donutsArea: container.querySelector("#donutsArea"),
+
+    // ✅ 中段4スロット
+    midSlotSalesDonut: container.querySelector("#midSlotSalesDonut"),
+    midSlotMachineDonut: container.querySelector("#midSlotMachineDonut"),
+    midSlotCostHist: container.querySelector("#midSlotCostHist"),
+    midSlotScatter: container.querySelector("#midSlotScatter"),
+
+    // ✅ 既存：下段カード（無罪）
     midCards: container.querySelector("#midCards"),
     detailMount: container.querySelector("#detailMount"),
 
-    // ✅ 追加：チャートDOM参照（必要なら使う）
-    costHistMode: container.querySelector("#costHistMode"),
-    costHistCanvas: container.querySelector("#costHistChart"),
-    salesCostCanvas: container.querySelector("#salesCostScatter"),
+    // ✅ フォーカス（上層レイヤー）
+    focusOverlay,
+    focusModal,
 
     drawer,
     drawerOverlay: overlay,
