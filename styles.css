@@ -165,7 +165,7 @@ a{ color:inherit; }
 .sectionHint{ font-size:12px; color:var(--muted); }
 
 /* =========================
-   Mid KPI（中段：安定した4分割）
+   Mid KPI（中段：4カード）
    ========================= */
 
 .midKpiWrap{
@@ -176,72 +176,106 @@ a{ color:inherit; }
   overflow:hidden;
 }
 
-/* ✅ midTop は「2段」にする：上段=ドーナツ2枚 / 下段=チャート2枚
-   → display: contents を使わないので、下段カードを巻き込まない */
+/* ✅ 中段：上段は 4カード（2×2 / スマホは縦積み） */
 .midTop{
   padding:14px;
   border-bottom:1px solid var(--border);
-  display:grid;
-  grid-template-rows:auto auto;
-  gap:12px;
-  align-items:stretch;
 }
 
-/* 上段：ドーナツ2枚 */
-#donutsArea{
+/* 4スロットの器 */
+.midGrid{
   display:grid;
+  gap:12px;
   grid-template-columns:repeat(2, minmax(0,1fr));
-  gap:12px;
   align-items:stretch;
 }
 
-/* 下段：チャート2枚 */
-#chartsGrid{
-  display:grid;
-  grid-template-columns:repeat(2, minmax(0,1fr));
-  gap:12px;
-  align-items:stretch;
+/* 4カード（共通） */
+.midPanel{
+  overflow:hidden;
 }
 
-/* ★ ここが “壊れの原因” なので禁止（削除）
-.donuts{ display:contents; }
-.chartsGrid{ display:contents; }
-*/
-
-/* ===== Donut Panels ===== */
-
-.donutPanel{
-  border:1px solid var(--border);
-  border-radius:14px;
-  background:rgba(15,21,29,.55);
+.midPanelHeader{
+  padding:12px 14px;
+  border-bottom:1px solid var(--border);
   display:flex;
-  gap:12px;
   align-items:center;
-  padding:12px;
-  height:280px;
+  justify-content:space-between;
+  gap:10px;
 }
 
-.donutMeta{
+.midPanelTitleWrap{
   display:flex;
   flex-direction:column;
-  gap:6px;
-  min-width:140px;
+  gap:2px;
+  min-width:0;
 }
-.donutMeta .title{
-  font-size:13px;
-  font-weight:850;
+
+.midPanelTitle{
+  font-size:14px;
+  font-weight:900;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
-.donutMeta .note{
+
+.midPanelSub{
+  font-size:12px;
+  color:var(--muted);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.midPanelBtn{
+  padding:7px 10px;
+  border-radius:10px;
+}
+
+.midPanelBody{
+  padding:10px 12px 12px;
+  height:280px;          /* PC基準：統一 */
+  display:flex;
+  gap:12px;
+  align-items:stretch;
+  min-height:0;
+}
+
+/* ドーナツ通常カード：左=ドーナツ / 右=凡例（省スペース） */
+.donutBody{
+  cursor:pointer;
+}
+
+.donutHost{
+  flex:0 0 58%;
+  min-width:0;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.donutMetaCompact{
+  flex:1;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.donutMetaCompact .note{
   font-size:12px;
   color:var(--muted);
 }
 
-/* ✅ 凡例（kpiMid.js で DOM は作られているので、CSS を復活させる） */
+/* 凡例（共通） */
 .legend{
-  margin-top: 6px;
   display:flex;
   flex-wrap:wrap;
   gap:8px;
+}
+.legend.compact .legendItem{
+  font-size:12px;
 }
 .legendItem{
   display:flex;
@@ -268,30 +302,9 @@ a{ color:inherit; }
   opacity:.9;
 }
 
-/* ===== Charts ===== */
-
-.chartCard{
-  border:1px solid var(--border);
-  background:rgba(18,26,34,.55);
-  border-radius:var(--r);
-  box-shadow:var(--shadow);
-  overflow:hidden;
-  height:280px;
-  display:flex;
-  flex-direction:column;
-}
-
-.chartHeader{
-  padding:12px 14px;
-  border-bottom:1px solid var(--border);
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-}
-
-.chartTitle{
-  font-size:14px;
-  font-weight:900;
+/* チャート通常カード */
+.chartBody{
+  cursor:pointer;
 }
 
 .chartTools .select{
@@ -303,20 +316,14 @@ a{ color:inherit; }
   padding:6px 10px;
 }
 
-.chartBody{
-  padding:10px 12px 12px;
-  flex:1;
-  min-height:0;
-}
-
-.chartBody canvas{
+.midPanelBody canvas{
   width:100% !important;
   height:100% !important;
   display:block;
 }
 
 /* =========================
-   Mid Cards（下段カード）
+   Mid Cards（下段カード：無罪）
    ========================= */
 
 .midCardsMount{
@@ -409,6 +416,156 @@ a{ color:inherit; }
 .drawer.open{ transform:translateX(0); }
 
 /* =========================
+   Focus Overlay（拡大表示）
+   ========================= */
+
+.focusOverlay{
+  position:fixed;
+  inset:0;
+  display:none;
+  z-index:80;
+  background:rgba(0,0,0,.58);
+  backdrop-filter: blur(4px);
+}
+
+.focusOverlay.open{
+  display:block;
+}
+
+.focusModal{
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  width:min(1100px, 96vw);
+  max-height:min(92vh, 920px);
+  background:rgba(15,21,29,.94);
+  border:1px solid var(--border);
+  border-radius:18px;
+  box-shadow:var(--shadow);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+.focusHeader{
+  padding:12px 12px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.focusTitle{
+  font-weight:900;
+  letter-spacing:.2px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.focusBody{
+  padding:12px 14px 14px;
+  overflow:auto;
+  min-height:0;
+}
+
+.focusPlaceholder{
+  padding:18px;
+  color:var(--muted);
+  border:1px dashed var(--border);
+  border-radius:14px;
+}
+
+/* ドーナツ拡大 */
+.focusPanel{
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:rgba(18,26,34,.55);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+
+.focusPanelTop{
+  padding:14px 14px 10px;
+}
+
+.focusPanelTitle{
+  font-weight:900;
+  font-size:16px;
+}
+.focusPanelNote{
+  margin-top:4px;
+  font-size:12px;
+  color:var(--muted);
+}
+
+.focusNav{
+  padding:0 14px 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.focusCrumb{ color:var(--muted); font-size:12px; }
+.focusHint{ color:var(--muted); font-size:12px; }
+
+.focusDonutGrid{
+  padding:12px 14px 14px;
+  display:grid;
+  grid-template-columns: 1.15fr .85fr;
+  gap:12px;
+  align-items:stretch;
+}
+
+.focusDonutWrap{
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:rgba(15,21,29,.55);
+  height:520px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.focusDonutHost{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.focusLegend{
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:rgba(15,21,29,.55);
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-height:0;
+}
+
+.focusLegendItem{
+  appearance:none;
+  border:1px solid var(--border);
+  background:rgba(18,26,34,.45);
+  color:var(--text);
+  border-radius:12px;
+  padding:10px 10px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-align:left;
+}
+.focusLegendItem:hover{
+  border-color: rgba(109,211,251,.35);
+}
+
+/* =========================
    Cost rate gradient
    ========================= */
 
@@ -433,13 +590,33 @@ a{ color:inherit; }
 @media (max-width:980px){
   .kpiTop{ grid-template-columns:repeat(2,1fr); }
 
-  /* 中段は縦積み */
-  #donutsArea{ grid-template-columns:1fr; }
-  #chartsGrid{ grid-template-columns:1fr; }
+  /* 中段は縦積み（1列×4） */
+  .midGrid{ grid-template-columns:1fr; }
+  .midPanelBody{ height:260px; }
 
   .midCards{ grid-template-columns:repeat(2,1fr); }
+
+  /* 拡大：小画面はフルスクリーン寄せ */
+  .focusModal{
+    left:0;
+    top:0;
+    transform:none;
+    width:100vw;
+    height:100vh;
+    max-height:none;
+    border-radius:0;
+  }
+
+  .focusDonutGrid{
+    grid-template-columns:1fr;
+  }
+  .focusDonutWrap{
+    height:46vh;
+    min-height:320px;
+  }
 }
 
 @media (max-width:560px){
+  .midPanelBody{ height:240px; }
   .midCards{ grid-template-columns:1fr; }
 }
