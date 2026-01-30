@@ -1,4 +1,4 @@
-// src/ui/charts.js
+  // src/ui/charts.js
 
 let costHistChart = null;
 let salesCostScatter = null;
@@ -17,7 +17,6 @@ function toNum(v) {
   if (typeof v === "string") {
     const s = v.trim().replace(/,/g, "");
     if (!s) return null;
-    // "5.2%" → 0.052
     if (s.endsWith("%")) {
       const n = Number(s.slice(0, -1));
       return Number.isFinite(n) ? n / 100 : null;
@@ -28,12 +27,22 @@ function toNum(v) {
   return null;
 }
 
-function ensureCharts(mounts) {
-  const Chart = window.Chart;
-  if (!Chart) return; // Chart.js 未ロード
+function findCanvasAndMode(mounts) {
+  // layout.js が返す mounts を信用しすぎない（崩れ防止）
+  // DOMにあるものを毎回探す（軽い）
+  const costCanvas = document.getElementById("costHistChart");
+  const scatterCanvas = document.getElementById("salesCostScatter");
+  const modeSelect = document.getElementById("costHistMode");
+  return { costCanvas, scatterCanvas, modeSelect };
+}
 
-  const c1 = mounts.costHistCanvas?.getContext?.("2d");
-  const c2 = mounts.salesCostCanvas?.getContext?.("2d");
+function ensureCharts() {
+  const Chart = window.Chart;
+  if (!Chart) return;
+
+  const { costCanvas, scatterCanvas } = findCanvasAndMode();
+  const c1 = costCanvas?.getContext?.("2d");
+  const c2 = scatterCanvas?.getContext?.("2d");
   if (!c1 || !c2) return;
 
   if (!costHistChart) {
@@ -45,6 +54,7 @@ function ensureCharts(mounts) {
       },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false } },
@@ -55,7 +65,6 @@ function ensureCharts(mounts) {
   }
 
   if (!salesCostScatter) {
-    // 補助線（売上=10000 / 原価率=5%）
     const quadLines = {
       id: "quadLines",
       afterDraw(chart) {
@@ -68,13 +77,11 @@ function ensureCharts(mounts) {
         ctx.globalAlpha = 0.35;
         ctx.lineWidth = 1;
 
-        // vertical
         ctx.beginPath();
         ctx.moveTo(x, chartArea.top);
         ctx.lineTo(x, chartArea.bottom);
         ctx.stroke();
 
-        // horizontal
         ctx.beginPath();
         ctx.moveTo(chartArea.left, y);
         ctx.lineTo(chartArea.right, y);
@@ -86,12 +93,11 @@ function ensureCharts(mounts) {
 
     salesCostScatter = new Chart(c2, {
       type: "scatter",
-      data: {
-        datasets: [{ label: "マシン", data: [] }],
-      },
+      data: { datasets: [{ label: "マシン", data: [] }] },
       plugins: [quadLines],
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         parsing: false,
         plugins: {
           legend: { display: false },
@@ -154,11 +160,13 @@ function computeScatter(rows) {
 }
 
 export function renderCharts(mounts, state) {
-  ensureCharts(mounts);
+  ensureCharts();
   if (!costHistChart || !salesCostScatter) return;
 
   const rows = Array.isArray(state.filteredRows) ? state.filteredRows : [];
-  const mode = mounts.costHistMode?.value || "count";
+
+  const { modeSelect } = findCanvasAndMode(mounts);
+  const mode = modeSelect?.value || "count";
 
   // ① 原価率分布
   const hist = computeCostHistogram(rows, mode);
@@ -171,9 +179,10 @@ export function renderCharts(mounts, state) {
   salesCostScatter.data.datasets[0].data = pts;
   salesCostScatter.update();
 
-  // mode変更時にも即反映（イベントは1回だけ付ける）
-  if (mounts.costHistMode && !mounts.costHistMode.__bound) {
-    mounts.costHistMode.addEventListener("change", () => renderCharts(mounts, state));
-    mounts.costHistMode.__bound = true;
+  // mode変更時にも即反映（イベントは1回だけ）
+  if (modeSelect && !modeSelect.__bound) {
+    modeSelect.addEventListener("change", () => renderCharts(mounts, state));
+    modeSelect.__bound = true;
   }
 }
+
