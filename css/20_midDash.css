@@ -49,15 +49,18 @@
   min-height:0;
 }
 
-/* bodyは残り高さに追従 */
-.midPanelBody{
-  flex:1;
-  min-height:0;
-  padding:10px 12px 12px;
-  height:auto !important;
+/* 中段：ドーナツがデカくなりすぎない上限 */
+.midPanelBody .donutHost{
   display:flex;
-  gap:12px;
-  align-items:stretch;
+  align-items:center;
+  justify-content:center;
+}
+
+/* svgは親にフィットするが、maxで止める */
+.midPanelBody .donutHost svg{
+  width: min(360px, 100%);
+  height: auto;
+  aspect-ratio: 1 / 1;
 }
 
 /* canvasは追従 */
