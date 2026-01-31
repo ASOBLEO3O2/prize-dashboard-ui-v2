@@ -128,3 +128,87 @@
 #midDash .dashPanel:active{
   transform: scale(.99);
 }
+/* =========================
+   Widget①: 売上/ブース 構成比（2重ドーナツ）
+   - 左: ドーナツ
+   - 右: ABC
+   ========================= */
+
+.widget1{
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  min-height:0; /* 重要: 子のoverflowが効く */
+}
+
+.widget1Header{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 10px 0;
+}
+
+.widget1Title{
+  font-weight:900;
+}
+
+.widget1Select{
+  margin-left:8px;
+}
+
+.widget1Body{
+  flex:1;
+  min-height:0;
+  display:grid;
+  grid-template-columns: minmax(0, 1fr) 240px; /* 右のABC幅 */
+  gap:12px;
+  padding:10px;
+}
+
+.widget1ChartWrap{
+  min-height:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.widget1ChartWrap canvas{
+  width:100% !important;
+  height:100% !important;
+  max-height:280px; /* 箱に合わせて制限 */
+}
+
+.widget1ABC{
+  min-height:0;
+  overflow:auto;
+  font-size:12px;
+  line-height:1.2;
+  padding-right:4px;
+}
+
+.widget1ABCRow{
+  display:grid;
+  grid-template-columns: 20px 1fr auto;
+  gap:8px;
+  padding:6px 0;
+  border-bottom:1px solid rgba(51,65,85,.6);
+}
+
+.widget1ABCRow .rank{
+  font-weight:900;
+  opacity:.9;
+}
+
+.widget1ABCRow.rank-A .rank{ opacity:1; }
+.widget1ABCRow.rank-B .rank{ opacity:.85; }
+.widget1ABCRow.rank-C .rank{ opacity:.75; }
+
+/* 狭い場合は縦並び */
+@media (max-width: 900px){
+  .widget1Body{
+    grid-template-columns: 1fr;
+  }
+  .widget1ABC{
+    max-height:160px;
+  }
+}
