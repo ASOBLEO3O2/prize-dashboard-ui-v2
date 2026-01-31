@@ -47,6 +47,7 @@
   padding:12px 14px 14px;
   overflow:auto;
   min-height:0;
+  flex:1; /* ← これを追加（器の安定化） */
 }
 
 .focusPlaceholder{
