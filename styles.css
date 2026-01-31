@@ -165,87 +165,101 @@ a{ color:inherit; }
 .sectionHint{ font-size:12px; color:var(--muted); }
 
 /* =========================
-   Mid KPI（中段：4カード）
+   Mid KPI（中段：画面フィットの器）
    ========================= */
 
+/* ✅ container を縦レイアウトにして中段が残り高さを取れるように */
+.container{
+  max-width:1280px;
+  margin:0 auto;
+  padding:18px 18px 40px;
+
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  min-height:100svh;
+}
+
+/* section は伸びられる（中段をフィットさせる前提） */
+.section{
+  margin-top:0;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  flex:1;
+}
+
+/* 中段全体（枠）も伸びる */
 .midKpiWrap{
   border:1px solid var(--border);
   background:rgba(18,26,34,.55);
   border-radius:var(--r);
   box-shadow:var(--shadow);
   overflow:hidden;
+
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
 }
 
-/* ✅ 中段：上段は 4カード（2×2 / スマホは縦積み） */
+/* 中段上段：ダッシュボード領域（2×2の器） */
 .midTop{
   padding:14px;
   border-bottom:1px solid var(--border);
+
+  flex:1;
+  min-height:0;
+  display:flex;
 }
 
-/* 4スロットの器 */
-.midGrid{
+/* ✅ 2×2 の“器”本体（layout.js 側に #midDash がある前提） */
+#midDash{
+  width:100%;
+  min-height:0;
   display:grid;
   gap:12px;
-  grid-template-columns:repeat(2, minmax(0,1fr));
+
+  /* 基本は2×2 */
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  grid-template-rows:repeat(2, minmax(0, 1fr));
   align-items:stretch;
 }
 
-/* 4カード（共通） */
-.midPanel{
-  overflow:hidden;
+/* スロット自体が「セル」を埋める */
+#midDash > *{
+  min-width:0;
+  min-height:0;
+  height:100%;
 }
 
-.midPanelHeader{
-  padding:12px 14px;
-  border-bottom:1px solid var(--border);
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-}
-
-.midPanelTitleWrap{
+/* スロットの中に入るカード（kpiMid.js が生成する）もセルを埋める */
+#midDash .midPanel{
+  height:100%;
   display:flex;
   flex-direction:column;
-  gap:2px;
-  min-width:0;
-}
-
-.midPanelTitle{
-  font-size:14px;
-  font-weight:900;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.midPanelSub{
-  font-size:12px;
-  color:var(--muted);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.midPanelBtn{
-  padding:7px 10px;
-  border-radius:10px;
-}
-
-.midPanelBody{
-  padding:10px 12px 12px;
-  height:280px;          /* PC基準：統一 */
-  display:flex;
-  gap:12px;
-  align-items:stretch;
   min-height:0;
 }
 
-/* ドーナツ通常カード：左=ドーナツ / 右=凡例（省スペース） */
-.donutBody{
-  cursor:pointer;
+/* ✅ ここが最重要：body を固定高にせず “残り高さ” を取らせる */
+.midPanelBody{
+  flex:1;
+  min-height:0;
+  padding:10px 12px 12px;
+  height:auto !important; /* もし古いCSSで height:280px が残ってても勝つ */
+  display:flex;
+  gap:12px;
+  align-items:stretch;
 }
 
+/* canvas は body に追従 */
+.midPanelBody canvas{
+  width:100% !important;
+  height:100% !important;
+  display:block;
+}
+
+/* ドーナツカードの左右割りは現状維持（host/meta） */
 .donutHost{
   flex:0 0 58%;
   min-width:0;
@@ -254,7 +268,6 @@ a{ color:inherit; }
   align-items:center;
   justify-content:center;
 }
-
 .donutMetaCompact{
   flex:1;
   min-width:0;
@@ -262,65 +275,40 @@ a{ color:inherit; }
   flex-direction:column;
   gap:8px;
 }
-
 .donutMetaCompact .note{
   font-size:12px;
   color:var(--muted);
 }
 
-/* 凡例（共通） */
-.legend{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-}
-.legend.compact .legendItem{
-  font-size:12px;
-}
-.legendItem{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  font-size:12px;
-  color:var(--muted);
-  border:1px solid var(--border);
-  padding:4px 8px;
-  border-radius:999px;
-  cursor:pointer;
-  user-select:none;
-  background:rgba(18,26,34,.45);
-}
-.legendItem:hover{
-  border-color: rgba(109,211,251,.35);
-  color: var(--text);
-}
-.legendSwatch{
-  width:10px;
-  height:10px;
-  border-radius:3px;
-  background: var(--muted);
-  opacity:.9;
+/* ✅ “余ったら左右にもう一つ”：
+   超ワイド時のみ3列化し、5個目のスロットがあれば右に縦2段で刺さる */
+@media (min-width: 1400px){
+  #midDash{
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    grid-template-rows:repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "a b side"
+      "c d side";
+  }
+  #midDash > :nth-child(1){ grid-area:a; }
+  #midDash > :nth-child(2){ grid-area:b; }
+  #midDash > :nth-child(3){ grid-area:c; }
+  #midDash > :nth-child(4){ grid-area:d; }
+  #midDash > :nth-child(5){ grid-area:side; }
 }
 
-/* チャート通常カード */
-.chartBody{
-  cursor:pointer;
+/* ✅ 狭幅は縦積み */
+@media (max-width:980px){
+  #midDash{
+    grid-template-columns:1fr;
+    grid-template-rows:auto;
+  }
+  #midDash > *{
+    grid-area:auto !important;
+  }
 }
 
-.chartTools .select{
-  appearance:none;
-  border:1px solid var(--border);
-  background:rgba(15,21,29,.75);
-  color:var(--text);
-  border-radius:10px;
-  padding:6px 10px;
-}
 
-.midPanelBody canvas{
-  width:100% !important;
-  height:100% !important;
-  display:block;
-}
 
 /* =========================
    Mid Cards（下段カード：無罪）
