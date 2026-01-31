@@ -1,5 +1,9 @@
-/* Mid KPI（中段：2×2フィットの器 / 5枠目なし） */
+/* =========================================
+   20_midDash.css
+   Mid KPI（中段：2×2フィットの器 / 5枠目なし）
+   ========================================= */
 
+/* ==== 外枠（中段KPIの箱） ==== */
 .midKpiWrap{
   border:1px solid var(--border);
   background:rgba(18,26,34,.55);
@@ -22,7 +26,7 @@
   display:flex;
 }
 
-/* 2×2 の器 */
+/* ==== 2×2 の器 ==== */
 #midDash{
   width:100%;
   min-height:0;
@@ -41,7 +45,7 @@
   height:100%;
 }
 
-/* スロット内カード（kpiMid.jsが生成する想定） */
+/* スロット内カード（kpiMid.js が生成する想定） */
 #midDash .midPanel{
   height:100%;
   display:flex;
@@ -49,7 +53,27 @@
   min-height:0;
 }
 
-/* 中段：ドーナツがデカくなりすぎない上限 */
+/* ==== 空パネルを「クリック枠」として固定（必要なら使用） ==== */
+#midDash .dashPanel{
+  border:1px solid var(--border);
+  background:rgba(15,21,29,.55);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+
+  cursor:pointer;
+  user-select:none;
+  transition:transform .08s ease, border-color .15s ease, background .15s ease;
+}
+#midDash .dashPanel:hover{
+  border-color: rgba(109,211,251,.35);
+  background: rgba(18,26,34,.55);
+}
+#midDash .dashPanel:active{
+  transform: scale(.99);
+}
+
+/* ==== 中段：ドーナツがデカくなりすぎない上限 ==== */
 .midPanelBody .donutHost{
   display:flex;
   align-items:center;
@@ -58,9 +82,9 @@
 
 /* svgは親にフィットするが、maxで止める */
 .midPanelBody .donutHost svg{
-  width: min(360px, 100%);
-  height: auto;
-  aspect-ratio: 1 / 1;
+  width:min(360px, 100%);
+  height:auto;
+  aspect-ratio:1 / 1;
 }
 
 /* canvasは追従 */
@@ -70,7 +94,7 @@
   display:block;
 }
 
-/* ドーナツ左右割り（現状維持） */
+/* ドーナツ左右割り（既存維持：donut.js の “左ドーナツ/右凡例” 用） */
 .donutHost{
   flex:0 0 58%;
   min-width:0;
@@ -91,7 +115,7 @@
   color:var(--muted);
 }
 
-/* 狭幅は縦積み（ブレークポイントを下げる） */
+/* 狭幅は縦積み（ブレークポイントは低め） */
 @media (max-width:720px){
   #midDash{
     grid-template-columns:1fr;
@@ -103,64 +127,60 @@
     height:260px;
   }
 }
-
 @media (max-width:560px){
   .midPanelBody{
     height:240px;
   }
 }
-/* ===== A: 空パネルを「クリック枠」として固定 ===== */
-#midDash .dashPanel{
-  border:1px solid var(--border);
-  background:rgba(15,21,29,.55);
-  border-radius:var(--r);
-  box-shadow:var(--shadow);
-  overflow:hidden;
 
-  cursor:pointer;
-  user-select:none;
-  transition: transform .08s ease, border-color .15s ease, background .15s ease;
-}
-#midDash .dashPanel:hover{
-  border-color: rgba(109,211,251,.35);
-  background: rgba(18,26,34,.55);
-}
-#midDash .dashPanel:active{
-  transform: scale(.99);
-}
-/* =========================
+/* =========================================
    Widget①: 売上/ブース 構成比（2重ドーナツ）
    - 左: ドーナツ
    - 右: ABC
-   ========================= */
+   ========================================= */
 
 .widget1{
   height:100%;
+  min-height:0;
   display:flex;
   flex-direction:column;
-  min-height:0; /* 重要: 子のoverflowが効く */
 }
 
+/* header（左：タイトル / 右：ドロップダウン） */
 .widget1Header{
   display:flex;
   align-items:center;
+  justify-content:space-between;
   gap:10px;
   padding:10px 10px 0;
+  min-height:0;
+}
+
+.widget1HeaderLeft{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
 }
 
 .widget1Title{
   font-weight:900;
+  white-space:nowrap;
 }
 
-.widget1Select{
-  margin-left:8px;
+.widget1HeaderRight{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
 }
 
+/* body（左: チャート / 右: ABC） */
 .widget1Body{
   flex:1;
   min-height:0;
   display:grid;
-  grid-template-columns: minmax(0, 1fr) 240px; /* 右のABC幅 */
+  grid-template-columns:minmax(0, 1fr) 240px; /* 右のABC幅 */
   gap:12px;
   padding:10px;
 }
@@ -176,8 +196,10 @@
   width:100% !important;
   height:100% !important;
   max-height:280px; /* 箱に合わせて制限 */
+  display:block;
 }
 
+/* ABC */
 .widget1ABC{
   min-height:0;
   overflow:auto;
@@ -188,7 +210,7 @@
 
 .widget1ABCRow{
   display:grid;
-  grid-template-columns: 20px 1fr auto;
+  grid-template-columns:20px 1fr auto;
   gap:8px;
   padding:6px 0;
   border-bottom:1px solid rgba(51,65,85,.6);
@@ -204,51 +226,42 @@
 .widget1ABCRow.rank-C .rank{ opacity:.75; }
 
 /* 狭い場合は縦並び */
-@media (max-width: 900px){
+@media (max-width:900px){
   .widget1Body{
-    grid-template-columns: 1fr;
+    grid-template-columns:1fr;
   }
   .widget1ABC{
     max-height:160px;
   }
 }
 
-/* ===== Widget① dropdown polish ===== */
+/* =========================================
+   Widget① dropdown polish（専用）
+   ※ .select を付けない前提（既存selectスタイルと衝突しない）
+   ========================================= */
 
-.widget1Header{
-  justify-content:space-between;
-}
-
-.widget1HeaderLeft{
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-
-.widget1HeaderRight{
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-
-/* 見た目を統一：select をボタン風に */
 .widget1SelectWrap{
   position:relative;
   display:inline-flex;
   align-items:center;
+  min-width:0;
 }
 
 .widget1Select{
   -webkit-appearance:none;
   appearance:none;
+
   border:1px solid rgba(51,65,85,.9);
   background:rgba(15,23,42,.78);
   color:var(--text);
+
   border-radius:999px;
   padding:8px 34px 8px 12px;
   font-weight:800;
   cursor:pointer;
   outline:none;
+
+  max-width:260px;
 }
 
 .widget1Select:hover{
