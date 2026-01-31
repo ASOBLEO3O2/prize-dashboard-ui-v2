@@ -1,0 +1,70 @@
+/* Focus Overlay（拡大表示：器だけ） */
+
+.focusOverlay{
+  position:fixed;
+  inset:0;
+  display:none;
+  z-index:80;
+  background:rgba(0,0,0,.58);
+  backdrop-filter: blur(4px);
+}
+.focusOverlay.open{ display:block; }
+
+.focusModal{
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  width:min(1100px, 96vw);
+  max-height:min(92vh, 920px);
+  background:rgba(15,21,29,.94);
+  border:1px solid var(--border);
+  border-radius:18px;
+  box-shadow:var(--shadow);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+.focusHeader{
+  padding:12px 12px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.focusTitle{
+  font-weight:900;
+  letter-spacing:.2px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.focusBody{
+  padding:12px 14px 14px;
+  overflow:auto;
+  min-height:0;
+}
+
+.focusPlaceholder{
+  padding:18px;
+  color:var(--muted);
+  border:1px dashed var(--border);
+  border-radius:14px;
+}
+
+/* 小画面はフルスクリーン寄せ */
+@media (max-width:980px){
+  .focusModal{
+    left:0;
+    top:0;
+    transform:none;
+    width:100vw;
+    height:100vh;
+    max-height:none;
+    border-radius:0;
+  }
+}
