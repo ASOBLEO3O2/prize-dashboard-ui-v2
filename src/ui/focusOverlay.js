@@ -4,22 +4,21 @@ import { renderDonut } from "../charts/donut.js?v=20260131";
 import { GENRES } from "../constants.js";
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
 
-
 export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   const focus = state.focus || { open: false };
   if (!overlayEl || !modalEl) return;
 
-  // ✅ 追加：開いている間は body スクロールを止める
+  // ✅ 開いている間は body スクロールを止める
   if (!focus.open) {
     overlayEl.classList.remove("open");
     clear(modalEl);
-    document.body.style.overflow = ""; // ← 追加
+    document.body.style.overflow = "";
     return;
   }
 
   overlayEl.classList.add("open");
   clear(modalEl);
-  document.body.style.overflow = "hidden"; // ← 追加
+  document.body.style.overflow = "hidden";
 
   // 背景クリックで閉じる
   overlayEl.onclick = (e) => {
@@ -38,12 +37,19 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   modalEl.appendChild(header);
   modalEl.appendChild(body);
 
+  // ✅ ウィジェット①（拡大）：shareDonut
+  if (focus.kind === "shareDonut") {
+    renderWidget1ShareDonut(body, state, actions, { mode: "expanded" });
+    return;
+  }
+
+  // 既存：ジャンルドーナツ拡大
   if (focus.kind === "salesDonut" || focus.kind === "machineDonut") {
     renderDonutFocus_(body, state, focus, actions);
     return;
   }
 
-  // チャート系は今は「拡大器だけ」用意（描画は後回しでも崩れない）
+  // その他
   body.appendChild(el("div", { class: "focusPlaceholder", text: "（拡大表示：準備中）" }));
 }
 
@@ -184,10 +190,3 @@ function normalizeShares_(items, meta) {
 
   return { ...meta, items: out };
 }
-
-if (state.focus?.open && state.focus.kind === "shareDonut") {
-  // focusModal の中に mount を作って描画（focusOverlayの構造に合わせて）
-  renderWidget1ShareDonut(focusModal, state, actions, { mode: "expanded" });
-  return;
-}
-
