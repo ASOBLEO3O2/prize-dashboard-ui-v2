@@ -1,14 +1,16 @@
 // src/ui/focusOverlay.js
+console.log("FOCUS_OVERLAY_BUILD 2026-01-31 r1");
+
 import { el, clear } from "../utils/dom.js";
 import { renderDonut } from "../charts/donut.js?v=20260131";
 import { GENRES } from "../constants.js";
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
 
 export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
-  const focus = state.focus || { open: false };
+  const focus = state?.focus || { open: false };
   if (!overlayEl || !modalEl) return;
 
-  // ✅ 開いている間は body スクロールを止める
+  // close
   if (!focus.open) {
     overlayEl.classList.remove("open");
     clear(modalEl);
@@ -16,16 +18,15 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
     return;
   }
 
+  // open
   overlayEl.classList.add("open");
   clear(modalEl);
   document.body.style.overflow = "hidden";
 
-  // 背景クリックで閉じる
   overlayEl.onclick = (e) => {
     if (e.target === overlayEl) actions.onCloseFocus?.();
   };
 
-  // タイトルと閉じる
   const header = el("div", { class: "focusHeader" }, [
     el("button", { class: "btn ghost", text: "← 戻る", onClick: () => actions.onCloseFocus?.() }),
     el("div", { class: "focusTitle", text: focus.title || "詳細" }),
@@ -33,23 +34,21 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   ]);
 
   const body = el("div", { class: "focusBody" });
-
   modalEl.appendChild(header);
   modalEl.appendChild(body);
 
-  // ✅ ウィジェット①（拡大）：shareDonut
+  // ✅ widget1 expanded
   if (focus.kind === "shareDonut") {
     renderWidget1ShareDonut(body, state, actions, { mode: "expanded" });
     return;
   }
 
-  // 既存：ジャンルドーナツ拡大
+  // ✅ existing donuts
   if (focus.kind === "salesDonut" || focus.kind === "machineDonut") {
     renderDonutFocus_(body, state, focus, actions);
     return;
   }
 
-  // その他
   body.appendChild(el("div", { class: "focusPlaceholder", text: "（拡大表示：準備中）" }));
 }
 
@@ -69,7 +68,6 @@ function renderDonutFocus_(mount, state, focus, actions) {
     color: x.color || null,
   }));
 
-  // 上層/下層ナビ
   const nav = el("div", { class: "focusNav" }, []);
   if (parentKey) {
     nav.appendChild(el("div", { class: "focusCrumb", text: `内訳：${view.parentLabel}` }));
@@ -91,35 +89,27 @@ function renderDonutFocus_(mount, state, focus, actions) {
   const host = el("div", { class: "focusDonutHost" });
   donutWrap.appendChild(host);
 
-  // クリック時の挙動
   const onPick = (k) => {
-    if (!parentKey) {
-      actions.onSetFocusParentKey?.(k);
-    }
+    if (!parentKey) actions.onSetFocusParentKey?.(k);
   };
 
   renderDonut(host, { title, values, pickedKey: null, onPick });
 
-  // 右側：凡例（スマホは下に回る）
   const legend = el("div", { class: "focusLegend" }, []);
   values.forEach((seg) => {
-    const item = el("button", { class: "focusLegendItem", onClick: () => onPick(seg.key) }, [
-      el("span", { class: "legendSwatch", style: `background:${seg.color || "#6dd3fb"}` }),
-      el("span", { text: seg.label }),
-    ]);
-    legend.appendChild(item);
+    legend.appendChild(
+      el("button", { class: "focusLegendItem", onClick: () => onPick(seg.key) }, [
+        el("span", { class: "legendSwatch", style: `background:${seg.color || "#6dd3fb"}` }),
+        el("span", { text: seg.label }),
+      ])
+    );
   });
 
-  const grid = el("div", { class: "focusDonutGrid" }, [
-    donutWrap,
-    legend,
-  ]);
-
-  panel.appendChild(grid);
+  panel.appendChild(el("div", { class: "focusDonutGrid" }, [donutWrap, legend]));
   mount.appendChild(panel);
 }
 
-/* ===== ビュー構築（拡大レイヤー用） ===== */
+/* ===== view builders ===== */
 
 function buildGenreTopView_(state) {
   const genreTree = Array.isArray(state.byAxis?.["ジャンル"]) ? state.byAxis["ジャンル"] : [];
@@ -148,7 +138,6 @@ function buildGenreTopView_(state) {
   });
 
   items.sort((a, b) => (b.sales - a.sales));
-
   return normalizeShares_(items, { parentLabel: null });
 }
 
@@ -180,7 +169,6 @@ function normalizeShares_(items, meta) {
   const out = items.map(x => {
     const machines = Number(x.machines) || 0;
     const sales = Number(x.sales) || 0;
-
     return {
       ...x,
       salesShare: totalSales > 0 ? (sales / totalSales) : 0,
