@@ -218,3 +218,17 @@
     grid-template-columns:1fr;
   }
 }
+
+/* 拡大：ドーナツは大きく見せつつ上限を入れる */
+.focusDonutHost{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.focusDonutHost svg{
+  width: min(720px, 100%);
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
