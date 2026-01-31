@@ -19,6 +19,10 @@ import { buildViewModel } from "./logic/aggregate.js";
 import { renderCharts } from "./ui/charts.js";
 import { renderFocusOverlay } from "./ui/focusOverlay.js";
 
+/* =========================
+   initial state
+   ========================= */
+
 const initialState = {
   // data
   updatedDate: MOCK.updatedDate,
@@ -26,13 +30,13 @@ const initialState = {
   byGenre: structuredClone(MOCK.byGenre),
   details: structuredClone(MOCK.details),
 
-  // チャート用（フィルタ後rows）
+  // チャート用（フィルタ後 rows）
   filteredRows: [],
 
   // 中段KPI：軸別集計
   byAxis: {},
 
-  // 下段（無罪：既存）
+  // 下段（既存）
   midAxis: "ジャンル",
   midParentKey: null,
   midSortKey: "sales",
@@ -46,13 +50,12 @@ const initialState = {
   openDetailGenre: null,
   drawerOpen: false,
 
-  // ✅ フォーカス（上層レイヤー）
+  // フォーカス（上層レイヤー）
   focus: {
     open: false,
-    kind: null,      // "salesDonut" | "machineDonut" | "costHist" | "scatter"
+    kind: null,        // "shareDonut" | "salesDonut" | "machineDonut" | "costHist" | "scatter"
     title: "",
-    parentKey: null, // ドーナツ下層（拡大内のみ）
-　　(kind === "shareDonut") ? "売上/ブース 構成比" :
+    parentKey: null,   // ドーナツ下層（拡大内のみ）
   },
 
   // 詳細（テーブル）の並び替え
@@ -66,13 +69,16 @@ const initialState = {
 const store = createStore(initialState);
 const root = document.getElementById("app");
 
-// ===== actions =====
+/* =========================
+   actions
+   ========================= */
+
 const actions = {
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
 
-  // 下段（無罪）
+  // 下段（既存）
   onPickMidParent: (keyOrNull) => {
     store.set((s) => ({ ...s, midParentKey: keyOrNull }));
   },
@@ -104,13 +110,14 @@ const actions = {
   onOpenDrawer: () => store.set((s) => ({ ...s, drawerOpen: true })),
   onCloseDrawer: () => store.set((s) => ({ ...s, drawerOpen: false })),
 
-  // ✅ フォーカス（上層レイヤー）
+  // フォーカス（上層レイヤー）
   onOpenFocus: (kind) => {
     const title =
-      (kind === "salesDonut") ? "売上構成比" :
+      (kind === "shareDonut")   ? "売上 / ブース 構成比" :
+      (kind === "salesDonut")   ? "売上構成比" :
       (kind === "machineDonut") ? "マシン構成比" :
-      (kind === "costHist") ? "原価率 分布" :
-      (kind === "scatter") ? "売上 × 原価率（マトリクス）" :
+      (kind === "costHist")     ? "原価率 分布" :
+      (kind === "scatter")      ? "売上 × 原価率（マトリクス）" :
       "詳細";
 
     store.set((s) => ({
@@ -139,40 +146,61 @@ const actions = {
   },
 };
 
-// ===== mount =====
+/* =========================
+   mount layout
+   ========================= */
+
 const mounts = mountLayout(root, {
   onOpenDrawer: actions.onOpenDrawer,
   onCloseDrawer: actions.onCloseDrawer,
   onRefresh: actions.onRefresh,
 });
 
-// ===== render loop =====
+/* =========================
+   render loop
+   ========================= */
+
 function renderAll(state) {
   mounts.updatedBadge.textContent = `更新日: ${fmtDate(state.updatedDate)}`;
 
+  // 上段 KPI
   renderTopKpi(mounts.topKpi, state.topKpi);
 
-  // 中段（4カード + 下段カード）
+  // ✅ ウィジェット①（通常表示）
+  renderWidget1ShareDonut(mounts.widget1, state, actions, { mode: "normal" });
+
+  // 中段（既存）
   renderMidKpi(mounts, state, actions);
 
-  // チャート描画
+  // チャート
   renderCharts(mounts, state);
 
-  // フォーカス（上層レイヤー）
-  renderFocusOverlay(mounts.focusOverlay, mounts.focusModal, state, actions);
+  // フォーカス（拡大レイヤー）
+  renderFocusOverlay(
+    mounts.focusOverlay,
+    mounts.focusModal,
+    state,
+    actions
+  );
 
   // 詳細
   renderDetail(mounts.detailMount, state, actions);
 
   // ドロワー
-  renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
-
-  renderWidget1ShareDonut(mounts.widget1, state, actions, { mode: "normal" });
-
+  renderDrawer(
+    mounts.drawer,
+    mounts.drawerOverlay,
+    state,
+    actions
+  );
 }
 
 renderAll(store.get());
 store.subscribe(renderAll);
+
+/* =========================
+   data hydrate
+   ========================= */
 
 hydrateFromRaw().catch((e) => {
   console.error(e);
@@ -185,7 +213,7 @@ async function hydrateFromRaw() {
   const summary = raw?.summary ?? null;
   const masterDict = raw?.masterDict ?? {};
 
-  // ② codebook
+  // codebook
   let codebook = {};
   try {
     const res = await fetch("./data/master/codebook.json", { cache: "no-store" });
@@ -194,7 +222,7 @@ async function hydrateFromRaw() {
     codebook = {};
   }
 
-  // ③ 正規化
+  // 正規化
   const normalizedRows = rows.map((r) => {
     const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
     const m = key ? masterDict?.[key] : null;
@@ -213,15 +241,15 @@ async function hydrateFromRaw() {
     };
   });
 
-  // ④ フィルタ
+  // フィルタ
   const st = store.get();
   const filtered = applyFilters(normalizedRows, st.filters);
 
-  // ⑤ 集計
+  // 集計
   const vm = buildViewModel(filtered, summary);
   const axis = buildByAxis(filtered);
 
-  // ⑥ state 更新
+  // state 更新
   store.set((s) => ({
     ...s,
     updatedDate: vm.updatedDate || s.updatedDate,
