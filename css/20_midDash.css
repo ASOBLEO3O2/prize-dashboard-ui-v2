@@ -106,3 +106,22 @@
     height:240px;
   }
 }
+/* ===== A: 空パネルを「クリック枠」として固定 ===== */
+#midDash .dashPanel{
+  border:1px solid var(--border);
+  background:rgba(15,21,29,.55);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+
+  cursor:pointer;
+  user-select:none;
+  transition: transform .08s ease, border-color .15s ease, background .15s ease;
+}
+#midDash .dashPanel:hover{
+  border-color: rgba(109,211,251,.35);
+  background: rgba(18,26,34,.55);
+}
+#midDash .dashPanel:active{
+  transform: scale(.99);
+}
