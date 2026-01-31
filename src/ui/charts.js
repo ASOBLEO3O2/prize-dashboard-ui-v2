@@ -58,6 +58,7 @@ function ensureCharts() {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        cutout: "40%",
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false } },
