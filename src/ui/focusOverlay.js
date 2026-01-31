@@ -1,6 +1,6 @@
 // src/ui/focusOverlay.js
 import { el, clear } from "../utils/dom.js";
-import { renderDonut } from "../charts/donut.js";
+import { renderDonut } from "../charts/donut.js?v=20260131";
 import { GENRES } from "../constants.js";
 
 export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
