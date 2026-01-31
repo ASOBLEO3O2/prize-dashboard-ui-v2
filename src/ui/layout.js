@@ -1,3 +1,4 @@
+// src/ui/layout.js
 import { el } from "../utils/dom.js";
 
 export function mountLayout(root, actions) {
@@ -17,15 +18,15 @@ export function mountLayout(root, actions) {
   const topKpi = el("div", { class: "kpiTop", id: "topKpi" });
 
   // =========================
-  // 中段：器だけ（4カードのマウントポイント）
-  //  - 役割別（donuts/charts）コンテナは作らない
-  //  - 同一の「カード枠」が4つあるだけ
+  // 中段：器だけ（#midDash を復活）
+  //  - 2×2固定（5枠なし）
+  //  - 中身はゼロ（kpiMid 側が後で差し込む）
   // =========================
-  const midGrid = el("div", { class: "midGrid", id: "midGrid" }, [
-    el("div", { id: "midSlotSalesDonut" }),
-    el("div", { id: "midSlotMachineDonut" }),
-    el("div", { id: "midSlotCostHist" }),
-    el("div", { id: "midSlotScatter" }),
+  const midDash = el("div", { id: "midDash" }, [
+    el("div", { class: "midPanel dashPanel", id: "midSlotSalesDonut" }),
+    el("div", { class: "midPanel dashPanel", id: "midSlotMachineDonut" }),
+    el("div", { class: "midPanel dashPanel", id: "midSlotCostHist" }),
+    el("div", { class: "midPanel dashPanel", id: "midSlotScatter" }),
   ]);
 
   const section = el("div", { class: "section" }, [
@@ -34,9 +35,9 @@ export function mountLayout(root, actions) {
       el("div", { class: "sectionHint", text: "カードをタップ → 拡大表示（ドーナツは下層へ）" }),
     ]),
     el("div", { class: "midKpiWrap", id: "midKpiWrap" }, [
-      // ✅ 上段：4カード（2×2 / スマホは縦積み）
+      // ✅ 上段：2×2の器（#midDash）
       el("div", { class: "midTop", id: "midTop" }, [
-        midGrid,
+        midDash,
       ]),
       // ✅ 下段（既存の下段カード：無罪・触らない）
       el("div", { class: "midCardsMount", id: "midCards" }),
@@ -68,7 +69,7 @@ export function mountLayout(root, actions) {
     updatedBadge: container.querySelector("#updatedBadge"),
     topKpi,
 
-    // ✅ 中段4スロット
+    // ✅ 中段4スロット（midDash 内に実体あり）
     midSlotSalesDonut: container.querySelector("#midSlotSalesDonut"),
     midSlotMachineDonut: container.querySelector("#midSlotMachineDonut"),
     midSlotCostHist: container.querySelector("#midSlotCostHist"),
