@@ -42,16 +42,13 @@ function arcPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
 function normalizeValues(values) {
   const raw = values.map(v => Math.max(0, Number(v?.value) || 0));
   const sum = raw.reduce((a, b) => a + b, 0);
-
-  // もし合計が 1.5 を超えるなら「% or 実数」扱いでそのまま
-  // もし合計が 1.5 以下なら「比率」扱い（そのままでもOK）
-  // => 結局 total は sum で良いが、ここは “全部0に見える”事故を避けるための保険
   return { raw, total: sum };
 }
 
 export function renderDonut(container, opts) {
   clear(container);
 
+  // === 設計サイズ（viewBox基準）===
   const size = 170;
   const cx = size / 2;
   const cy = size / 2;
@@ -61,10 +58,12 @@ export function renderDonut(container, opts) {
   const values = Array.isArray(opts?.values) ? opts.values : [];
   const { raw, total } = normalizeValues(values);
 
+  // ✅ 変更：svg の width/height を固定値にせず “親にフィット” させる
   const svg = svgEl("svg", {
-    width: size,
-    height: size,
+    width: "100%",
+    height: "100%",
     viewBox: `0 0 ${size} ${size}`,
+    preserveAspectRatio: "xMidYMid meet",
     role: "img",
     "aria-label": opts?.title ?? "",
     style: "display:block; overflow:visible;"
