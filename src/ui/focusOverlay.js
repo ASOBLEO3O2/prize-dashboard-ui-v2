@@ -7,14 +7,17 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   const focus = state.focus || { open: false };
   if (!overlayEl || !modalEl) return;
 
+  // ✅ 追加：開いている間は body スクロールを止める
   if (!focus.open) {
     overlayEl.classList.remove("open");
     clear(modalEl);
+    document.body.style.overflow = ""; // ← 追加
     return;
   }
 
   overlayEl.classList.add("open");
   clear(modalEl);
+  document.body.style.overflow = "hidden"; // ← 追加
 
   // 背景クリックで閉じる
   overlayEl.onclick = (e) => {
