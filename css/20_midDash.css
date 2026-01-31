@@ -212,3 +212,63 @@
     max-height:160px;
   }
 }
+
+/* ===== Widget① dropdown polish ===== */
+
+.widget1Header{
+  justify-content:space-between;
+}
+
+.widget1HeaderLeft{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.widget1HeaderRight{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+/* 見た目を統一：select をボタン風に */
+.widget1SelectWrap{
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+}
+
+.widget1Select{
+  -webkit-appearance:none;
+  appearance:none;
+  border:1px solid rgba(51,65,85,.9);
+  background:rgba(15,23,42,.78);
+  color:var(--text);
+  border-radius:999px;
+  padding:8px 34px 8px 12px;
+  font-weight:800;
+  cursor:pointer;
+  outline:none;
+}
+
+.widget1Select:hover{
+  border-color:rgba(109,211,251,.9);
+}
+
+.widget1Select:focus{
+  border-color:rgba(109,211,251,1);
+  box-shadow:0 0 0 3px rgba(109,211,251,.15);
+}
+
+/* ▼の矢印（擬似） */
+.widget1SelectWrap::after{
+  content:"";
+  position:absolute;
+  right:12px;
+  width:0;
+  height:0;
+  border-left:6px solid transparent;
+  border-right:6px solid transparent;
+  border-top:7px solid rgba(229,231,235,.9);
+  pointer-events:none;
+}
