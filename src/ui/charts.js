@@ -1,4 +1,7 @@
-  // src/ui/charts.js
+// src/ui/charts.js
+
+import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
+
 
 let costHistChart = null;
 let salesCostScatter = null;
