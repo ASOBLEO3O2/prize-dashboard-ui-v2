@@ -88,10 +88,21 @@
   color:var(--muted);
 }
 
-/* 狭幅は縦積み */
-@media (max-width:980px){
+/* 狭幅は縦積み（ブレークポイントを下げる） */
+@media (max-width:720px){
   #midDash{
     grid-template-columns:1fr;
     grid-template-rows:auto;
+  }
+
+  /* 縦積み時にカードが間延びしないように高さを戻す */
+  .midPanelBody{
+    height:260px;
+  }
+}
+
+@media (max-width:560px){
+  .midPanelBody{
+    height:240px;
   }
 }
