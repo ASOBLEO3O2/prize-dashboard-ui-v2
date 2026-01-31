@@ -29,9 +29,7 @@
   flex-wrap:wrap;
 }
 
-/* dropdown is inside the card/window */
-.w1-axis,
-.w1-topn{
+.w1-axis{
   background:rgba(15,23,42,.78);
   border:1px solid rgba(148,163,184,.25);
   color:var(--text,#e5e7eb);
@@ -58,7 +56,6 @@
   gap:14px;
   align-items:stretch;
 }
-
 .w1-body.expanded{
   grid-template-columns: 360px 1fr;
 }
@@ -71,9 +68,7 @@
   min-height:240px;
 }
 
-.w1-right{
-  min-height:240px;
-}
+.w1-right{ min-height:240px; }
 
 .w1-donutWrap{ position:relative; }
 .w1-svg{ display:block; }
@@ -99,7 +94,7 @@
 
 .w1-seg{
   opacity:.92;
-  transition:transform .08s ease, opacity .08s ease;
+  transition:opacity .08s ease;
 }
 .w1-seg.hover{ opacity:1; }
 
@@ -126,9 +121,7 @@
   text-align:left;
   color:var(--text,#e5e7eb);
 }
-
 .w1-row:hover{ border-color: rgba(148,163,184,.28); }
-.w1-row.selected{ outline:2px solid rgba(99,102,241,.55); }
 
 .w1-chip{
   width:12px;
@@ -145,12 +138,8 @@
   white-space:nowrap;
 }
 
-.w1-v{
-  font-weight:800;
-  opacity:.95;
-}
+.w1-v{ font-weight:800; opacity:.95; }
 
-/* expanded list shows booth too */
 .w1-v2{
   grid-column: 2 / span 2;
   font-weight:800;
@@ -165,12 +154,8 @@
   opacity:.75;
 }
 
-.w1-empty{
-  opacity:.75;
-  padding:16px;
-}
+.w1-empty{ opacity:.75; padding:16px; }
 
-/* responsive: narrow width => stack */
 @media (max-width: 720px){
   .w1-body{ grid-template-columns: 1fr; }
   .w1-body.expanded{ grid-template-columns: 1fr; }
