@@ -1,396 +1,257 @@
-// src/ui/widget1_shareDonut.js
-// ウィジェット①：売上構成比（外）＋ブース構成比（内）2重ドーナツ
-// - 左：ドーナツ、右：一覧
-// - 全体表示：親レベルのみ、右は親マスタ順で全件
-// - 拡大表示：親→子ドリル可、子でも2重ドーナツ維持、右は売上順TopN+その他
-// - クリック：全体フィルタに追加（同一軸内OR想定）
-//
-// 依存：../utils/dom.js の el を使用（あなたの既存構成）
-// ---------------------------------------------------------
-
+// src/ui/widget1ShareDonut.js
 import { el } from "../utils/dom.js";
 
-/** ====== 列名マッピング（ここだけあなたのデータに合わせて編集） ====== */
-const COLS = {
-  sales: "総売上",         // 売上
-  boothId: "ブースID",     // ブース数（ユニーク）
-
-  // 階層：投入法
-  methodParent: "投入法",  // 親：3本爪/2本爪
-  methodChild: "記号",      // 子：各記号（3本爪/2本爪で辞書が違う想定でもOK。列は同じでOK）
-
-  // 階層：景品ジャンル
-  genreParent: "景品ジャンル",     // 親：食品/ぬいぐるみ/雑貨
-  genreChild: "ジャンル下層",       // 子：各下層（例：食品下層/ぬいぐるみ下層/雑貨下層…をこの列にまとめている想定）
-
-  // 階層：キャラ（親：キャラ/ノンキャラ）
-  charName: "キャラ",      // 子：キャラ名（空ならノンキャラ扱い）
-  // もし専用列があるなら使ってOK：charParent: "キャラ区分"（キャラ/ノンキャラ）
-  charParent: null,
-
-  // フラット：ターゲット/年代
-  target: "ターゲット",
-  age: "年代",
-
-  // YES/NO（2値）
-  movie: "映画",           // YES/NO
-  reserve: "予約",         // YES/NO
-  wlOriginal: "WLオリジナル" // YES/NO
+/** ====== あなたの normalizedRows のキーに合わせてここだけ調整 ====== */
+const COL = {
+  sales: "sales",          // 数値
+  boothId: "booth_id",     // 文字列（ユニークブース）
+  methodParent: "claw",    // "3本爪"/"2本爪"
+  methodChild: "symbol",   // 記号
+  genreParent: "genre",    // "食品"/"ぬいぐるみ"/"雑貨"
+  genreChild: "genre_sub", // 下層
+  target: "target",
+  age: "age",
+  charName: "character",
+  movie: "movie",          // YES/NO
+  reserve: "reserve",      // YES/NO
+  wl: "wl_original"        // YES/NO
 };
 
-/** ====== 親マスタの「定義順」 ====== */
-const MASTER_PARENT_ORDER = {
+const MASTER = {
   method: ["3本爪", "2本爪"],
   genre: ["食品", "ぬいぐるみ", "雑貨"],
   char: ["キャラ", "ノンキャラ"],
-  yesno: ["YES", "NO"] // 2値は固定
+  yesno: ["YES", "NO"]
 };
 
-/** ====== 軸定義（あなたが指定した10軸） ====== */
 const AXES = [
-  // ①料金（ここではフラット例：料金帯 列があるなら入れてください）
-  // { id:"fee", label:"料金", type:"flat", key:"料金帯", parentOrder:null },
-
-  // ②プレイ回数（ここではフラット例：回数帯 列があるなら入れてください）
-  // { id:"plays", label:"プレイ回数", type:"flat", key:"回数帯", parentOrder:null },
-
-  { id:"method", label:"投入法", type:"hier",
-    parentKey: COLS.methodParent,
-    childKey: COLS.methodChild,
-    parentOrder: MASTER_PARENT_ORDER.method
-  },
-  { id:"genre", label:"景品ジャンル", type:"hier",
-    parentKey: COLS.genreParent,
-    childKey: COLS.genreChild,
-    parentOrder: MASTER_PARENT_ORDER.genre
-  },
-  { id:"target", label:"ターゲット", type:"flat",
-    key: COLS.target,
-    parentOrder: null
-  },
-  { id:"age", label:"年代", type:"flat",
-    key: COLS.age,
-    parentOrder: null
-  },
-  { id:"char", label:"キャラ", type:"hier_custom",
-    // 親：キャラ/ノンキャラ、子：キャラ名
-    parentOrder: MASTER_PARENT_ORDER.char
-  },
-  { id:"movie", label:"映画", type:"yesno", key: COLS.movie, parentOrder: MASTER_PARENT_ORDER.yesno },
-  { id:"reserve", label:"予約", type:"yesno", key: COLS.reserve, parentOrder: MASTER_PARENT_ORDER.yesno },
-  { id:"wl", label:"WLオリジナル", type:"yesno", key: COLS.wlOriginal, parentOrder: MASTER_PARENT_ORDER.yesno },
+  { id:"method", label:"投入法", type:"hier", parentKey: COL.methodParent, childKey: COL.methodChild, parentOrder: MASTER.method },
+  { id:"genre", label:"景品ジャンル", type:"hier", parentKey: COL.genreParent, childKey: COL.genreChild, parentOrder: MASTER.genre },
+  { id:"target", label:"ターゲット", type:"flat", key: COL.target },
+  { id:"age", label:"年代", type:"flat", key: COL.age },
+  { id:"char", label:"キャラ", type:"char" },
+  { id:"movie", label:"映画", type:"yesno", key: COL.movie, parentOrder: MASTER.yesno },
+  { id:"reserve", label:"予約", type:"yesno", key: COL.reserve, parentOrder: MASTER.yesno },
+  { id:"wl", label:"WLオリジナル", type:"yesno", key: COL.wl, parentOrder: MASTER.yesno },
 ];
 
-/** ====== 公開API ======
- * mountWidget1ShareDonut(root, opts)
- *  opts:
- *   - getRows(): 現在のフィルタ後 rows を返す（配列）
- *   - onFilterAdd(filterObj): クリックでフィルタに追加（あなた側でOR/AND運用）
- *   - onFilterRemove(filterObj): クリックで解除（任意）
- *   - getFilterState(): 現在の選択状態を返す（任意）…ハイライト用
- *   - title?: 表示名
- *   - defaultAxisId?: 初期軸
- */
-export function mountWidget1ShareDonut(root, opts) {
-  const state = {
-    axisId: opts.defaultAxisId || "method",
-    level: "parent",        // "parent" | "child"
-    parentValue: null,      // child時のみ
-    expanded: false,
+export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
+  if (!mount) return;
+
+  const mode = opts.mode || "normal"; // "normal" | "expanded"
+  const rows = Array.isArray(state.filteredRows) ? state.filteredRows : [];
+
+  // ウィジェット状態（storeに入れずローカルで保持：要求がウィジェット①のみなので簡潔に）
+  // ※ページ再描画が多いので mount にぶら下げて保持
+  const local = mount.__w1 || (mount.__w1 = {
+    axisId: "method",
+    level: "parent",      // expanded only
+    parentValue: null,    // expanded only
     topN: 10
-  };
+  });
 
-  const card = el("div", { class: "w1 card" });
+  // expanded開始時は親に戻す（仕様：全体表示は親固定）
+  if (mode === "normal") {
+    local.level = "parent";
+    local.parentValue = null;
+  }
 
-  // Header (dropdown inside the window)
-  const axisSelect = el("select", { class: "w1-axis" });
-  AXES.forEach(a => axisSelect.appendChild(el("option", { value: a.id, text: a.label })));
-  axisSelect.value = state.axisId;
+  const axis = AXES.find(a => a.id === local.axisId) || AXES[0];
 
-  const btnExpand = el("button", { class: "w1-btn ghost", text: "拡大" });
+  mount.innerHTML = "";
+
+  const axisSel = el("select", { class: "w1-axis" });
+  AXES.forEach(a => axisSel.appendChild(el("option", { value: a.id, text: a.label })));
+  axisSel.value = local.axisId;
+
+  const headRight = [axisSel];
+
+  if (mode === "normal") {
+    // 拡大ボタン（既存FocusOverlayを使う）
+    const btn = el("button", { class: "w1-btn ghost", text: "拡大", onClick: () => actions.onOpenFocus("shareDonut") });
+    headRight.push(btn);
+  } else {
+    // expanded: 戻る・TopN
+    const back = el("button", {
+      class: "w1-btn ghost" + ((axisHasChild(axis) && local.level === "child") ? "" : " hidden"),
+      text: "← 親に戻る",
+      onClick: () => { local.level = "parent"; local.parentValue = null; renderWidget1ShareDonut(mount, state, actions, opts); }
+    });
+
+    const topN = el("select", { class: "w1-axis" }, [
+      el("option", { value: "10", text: "Top10" }),
+      el("option", { value: "15", text: "Top15" }),
+      el("option", { value: "999999", text: "All" }),
+    ]);
+    topN.value = String(local.topN);
+
+    headRight.push(back, topN);
+
+    topN.onchange = () => {
+      local.topN = Number(topN.value);
+      renderWidget1ShareDonut(mount, state, actions, opts);
+    };
+  }
 
   const header = el("div", { class: "w1-head" }, [
-    el("div", { class: "w1-headLeft" }, [
-      el("div", { class: "w1-title", text: opts.title || "売上構成比（外）/ ブース構成比（内）" }),
-    ]),
-    el("div", { class: "w1-headRight" }, [
-      axisSelect,
-      btnExpand
-    ])
+    el("div", { class: "w1-title", text: "売上構成比（外）/ ブース構成比（内）" }),
+    el("div", { class: "w1-headRight" }, headRight)
   ]);
 
   const left = el("div", { class: "w1-left" });
   const right = el("div", { class: "w1-right" });
-  const body = el("div", { class: "w1-body" }, [left, right]);
+  const body = el("div", { class: "w1-body" + (mode === "expanded" ? " expanded" : "") }, [left, right]);
 
-  card.appendChild(header);
-  card.appendChild(body);
-  root.appendChild(card);
+  mount.appendChild(header);
+  mount.appendChild(body);
 
-  // modal (expanded)
-  const modal = el("div", { class: "w1-modal hidden" });
-  const modalInner = el("div", { class: "w1-modalInner card" });
-  modal.appendChild(modalInner);
-  document.body.appendChild(modal);
-
-  // Expanded header
-  const axisSelect2 = el("select", { class: "w1-axis" });
-  AXES.forEach(a => axisSelect2.appendChild(el("option", { value: a.id, text: a.label })));
-  axisSelect2.value = state.axisId;
-
-  const btnBackParent = el("button", { class: "w1-btn ghost hidden", text: "← 親に戻る" });
-  const topNSelect = el("select", { class: "w1-topn" }, [
-    el("option", { value: "10", text: "Top10" }),
-    el("option", { value: "15", text: "Top15" }),
-    el("option", { value: "999999", text: "All" }),
-  ]);
-  topNSelect.value = String(state.topN);
-
-  const btnClose = el("button", { class: "w1-btn primary", text: "閉じる" });
-
-  const modalHead = el("div", { class: "w1-head" }, [
-    el("div", { class: "w1-headLeft" }, [
-      el("div", { class: "w1-title", text: "売上構成比（外）/ ブース構成比（内）" }),
-    ]),
-    el("div", { class: "w1-headRight" }, [
-      axisSelect2,
-      btnBackParent,
-      topNSelect,
-      btnClose
-    ])
-  ]);
-
-  const modalLeft = el("div", { class: "w1-left" });
-  const modalRight = el("div", { class: "w1-right" });
-  const modalBody = el("div", { class: "w1-body expanded" }, [modalLeft, modalRight]);
-
-  modalInner.appendChild(modalHead);
-  modalInner.appendChild(modalBody);
-
-  /** ====== Events ====== */
-  axisSelect.onchange = () => {
-    state.axisId = axisSelect.value;
-    axisSelect2.value = state.axisId;
-    // 全体表示は常に親
-    state.level = "parent";
-    state.parentValue = null;
-    renderAll();
-  };
-  axisSelect2.onchange = () => {
-    state.axisId = axisSelect2.value;
-    axisSelect.value = state.axisId;
-    // 拡大表示は親に戻す
-    state.level = "parent";
-    state.parentValue = null;
-    renderAll();
+  axisSel.onchange = () => {
+    local.axisId = axisSel.value;
+    local.level = "parent";
+    local.parentValue = null;
+    renderWidget1ShareDonut(mount, state, actions, opts);
   };
 
-  btnExpand.onclick = () => {
-    state.expanded = true;
-    modal.classList.remove("hidden");
-    renderAll();
-  };
+  const lvl = (mode === "expanded") ? local.level : "parent";
+  const pv = (mode === "expanded") ? local.parentValue : null;
 
-  btnClose.onclick = () => {
-    state.expanded = false;
-    modal.classList.add("hidden");
-    // 全体表示は親に固定
-    state.level = "parent";
-    state.parentValue = null;
-    renderAll();
-  };
+  const agg = aggregate(rows, axis, lvl, pv);
 
-  modal.onclick = (e) => {
-    // 背景クリックで閉じる
-    if (e.target === modal) btnClose.onclick();
-  };
-
-  btnBackParent.onclick = () => {
-    state.level = "parent";
-    state.parentValue = null;
-    renderAll();
-  };
-
-  topNSelect.onchange = () => {
-    state.topN = Number(topNSelect.value);
-    renderAll();
-  };
-
-  /** ====== Render ====== */
-  function renderAll() {
-    // 全体表示：親のみ
-    const rows = safeRows(opts.getRows?.() || []);
-    const axis = AXES.find(a => a.id === state.axisId) || AXES[0];
-
-    // --- Normal (parent only) ---
-    const parentAgg = aggregate(rows, axis, "parent", null);
-    renderPanel(left, right, axis, "parent", null, parentAgg, {
-      mode: "normal",
-      showBoothInList: false,
-      listOrder: "master",
-      enableDrill: false // 全体は親固定
-    });
-
-    // --- Expanded (parent or child) ---
-    if (state.expanded) {
-      const lvl = state.level;
-      const pv = state.parentValue;
-      const agg = aggregate(rows, axis, lvl, pv);
-
-      btnBackParent.classList.toggle("hidden", !(axisHasChild(axis) && lvl === "child"));
-      topNSelect.classList.toggle("hidden", !(lvl === "child")); // 子のときだけTopN切替見せる（仕様）
-      renderPanel(modalLeft, modalRight, axis, lvl, pv, agg, {
-        mode: "expanded",
-        showBoothInList: true,
-        listOrder: (lvl === "child") ? "salesDesc" : "master",
-        enableDrill: axisHasChild(axis)
-      });
-    }
+  if (!agg || agg.totalSales <= 0) {
+    left.appendChild(el("div", { class: "w1-empty", text: "該当データなし" }));
+    return;
   }
 
-  // 初回
-  renderAll();
-
-  /** ====== クリックでフィルタ反映 ====== */
-  function handleClick(axis, level, parentValue, value) {
-    // 親表示でクリック：拡大時のみドリル可能
-    if (state.expanded && axisHasChild(axis) && level === "parent" && shouldDrillOnParent(axis)) {
-      state.level = "child";
-      state.parentValue = value;
-      renderAll();
+  // left: donut
+  const donut = renderDoubleDonutSVG({
+    items: agg.items,
+    totalSales: agg.totalSales,
+    totalBooths: agg.totalBooths,
+    size: (mode === "expanded") ? 320 : 220,
+    expanded: (mode === "expanded"),
+  }, (key) => {
+    // expanded時：親クリックで子へ
+    if (mode === "expanded" && axisHasChild(axis) && local.level === "parent") {
+      local.level = "child";
+      local.parentValue = key;
+      renderWidget1ShareDonut(mount, state, actions, opts);
       return;
     }
 
-    // フィルタ追加/解除（外部へ委譲）
-    const f = buildFilter(axis, level, parentValue, value);
-    const selected = isSelected(opts.getFilterState?.(), f);
+    // フィルタ連動（まずは「この軸の値で絞る」だけを外へ）
+    // ※あなたの applyFilters の仕様に合わせてここを拡張してOK
+    actions.onPickMidParent?.(null); // 既存との衝突を避ける（必要なければ削除OK）
+    // TODO: filtersへ追加するアクションがあるならここで呼ぶ
+  });
 
-    if (selected && opts.onFilterRemove) opts.onFilterRemove(f);
-    else if (!selected && opts.onFilterAdd) opts.onFilterAdd(f);
+  left.appendChild(donut);
+
+  // center text
+  const center = el("div", { class: "w1-center" });
+  if (mode === "expanded" && lvl === "child" && pv) {
+    center.appendChild(el("div", { class: "w1-centerLine top", text: `${axis.label}：${pv}` }));
+  }
+  center.appendChild(el("div", { class: "w1-centerLine", text: `売上合計 ${fmtYen(agg.totalSales)}` }));
+  center.appendChild(el("div", { class: "w1-centerLine", text: `ブース数 ${agg.totalBooths}` }));
+  left.appendChild(center);
+
+  // right list
+  const list = el("div", { class: "w1-list" });
+
+  let items = agg.items.slice();
+
+  if (mode === "expanded" && lvl === "child") {
+    items = topNAndOther(items, local.topN);
   }
 
-  /** 子に入れる軸は（投入法/景品ジャンル/キャラ）だけ想定 */
-  function shouldDrillOnParent(axis) {
-    return axis.type === "hier" || axis.type === "hier_custom";
+  items.forEach((it, i) => {
+    const row = el("button", { class: "w1-row", title: it.label });
+    row.onclick = () => {
+      if (mode === "expanded" && axisHasChild(axis) && lvl === "parent") {
+        local.level = "child";
+        local.parentValue = it.key;
+        renderWidget1ShareDonut(mount, state, actions, opts);
+        return;
+      }
+      // TODO: フィルタ追加へ（あなたの store.filters 方式に合わせて）
+    };
+
+    row.appendChild(el("span", { class: "w1-chip", style: `--c:${it.color}` }));
+    row.appendChild(el("span", { class: "w1-name", text: it.label }));
+    row.appendChild(el("span", { class: "w1-v", text: `${fmtYen(it.sales)}  ${fmtPct(it.salesShare)}` }));
+
+    if (mode === "expanded") {
+      row.appendChild(el("span", { class: "w1-v2", text: `${it.booths}B  ${fmtPct(it.boothShare)}` }));
+    }
+
+    list.appendChild(row);
+  });
+
+  right.appendChild(list);
+
+  if (mode === "expanded" && lvl === "parent" && axisHasChild(axis)) {
+    right.appendChild(el("div", { class: "w1-note", text: "※ 親カテゴリをクリックすると子階層へドリルダウン" }));
+  }
+}
+
+/* ===== aggregation ===== */
+
+function aggregate(rows, axis, level, parentValue) {
+  const groups = new Map();
+  const boothAll = new Set();
+  let totalSales = 0;
+
+  // 親レベル：マスタ順に全件表示（空でも出す）
+  if (level === "parent" && axis.parentOrder?.length) {
+    axis.parentOrder.forEach(k => groups.set(k, { key:k, label:k, sales:0, boothSet:new Set() }));
   }
 
-  /** ====== UI描画 ====== */
-  function renderPanel(leftRoot, rightRoot, axis, level, parentValue, agg, ui) {
-    leftRoot.innerHTML = "";
-    rightRoot.innerHTML = "";
+  for (const r of rows) {
+    const sales = toNum(r[COL.sales]);
+    totalSales += sales;
 
-    if (!agg || agg.totalSales <= 0 || agg.totalBooths <= 0) {
-      leftRoot.appendChild(el("div", { class: "w1-empty", text: "該当データなし" }));
-      rightRoot.appendChild(el("div", { class: "w1-empty", text: "—" }));
-      return;
+    const boothId = safe(r[COL.boothId]);
+    if (boothId) boothAll.add(boothId);
+
+    let key = null;
+
+    if (axis.type === "flat") {
+      key = safe(r[axis.key]) || "未分類";
+      upsert(groups, key, sales, boothId);
+      continue;
     }
 
-    // left: donut svg
-    const donut = renderDoubleDonutSVG({
-      items: agg.items,
-      totalSales: agg.totalSales,
-      totalBooths: agg.totalBooths,
-      axis,
-      level,
-      parentValue,
-      mode: ui.mode
-    }, (value) => handleClick(axis, level, parentValue, value));
-    leftRoot.appendChild(donut);
-
-    // center text overlay
-    const center = el("div", { class: "w1-center" });
-    if (ui.mode === "expanded" && level === "child" && parentValue != null) {
-      center.appendChild(el("div", { class: "w1-centerLine top", text: `${axis.label}：${parentValue}` }));
-    }
-    center.appendChild(el("div", { class: "w1-centerLine", text: `売上合計 ${fmtYen(agg.totalSales)}` }));
-    center.appendChild(el("div", { class: "w1-centerLine", text: `ブース数 ${agg.totalBooths}` }));
-    leftRoot.appendChild(center);
-
-    // right: list
-    const list = el("div", { class: "w1-list" });
-
-    // 表示対象のitems（全体：親マスタ全件 / 拡大親：親マスタ全件 / 拡大子：TopN+その他）
-    const displayItems = (ui.listOrder === "salesDesc")
-      ? applyTopNAndOther(agg.items, ui.mode === "expanded" ? state.topN : 10)
-      : agg.items;
-
-    displayItems.forEach((it, idx) => {
-      const row = el("button", { class: "w1-row", title: it.label });
-      row.onclick = () => handleClick(axis, level, parentValue, it.key);
-
-      const chip = el("span", { class: "w1-chip", style: `--c:${it.color}` });
-      const name = el("span", { class: "w1-name", text: it.label });
-
-      const v1 = el("span", { class: "w1-v", text: `${fmtYen(it.sales)}  ${fmtPct(it.salesShare)}` });
-
-      row.appendChild(chip);
-      row.appendChild(name);
-      row.appendChild(v1);
-
-      if (ui.showBoothInList) {
-        const v2 = el("span", { class: "w1-v2", text: `${it.booths}B  ${fmtPct(it.boothShare)}` });
-        row.appendChild(v2);
-      }
-
-      // selected highlight (optional)
-      const f = buildFilter(axis, level, parentValue, it.key);
-      if (isSelected(opts.getFilterState?.(), f)) row.classList.add("selected");
-
-      list.appendChild(row);
-    });
-
-    rightRoot.appendChild(list);
-
-    // （拡大・親表示時）説明ラベル
-    if (ui.mode === "expanded" && level === "parent" && axisHasChild(axis)) {
-      rightRoot.appendChild(el("div", { class: "w1-note", text: "※ 親カテゴリをクリックすると子階層へドリルダウンします" }));
-    }
-  }
-
-  /** ====== 集計 ====== */
-  function aggregate(rows, axis, level, parentValue) {
-    // groupKey作成
-    const groups = new Map(); // key -> {key,label,sales,boothSet:Set}
-    const boothAll = new Set();
-    let totalSales = 0;
-
-    // 親マスタ順の全件表示のために、親レベルなら先に空グループを作る
-    if (level === "parent") {
-      const order = axis.parentOrder || null;
-      if (order && order.length) {
-        order.forEach(k => groups.set(k, { key: k, label: k, sales: 0, boothSet: new Set() }));
-      }
+    if (axis.type === "yesno") {
+      key = normYesNo(safe(r[axis.key]));
+      upsert(groups, key, sales, boothId);
+      continue;
     }
 
-    for (const r of rows) {
-      const sales = toNum(r[COLS.sales]);
-      if (sales > 0) totalSales += sales;
-
-      const boothId = safe(r[COLS.boothId]);
-      if (boothId) boothAll.add(boothId);
-
-      const { parentKey, childKey } = axisKeyOfRow(axis, r);
-
-      // 親の値
-      const p = safe(parentKey);
-
-      // YES/NO正規化
-      const pNorm = (axis.type === "yesno") ? normYesNo(p) : (p || "未分類");
-
-      // キャラ軸特殊
-      if (axis.type === "hier_custom") {
-        const parentVal = deriveCharParent(r);
-        const childVal = safe(r[COLS.charName]);
-        const useParent = (level === "parent");
-        const gKey = useParent ? parentVal : (childVal || "未分類");
-        if (level === "child") {
-          // childは parentValue（キャラ/ノンキャラ）で絞る
-          if (parentValue && parentVal !== parentValue) continue;
-        }
-        upsertGroup(groups, gKey, gKey, sales, boothId);
-        continue;
-      }
-
-      // hier/flat/yesno
+    if (axis.type === "char") {
+      const parent = safe(r[COL.charName]) ? "キャラ" : "ノンキャラ";
       if (level === "parent") {
-        const gKey = (axis.type === "flat") ? safe(r[axis.key]) : pNorm;
+        upsert(groups, parent, sales, boothId);
+      } else {
+        if (parentValue && parent !== parentValue) continue;
+        const child = safe(r[COL.charName]) || "未分類";
+        upsert(groups, child, sales, boothId);
+      }
+      continue;
+    }
+
+    // hier
+    const p = safe(r[axis.parentKey]) || "未分類";
+    if (level === "parent") {
+      upsert(groups, p, sales, boothId);
+    } else {
+      if (parentValue && p !== parentValue) continue;
+      const c = safe(r[axis.childKey]) || "未分類";
+      upsert(groups, c, sales, boothId);
+    }
+  }
+
+  const totalBooths = boothAll.size;
+
+  let items = Array.from(groups.values()).map((g, i) => ({
+    key: g.key,
+    label: g.label,
