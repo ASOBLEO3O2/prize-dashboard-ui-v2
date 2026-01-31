@@ -1,32 +1,35 @@
 // src/ui/kpiMid.js
 import { el, clear } from "../utils/dom.js";
 import { fmtYen, fmtPct } from "../utils/format.js";
-import { renderDonut } from "../charts/donut.js";
 import { GENRES } from "../constants.js";
+
+import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
 
 /**
  * 役割：
- * - 中段4カードを描画（売上ドーナツ / マシンドーナツ / 原価率分布 / 散布図）
+ * - 中段カードを描画
+ *   - ✅ ウィジェット①（売上/ブース 構成比）← ここに統一（旧ドーナツ2枚は廃止）
+ *   - 原価率分布（canvas器）
+ *   - 散布図（canvas器）
  * - 下段（midCardsMount）は既存仕様のまま（無罪）
  *
  * 注意：
- * - チャート（ヒスト/散布）の描画は charts.js 側が担当。
+ * - chart（ヒスト/散布）の描画更新は charts.js 側が担当。
  *   ここでは「カード枠＋canvasの器」までを用意する。
  */
 export function renderMidKpi(mounts, state, actions) {
-  // ========= 4カード（上段） =========
-  renderDonutCard_(mounts.midSlotSalesDonut, {
-    title: "売上構成比",
-    subtitle: "ジャンル別（%）",
-    onFocus: () => actions.onOpenFocus?.("salesDonut"),
-  });
+  // ========= ここが統一ポイント =========
+  // 旧：売上ドーナツ + マシンドーナツ（2枚）
+  // 新：ウィジェット①（1枚）に統合
+  renderWidgetCard_(mounts.midSlotSalesDonut, state, actions);
 
-  renderDonutCard_(mounts.midSlotMachineDonut, {
-    title: "マシン構成比",
-    subtitle: "ジャンル別（%）",
-    onFocus: () => actions.onOpenFocus?.("machineDonut"),
-  });
+  // 旧「マシン構成比」スロットは邪魔なので完全に消す（余白も残さない）
+  if (mounts.midSlotMachineDonut) {
+    clear(mounts.midSlotMachineDonut);
+    mounts.midSlotMachineDonut.style.display = "none";
+  }
 
+  // ========= 既存：原価率分布 =========
   renderChartCard_(mounts.midSlotCostHist, {
     title: "原価率 分布",
     tools: el("div", { class: "chartTools" }, [
@@ -39,6 +42,7 @@ export function renderMidKpi(mounts, state, actions) {
     onFocus: () => actions.onOpenFocus?.("costHist"),
   });
 
+  // ========= 既存：散布図 =========
   renderChartCard_(mounts.midSlotScatter, {
     title: "売上 × 原価率（マトリクス）",
     tools: null,
@@ -46,71 +50,53 @@ export function renderMidKpi(mounts, state, actions) {
     onFocus: () => actions.onOpenFocus?.("scatter"),
   });
 
-  // ========= 通常カードのドーナツ描画（“上層のみ”） =========
-  // 通常表示は「詰め込み禁止」なので、ドリルはしない。拡大レイヤーでやる。
-  const axis = "ジャンル";
-  const viewTop = buildGenreTopView_(state);
-
-  drawDonutIntoCard_(mounts.midSlotSalesDonut, {
-    title: "売上構成比",
-    values: viewTop.items.map((x) => ({
-      key: x.key,
-      label: x.label,
-      value: x.salesShare,
-      color: x.color || null,
-    })),
-    onPick: () => actions.onOpenFocus?.("salesDonut"),
-  });
-
-  drawDonutIntoCard_(mounts.midSlotMachineDonut, {
-    title: "マシン構成比",
-    values: viewTop.items.map((x) => ({
-      key: x.key,
-      label: x.label,
-      value: x.machineShare,
-      color: x.color || null,
-    })),
-    onPick: () => actions.onOpenFocus?.("machineDonut"),
-  });
-
   // ========= 下段（既存の一覧カード：無罪） =========
-  // 現状の仕様（midParentKeyで上層/下層を切替）を維持するが、
-  // 今回の「ドーナツ下層」は拡大レイヤーに移すため、ここは現状のままでOK。
   renderLowerCards_(mounts.midCards, state, actions);
 }
 
 /* =========================
-   上段カード（器）描画
+   上段：ウィジェット①カード（統一）
    ========================= */
 
-function renderDonutCard_(slotMount, { title, subtitle, onFocus }) {
+function renderWidgetCard_(slotMount, state, actions) {
+  if (!slotMount) return;
   clear(slotMount);
 
+  // 旧と同じカード枠を使って見た目を統一（邪魔にならない）
   const card = el("div", { class: "card midPanel" });
 
-  const header = el("div", { class: "midPanelHeader" }, [
-    el("div", { class: "midPanelTitleWrap" }, [
-      el("div", { class: "midPanelTitle", text: title }),
-      el("div", { class: "midPanelSub", text: subtitle || "" }),
-    ]),
-    el("button", { class: "btn ghost midPanelBtn", text: "拡大", onClick: (e) => { e.preventDefault(); onFocus?.(); } }),
-  ]);
+  // ウィジェット側にヘッダー/セレクト/拡大ボタンを持たせるので、
+  // ここは body だけ用意して丸ごと描画する
+  const body = el("div", { class: "midPanelBody" });
 
-  const body = el("div", { class: "midPanelBody donutBody", onClick: () => onFocus?.() });
-
-  card.appendChild(header);
   card.appendChild(body);
   slotMount.appendChild(card);
+
+  // ✅ ここが「中段KPI＝ウィジェット①」
+  // normal 内の「拡大」ボタンは widget 側が actions.onOpenFocus("shareDonut") を呼ぶ想定
+  renderWidget1ShareDonut(body, state, actions, { mode: "normal" });
 }
 
+/* =========================
+   上段：チャートカード（器）
+   ========================= */
+
 function renderChartCard_(slotMount, { title, tools, canvasId, onFocus }) {
+  if (!slotMount) return;
   clear(slotMount);
+
+  // もし前回 display:none にしたスロットがあっても、他カードは表示する
+  slotMount.style.display = "";
 
   const card = el("div", { class: "card midPanel" });
 
   const headerRight = el("div", { style: "display:flex; align-items:center; gap:10px;" }, []);
   if (tools) headerRight.appendChild(tools);
-  headerRight.appendChild(el("button", { class: "btn ghost midPanelBtn", text: "拡大", onClick: (e) => { e.preventDefault(); onFocus?.(); } }));
+  headerRight.appendChild(el("button", {
+    class: "btn ghost midPanelBtn",
+    text: "拡大",
+    onClick: (e) => { e.preventDefault(); onFocus?.(); }
+  }));
 
   const header = el("div", { class: "midPanelHeader" }, [
     el("div", { class: "midPanelTitleWrap" }, [
@@ -129,59 +115,11 @@ function renderChartCard_(slotMount, { title, tools, canvasId, onFocus }) {
   slotMount.appendChild(card);
 }
 
-function drawDonutIntoCard_(slotMount, { title, values, onPick }) {
-  const body = slotMount.querySelector(".midPanelBody");
-  if (!body) return;
-
-  // 既存のhostを作り直さず、中身だけ差し替え（崩れ防止）
-  clear(body);
-
-  const host = el("div", { class: "donutHost" });
-  const meta = el("div", { class: "donutMetaCompact" }, [
-    el("div", { class: "note", text: "タップで拡大 → 内訳へ" }),
-    legendCompact_(values, null, onPick),
-  ]);
-
-  body.appendChild(host);
-  body.appendChild(meta);
-
-  renderDonut(host, { title, values, pickedKey: null, onPick: () => onPick?.() });
-}
-
-function legendCompact_(values, pickedKey, onPick) {
-  const box = el("div", { class: "legend compact" });
-  const fallback = ["#6dd3fb", "#7ee081", "#f2c14e", "#b28dff", "#ff6b6b"];
-
-  values.forEach((seg, idx) => {
-    const dim = (pickedKey && pickedKey !== seg.key);
-
-    const sw = el("span", { class: "legendSwatch" });
-    sw.style.backgroundColor = seg.color || fallback[idx % fallback.length];
-
-    const label = el("span", { text: seg.label });
-
-    const item = el("div", {
-      class: "legendItem",
-      style: dim ? "opacity:.35;" : ""
-    }, [sw, label]);
-
-    item.addEventListener("click", (e) => {
-      e.preventDefault();
-      onPick?.(seg.key);
-    });
-
-    box.appendChild(item);
-  });
-
-  return box;
-}
-
 /* =========================
    下段（無罪：そのまま）
    ========================= */
 
 function renderLowerCards_(cardsMount, state, actions) {
-  // 既存の実装をほぼそのまま移植（あなたの固定方針：下段は触らない）
   const axis = state.midAxis || "ジャンル";
   const parentKey = state.midParentKey || null;
 
@@ -258,8 +196,6 @@ function buildMidView_(state, axis, parentKey) {
     return normalizeShares_(items, {
       level: "parent",
       parentLabel: axis,
-      noteSales: `${axis}別（%）`,
-      noteMachines: `${axis}別（%）`,
     });
   }
 
@@ -289,20 +225,11 @@ function buildMidView_(state, axis, parentKey) {
       };
     });
 
-    items.sort((a, b) => {
-      const ai = GENRES.findIndex(g => String(g.key) === String(a.key) || String(g.label) === String(a.label));
-      const bi = GENRES.findIndex(g => String(g.key) === String(b.key) || String(g.label) === String(b.label));
-      const aa = (ai === -1) ? 9999 : ai;
-      const bb = (bi === -1) ? 9999 : bi;
-      if (aa !== bb) return aa - bb;
-      return (b.sales - a.sales);
-    });
+    items.sort((a, b) => (b.sales - a.sales));
 
     return normalizeShares_(items, {
       level: "parent",
       parentLabel: null,
-      noteSales: "ジャンル別（%）",
-      noteMachines: "ジャンル別（%）",
     });
   }
 
@@ -327,48 +254,7 @@ function buildMidView_(state, axis, parentKey) {
   return normalizeShares_(items, {
     level: "child",
     parentLabel,
-    noteSales: `${parentLabel} 内訳（%）`,
-    noteMachines: `${parentLabel} 内訳（%）`,
   });
-}
-
-// 中段“通常カード用”のジャンル上層ビュー（ドーナツ）
-function buildGenreTopView_(state) {
-  const genreTree = Array.isArray(state.byAxis?.["ジャンル"]) ? state.byAxis["ジャンル"] : [];
-
-  const genreMetaByKey = new Map(GENRES.map(g => [String(g.key), g]));
-  const genreMetaByLabel = new Map(GENRES.map(g => [String(g.label), g]));
-
-  const metaOf = (node) => {
-    return genreMetaByKey.get(String(node.key)) ||
-      genreMetaByLabel.get(String(node.label)) ||
-      null;
-  };
-
-  const items = genreTree.map(p => {
-    const meta = metaOf(p);
-    return {
-      key: p.key,
-      label: meta?.label || p.label || p.key,
-      machines: p.machines ?? 0,
-      sales: p.sales ?? 0,
-      consume: p.consume ?? 0,
-      costRate: p.costRate ?? 0,
-      color: meta?.color || null,
-      hasChildren: Array.isArray(p.children) && p.children.length > 0,
-    };
-  });
-
-  items.sort((a, b) => {
-    const ai = GENRES.findIndex(g => String(g.key) === String(a.key) || String(g.label) === String(a.label));
-    const bi = GENRES.findIndex(g => String(g.key) === String(b.key) || String(g.label) === String(b.label));
-    const aa = (ai === -1) ? 9999 : ai;
-    const bb = (bi === -1) ? 9999 : bi;
-    if (aa !== bb) return aa - bb;
-    return (b.sales - a.sales);
-  });
-
-  return normalizeShares_(items, { level: "parent", parentLabel: null });
 }
 
 function normalizeShares_(items, meta) {
