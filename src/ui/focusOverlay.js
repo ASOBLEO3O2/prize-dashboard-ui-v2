@@ -2,6 +2,8 @@
 import { el, clear } from "../utils/dom.js";
 import { renderDonut } from "../charts/donut.js?v=20260131";
 import { GENRES } from "../constants.js";
+import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
+
 
 export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   const focus = state.focus || { open: false };
@@ -182,3 +184,10 @@ function normalizeShares_(items, meta) {
 
   return { ...meta, items: out };
 }
+
+if (state.focus?.open && state.focus.kind === "shareDonut") {
+  // focusModal の中に mount を作って描画（focusOverlayの構造に合わせて）
+  renderWidget1ShareDonut(focusModal, state, actions, { mode: "expanded" });
+  return;
+}
+
