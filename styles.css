@@ -620,3 +620,135 @@ a{ color:inherit; }
   .midPanelBody{ height:240px; }
   .midCards{ grid-template-columns:1fr; }
 }
+
+/* =========================
+   Mid KPI（中段：画面フィットの器）
+   ========================= */
+
+/* ✅ container を縦レイアウトにして「中段が残り高さを取れる」ようにする */
+.container{
+  max-width:1280px;
+  margin:0 auto;
+  padding:18px 18px 40px;
+
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  min-height:100svh; /* mobile safe */
+}
+
+/* section（中段を含むブロック）も伸びられるように */
+.section{ 
+  margin-top:0;           /* container gapに任せる */
+  display:flex;
+  flex-direction:column;
+  min-height:0;           /* 子のoverflow/height計算を安定させる */
+  flex:1;                 /* 残り高さを使える */
+}
+
+.midKpiWrap{
+  border:1px solid var(--border);
+  background:rgba(18,26,34,.55);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+
+  /* ✅ ここが肝：中段の“器”を残り高さにフィットさせる */
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+
+/* 中段ヘッダ（「中段KPI」タイトル行） */
+.sectionHeader{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  margin:0 2px 10px;
+}
+
+/* ✅ ダッシュボード領域（= 2×2 + 余ったらサイド1枠） */
+.midTop{
+  padding:14px;
+  border-bottom:1px solid var(--border);
+
+  /* 重要：中段の残り高さに追従させる */
+  flex:1;
+  min-height:0;
+  display:flex;
+}
+
+/* 2×2/5枠の“器” */
+#midDash{
+  width:100%;
+  min-height:0;
+  display:grid;
+  gap:12px;
+
+  /* 기본：2列（=2×2） */
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  grid-template-rows:repeat(2, minmax(0, 1fr));
+  align-items:stretch;
+}
+
+/* 各枠は同サイズで埋める */
+.dashPanel{
+  border:1px solid var(--border);
+  background:rgba(15,21,29,.55);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+
+  /* 重要：高さを均等化 */
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+
+/* タイトル行などを入れるならここ（中身は今は空でもOK） */
+.dashPanelHeader{
+  padding:12px 14px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.dashPanelBody{
+  flex:1;
+  min-height:0;
+  padding:10px 12px 12px;
+}
+
+/* ✅ “余ったら左右にもう1枠” を実現：
+   超ワイド時に3列化して、右側に縦2段ぶち抜きのサイド枠を置く */
+@media (min-width: 1400px){
+  #midDash{
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    grid-template-rows:repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "a b side"
+      "c d side";
+  }
+  /* 4枠は固定位置 */
+  #midDash > .dashPanel:nth-child(1){ grid-area:a; }
+  #midDash > .dashPanel:nth-child(2){ grid-area:b; }
+  #midDash > .dashPanel:nth-child(3){ grid-area:c; }
+  #midDash > .dashPanel:nth-child(4){ grid-area:d; }
+
+  /* 5枠目がある時だけサイドに入る（無ければ無視される） */
+  #midDash > .dashPanel:nth-child(5){ grid-area:side; }
+}
+
+/* ✅ 狭幅は縦積み */
+@media (max-width: 980px){
+  #midDash{
+    grid-template-columns:1fr;
+    grid-template-rows:auto;
+  }
+  /* ぶち抜き指定を無効化（縦積み優先） */
+  #midDash > .dashPanel{
+    grid-area:auto !important;
+  }
+}
