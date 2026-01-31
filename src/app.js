@@ -52,6 +52,7 @@ const initialState = {
     kind: null,      // "salesDonut" | "machineDonut" | "costHist" | "scatter"
     title: "",
     parentKey: null, // ドーナツ下層（拡大内のみ）
+　　(kind === "shareDonut") ? "売上/ブース 構成比" :
   },
 
   // 詳細（テーブル）の並び替え
