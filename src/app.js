@@ -166,9 +166,7 @@ function renderAll(state) {
   // 上段 KPI
   renderTopKpi(mounts.topKpi, state.topKpi);
 
-  // ✅ ウィジェット①（通常表示）
-  renderWidget1ShareDonut(mounts.widget1, state, actions, { mode: "normal" });
-
+  
   // 中段（既存）
   renderMidKpi(mounts, state, actions);
 
