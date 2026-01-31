@@ -2,6 +2,7 @@
 import { createStore } from "./state/store.js";
 import { mountLayout } from "./ui/layout.js";
 import { renderTopKpi } from "./ui/kpiTop.js";
+import { renderWidget1ShareDonut } from "./ui/widget1ShareDonut.js";
 import { renderMidKpi } from "./ui/kpiMid.js";
 import { renderDetail } from "./ui/detail.js";
 import { renderDrawer } from "./ui/drawer.js";
@@ -164,6 +165,9 @@ function renderAll(state) {
 
   // ドロワー
   renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
+
+  renderWidget1ShareDonut(mounts.widget1, state, actions, { mode: "normal" });
+
 }
 
 renderAll(store.get());
