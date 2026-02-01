@@ -1,4 +1,3 @@
-
 // src/logic/byAxis.js
 // rows（1行=1台）から「中段KPIの軸別カード用データ」を作る
 //
