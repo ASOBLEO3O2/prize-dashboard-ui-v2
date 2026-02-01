@@ -8,13 +8,11 @@ import { el, clear } from "../utils/dom.js";
  *
  * 重要：
  * - 集計母集団は state.filteredRows（＝フィルタ後）
- * - 「合計192」は filteredRows 内の distinct booth_id（診断ログで確定）
  */
 
-/** 軸キーは「実データの列名」に合わせる */
 const AXES = [
   { key: "料金", label: "① 料金", titleLabel: "料金" },
-  { key: "回数", label: "② プレイ回数", titleLabel: "プレイ回数" }, // ✅ 修正：プレイ回数 → 回数
+  { key: "回数", label: "② プレイ回数", titleLabel: "プレイ回数" }, // ✅ データ列は「回数」
   { key: "投入法", label: "③ 投入法", titleLabel: "投入法" },
   { key: "景品ジャンル", label: "④ 景品ジャンル", titleLabel: "景品ジャンル" },
   { key: "ターゲット", label: "⑤ ターゲット", titleLabel: "ターゲット" },
@@ -24,6 +22,11 @@ const AXES = [
   { key: "予約", label: "⑨ 予約", titleLabel: "予約" },
   { key: "WLオリジナル", label: "⑩ WLオリジナル", titleLabel: "WLオリジナル" },
 ];
+
+function safeStr(v, fallback = "未分類") {
+  const s = String(v ?? "").trim();
+  return s ? s : fallback;
+}
 
 function toNum(v) {
   if (v == null) return 0;
@@ -35,17 +38,12 @@ function yen(n) {
   return new Intl.NumberFormat("ja-JP").format(Math.round(n || 0)) + "円";
 }
 
-function safeStr(v, fallback = "未分類") {
-  const s = String(v ?? "").trim();
-  return s ? s : fallback;
-}
-
 function axisMeta(axisKey) {
-  return AXES.find(a => a.key === axisKey) || AXES[3]; // default: 景品ジャンル
+  return AXES.find(a => a.key === axisKey) || AXES[3];
 }
 
 function getAxisFromState_(state) {
-  // app.js の初期値：widget1Axis: "ジャンル" になっている場合があるので吸収
+  // app.js 初期値が "ジャンル" だった揺れを吸収
   const raw = safeStr(state?.widget1Axis, "景品ジャンル");
   if (raw === "ジャンル") return "景品ジャンル";
   return raw;
@@ -67,7 +65,6 @@ function colorSoft_(key) {
 }
 
 function buildAgg_(rows, axisKey) {
-  // axisKey が rows に存在しない場合は全部「未分類」になる（今回の回数がそうだった）
   const map = new Map();
 
   for (const r of rows) {
@@ -86,8 +83,7 @@ function buildAgg_(rows, axisKey) {
 
     o.sales += toNum(r?.sales);
 
-    // 1ステーション = booth_id（あなたの定義）
-    // booth_id が無い場合の救済はしない（無いなら upstream が壊れてる）
+    // 1ステーション = booth_id
     if (r?.booth_id != null) o.booths.add(String(r.booth_id));
   }
 
@@ -118,13 +114,17 @@ function buildABC_(items, totalSales) {
   });
 }
 
+/* =========================
+   DOM
+   ========================= */
+
 function ensureDom_(mount, actions, mode) {
   if (mount.__w1_root) return mount.__w1_root;
 
   const root = el("div", { class: `widget1 widget1-${mode}` });
 
-  // header
   const header = el("div", { class: "widget1Header" });
+
   const title = el("div", { class: "widget1Title", text: "景品ジャンル別 売上 / ステーション構成比" });
   const left = el("div", { class: "widget1HeaderLeft" }, [title]);
 
@@ -146,7 +146,6 @@ function ensureDom_(mount, actions, mode) {
   header.appendChild(left);
   header.appendChild(right);
 
-  // body
   const body = el("div", { class: "widget1Body" });
 
   const chartWrap = el("div", { class: "widget1ChartWrap" });
@@ -164,22 +163,26 @@ function ensureDom_(mount, actions, mode) {
   clear(mount);
   mount.appendChild(root);
 
-  // refs
   mount.__w1_root = root;
   mount.__w1_title = title;
   mount.__w1_select = select;
   mount.__w1_canvas = canvas;
   mount.__w1_abc = abcWrap;
 
+  // ✅ 重要：描画更新中のselect同期で change が噛んでも無視するためのガード
+  mount.__w1_syncingSelect = false;
+
   // change handler（1回だけ）
   select.addEventListener("change", () => {
+    // ✅ programmatic update 由来の change は無視（無限ループ防止）
+    if (mount.__w1_syncingSelect) return;
+
     const axisKey = select.value;
 
-    // ✅ state直書き禁止：storeに確定
+    // ✅ state直書き禁止：storeに確定（これだけで再描画される）
     actions.onSetWidget1Axis?.(axisKey);
 
-    // 描画要求（store.setでrenderが回るなら不要だが保険）
-    actions.requestRender?.();
+    // ✅ requestRender は呼ばない（store.set → render で十分）
   });
 
   return root;
@@ -189,21 +192,29 @@ function updateTitle_(mount, axisKey) {
   const meta = axisMeta(axisKey);
   const title = mount.__w1_title;
   if (!title) return;
-
-  // タイトル要望：◯◯別 売上/構成比（あなたの「1ステーション」定義を反映）
   title.textContent = `${meta.titleLabel}別 売上 / ステーション構成比`;
 }
 
 function updateSelect_(mount, axisKey) {
   const sel = mount.__w1_select;
   if (!sel) return;
-  if (sel.value !== axisKey) sel.value = axisKey;
+
+  if (sel.value !== axisKey) {
+    // ✅ 同期中フラグ
+    mount.__w1_syncingSelect = true;
+    sel.value = axisKey;
+    mount.__w1_syncingSelect = false;
+  }
 }
 
 function pct(v) {
   if (!Number.isFinite(v)) return "0.0%";
   return (v * 100).toFixed(1) + "%";
 }
+
+/* =========================
+   Chart
+   ========================= */
 
 function upsertChart_(mount, items, totalSales, totalBooths) {
   const Chart = window.Chart;
@@ -216,21 +227,18 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   const dataBooths = items.map(x => (totalBooths ? x.booths / totalBooths : 0));
   const dataSales  = items.map(x => (totalSales ? x.sales / totalSales : 0));
 
-  // 色（配列前提）
+  // 色（配列）
   const colorsInner = items.map(x => x.colorSoft || "#93c5fd");
   const colorsOuter = items.map(x => x.color || "#2563eb");
 
-  // Tooltip 表示文字
+  // Tooltip：要望「台数◯台（ブース数） / 構成比◯%」
   const tooltipLabel = (ctx) => {
     const i = ctx.dataIndex;
     const it = items[i];
 
-    // どっちのリングかで構成比の分母が違う
-    const isInner = (ctx.datasetIndex === 0); // 0: 台数リング, 1: 売上リング
+    const isInner = (ctx.datasetIndex === 0); // 0: 台数リング / 1: 売上リング
     const share = isInner ? dataBooths[i] : dataSales[i];
 
-    // 要望：台数〇台（ブース数） / 構成比〇%
-    // ※売上リングを触っても「台数」と「構成比」を出す（構成比は触ったリング基準）
     return `${it.label} / 台数 ${it.booths}台（ブース） / 構成比 ${pct(share)}`;
   };
 
@@ -266,8 +274,6 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
         resizeDelay: 80,
         plugins: {
           legend: { display: false },
-
-          // ✅ 強制的に tooltip を有効化（全体defaultsに負けないように明示）
           tooltip: {
             enabled: true,
             callbacks: { label: tooltipLabel },
@@ -288,7 +294,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   ch.data.datasets[1].data = dataSales;
   ch.data.datasets[1].backgroundColor = colorsOuter;
 
-  // ✅ updateでもtooltip設定が死なないように保持
+  // tooltip を強制保持（defaultsに負けない）
   ch.options.plugins = ch.options.plugins || {};
   ch.options.plugins.tooltip = ch.options.plugins.tooltip || {};
   ch.options.plugins.tooltip.enabled = true;
@@ -297,8 +303,9 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   ch.update("none");
 }
 
-
-
+/* =========================
+   ABC
+   ========================= */
 
 function renderABC_(mount, abcRows, totalBooths) {
   const box = mount.__w1_abc;
@@ -311,7 +318,7 @@ function renderABC_(mount, abcRows, totalBooths) {
       el("div", { class: `widget1ABCRow rank-${r.rank}` }, [
         el("span", { class: "rank", text: r.rank }),
         el("span", { class: "label" }, [
-          el("span", { class: "w1chip", style: `background:${r.color};` }),
+          el("span", { class: "widget1Chip", style: `background:${r.color};` }),
           el("span", { text: r.label }),
         ]),
         el("span", { class: "value", text: yen(r.sales) }),
@@ -319,9 +326,11 @@ function renderABC_(mount, abcRows, totalBooths) {
     );
   });
 
-  // 右下注記（あなたの定義を明示）
   box.appendChild(
-    el("div", { class: "widget1Note", text: `台数は 1ステーション（ブースID）単位で集計` + (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : "") })
+    el("div", {
+      class: "widget1Note",
+      text: `台数は 1ステーション（ブースID）単位で集計${Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""}`
+    })
   );
 }
 
@@ -333,7 +342,6 @@ export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
 
   const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
 
-  // 軸（stateの揺れを吸収）
   const axisKey = getAxisFromState_(state);
   updateSelect_(mount, axisKey);
   updateTitle_(mount, axisKey);
