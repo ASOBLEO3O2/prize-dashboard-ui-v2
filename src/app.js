@@ -65,6 +65,42 @@ const initialState = {
 };
 
 const store = createStore(initialState);
+
+// ===== FIX: store.set を強制バッチ化（set再入で落ちるのを止める）=====
+{
+  const rawSet = store.set.bind(store);
+  let scheduled = false;
+  let pending = [];
+
+  store.set = (u) => {
+    pending.push(u);
+    if (scheduled) return;
+    scheduled = true;
+
+    queueMicrotask(() => {
+      scheduled = false;
+
+      // pending をまとめて 1回だけ rawSet する
+      let s = store.get();
+      const batch = pending;
+      pending = [];
+
+      for (const up of batch) {
+        s = (typeof up === "function") ? up(s) : up;
+      }
+
+      rawSet(s);
+    });
+  };
+
+  console.log("[FIX] store.set batched");
+}
+
+// window に出す（コンソール診断用）
+window.getState = () => store.get();
+
+
+
 const root = document.getElementById("app");
 
 // ===== DEBUG: DevTools で state/rows を確認するための一時公開 =====
