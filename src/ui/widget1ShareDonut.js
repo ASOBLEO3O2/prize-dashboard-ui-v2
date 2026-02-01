@@ -200,6 +200,11 @@ function updateSelect_(mount, axisKey) {
   if (sel.value !== axisKey) sel.value = axisKey;
 }
 
+function pct(v) {
+  if (!Number.isFinite(v)) return "0.0%";
+  return (v * 100).toFixed(1) + "%";
+}
+
 function upsertChart_(mount, items, totalSales, totalBooths) {
   const Chart = window.Chart;
   const canvas = mount.__w1_canvas;
@@ -207,12 +212,27 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
 
   const labels = items.map(x => x.label);
 
+  // 比率（0..1）
   const dataBooths = items.map(x => (totalBooths ? x.booths / totalBooths : 0));
-  const dataSales = items.map(x => (totalSales ? x.sales / totalSales : 0));
+  const dataSales  = items.map(x => (totalSales ? x.sales / totalSales : 0));
 
-  // ✅ カテゴリごとの色（配列）にする
-  const colorsInner = items.map(x => x.colorSoft); // 内周：明るめ
-  const colorsOuter = items.map(x => x.color);     // 外周：濃いめ
+  // 色（配列前提）
+  const colorsInner = items.map(x => x.colorSoft || "#93c5fd");
+  const colorsOuter = items.map(x => x.color || "#2563eb");
+
+  // Tooltip 表示文字
+  const tooltipLabel = (ctx) => {
+    const i = ctx.dataIndex;
+    const it = items[i];
+
+    // どっちのリングかで構成比の分母が違う
+    const isInner = (ctx.datasetIndex === 0); // 0: 台数リング, 1: 売上リング
+    const share = isInner ? dataBooths[i] : dataSales[i];
+
+    // 要望：台数〇台（ブース数） / 構成比〇%
+    // ※売上リングを触っても「台数」と「構成比」を出す（構成比は触ったリング基準）
+    return `${it.label} / 台数 ${it.booths}台（ブース） / 構成比 ${pct(share)}`;
+  };
 
   if (!mount.__w1_chart) {
     mount.__w1_chart = new Chart(canvas.getContext("2d"), {
@@ -221,7 +241,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
         labels,
         datasets: [
           {
-            label: "ステーション構成比",
+            label: "台数（ステーション）構成比",
             data: dataBooths,
             backgroundColor: colorsInner,
             borderColor: "rgba(10,15,20,.65)",
@@ -246,14 +266,11 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
         resizeDelay: 80,
         plugins: {
           legend: { display: false },
+
+          // ✅ 強制的に tooltip を有効化（全体defaultsに負けないように明示）
           tooltip: {
-            callbacks: {
-              label: (ctx) => {
-                const i = ctx.dataIndex;
-                const it = items[i];
-                return `${it.label} / 売上 ${yen(it.sales)} / ステーション ${it.booths}`;
-              },
-            },
+            enabled: true,
+            callbacks: { label: tooltipLabel },
           },
         },
       },
@@ -262,6 +279,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   }
 
   const ch = mount.__w1_chart;
+
   ch.data.labels = labels;
 
   ch.data.datasets[0].data = dataBooths;
@@ -270,8 +288,17 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   ch.data.datasets[1].data = dataSales;
   ch.data.datasets[1].backgroundColor = colorsOuter;
 
+  // ✅ updateでもtooltip設定が死なないように保持
+  ch.options.plugins = ch.options.plugins || {};
+  ch.options.plugins.tooltip = ch.options.plugins.tooltip || {};
+  ch.options.plugins.tooltip.enabled = true;
+  ch.options.plugins.tooltip.callbacks = { label: tooltipLabel };
+
   ch.update("none");
 }
+
+
+
 
 function renderABC_(mount, abcRows, totalBooths) {
   const box = mount.__w1_abc;
