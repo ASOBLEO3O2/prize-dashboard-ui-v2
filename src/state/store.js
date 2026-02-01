@@ -3,45 +3,45 @@ export function createStore(initialState) {
   let state = initialState;
   const listeners = new Set();
 
-  // notify中の再入を防ぐ
-  let isEmitting = false;
-  let pendingState = null;
+  // setが連打されたら「最後の状態」だけを次tickで1回通知する
+  let scheduled = false;
+  let pending = null;
 
   function get() {
     return state;
   }
 
-  function set(updater) {
-    const next =
-      (typeof updater === "function") ? updater(state) : updater;
+  function flush() {
+    scheduled = false;
 
-    // 同一参照なら何もしない（無限ループ抑止の基本）
+    // pending がなければ終了
+    if (pending == null) return;
+
+    // pending を確定して通知（この通知中に set が来ても次tickに回る）
+    state = pending;
+    pending = null;
+
+    for (const fn of listeners) fn(state);
+
+    // 通知中にまた pending が積まれていたら次tickへ
+    if (pending != null && !scheduled) {
+      scheduled = true;
+      queueMicrotask(flush);
+    }
+  }
+
+  function set(updater) {
+    const next = (typeof updater === "function") ? updater(state) : updater;
+
+    // 同一参照は無視（無限レンダーの最大要因）
     if (next === state) return;
 
-    // notify中に set が来たら積むだけ（再帰しない）
-    if (isEmitting) {
-      pendingState = next;
-      return;
-    }
+    // いまのtickでは state を即座に変えず、pending に積む
+    pending = next;
 
-    // まず state 更新
-    state = next;
-
-    // notify（この間に set が来ても pending に積まれる）
-    isEmitting = true;
-    try {
-      for (const fn of listeners) fn(state);
-    } finally {
-      isEmitting = false;
-    }
-
-    // notify中に積まれた pending があれば「1回だけ」反映する
-    if (pendingState && pendingState !== state) {
-      const p = pendingState;
-      pendingState = null;
-      set(p); // ここは isEmitting=false のため1段だけ進む
-    } else {
-      pendingState = null;
+    if (!scheduled) {
+      scheduled = true;
+      queueMicrotask(flush);
     }
   }
 
