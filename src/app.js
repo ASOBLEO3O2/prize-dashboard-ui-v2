@@ -91,7 +91,7 @@ const actions = {
     store.set((s) => ({ ...s, midDetail: payloadOrNull }));
   },
 
- requestRender: () => {},
+  requestRender: () => {},
 
   onToggleDetail: (genre) => {
     store.set((s) => {
