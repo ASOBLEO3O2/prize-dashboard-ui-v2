@@ -1,102 +1,103 @@
 // src/ui/widget1ShareDonut.js
 import { el, clear } from "../utils/dom.js";
 
-/* =========================
-   設定
-   ========================= */
+/**
+ * Widget①: 売上 / ステーション(=booth_id) 構成比（2重ドーナツ）
+ * - 外周: 売上構成比
+ * - 内周: ステーション構成比（distinct booth_id）
+ *
+ * 重要：
+ * - 集計母集団は state.filteredRows（＝フィルタ後）
+ * - 「合計192」は filteredRows 内の distinct booth_id（診断ログで確定）
+ */
 
+/** 軸キーは「実データの列名」に合わせる */
 const AXES = [
-  { key: "料金", label: "① 料金" },
-  { key: "プレイ回数", label: "② プレイ回数" },
-  { key: "投入法", label: "③ 投入法" },
-  { key: "景品ジャンル", label: "④ 景品ジャンル" },
-  { key: "ターゲット", label: "⑤ ターゲット" },
-  { key: "年代", label: "⑥ 年代" },
-  { key: "キャラ", label: "⑦ キャラ" },
-  { key: "映画", label: "⑧ 映画" },
-  { key: "予約", label: "⑨ 予約" },
-  { key: "WLオリジナル", label: "⑩ WLオリジナル" },
+  { key: "料金", label: "① 料金", titleLabel: "料金" },
+  { key: "回数", label: "② プレイ回数", titleLabel: "プレイ回数" }, // ✅ 修正：プレイ回数 → 回数
+  { key: "投入法", label: "③ 投入法", titleLabel: "投入法" },
+  { key: "景品ジャンル", label: "④ 景品ジャンル", titleLabel: "景品ジャンル" },
+  { key: "ターゲット", label: "⑤ ターゲット", titleLabel: "ターゲット" },
+  { key: "年代", label: "⑥ 年代", titleLabel: "年代" },
+  { key: "キャラ", label: "⑦ キャラ", titleLabel: "キャラ" },
+  { key: "映画", label: "⑧ 映画", titleLabel: "映画" },
+  { key: "予約", label: "⑨ 予約", titleLabel: "予約" },
+  { key: "WLオリジナル", label: "⑩ WLオリジナル", titleLabel: "WLオリジナル" },
 ];
 
-const DEFAULT_AXIS = "景品ジャンル";
-
-/* =========================
-   util
-   ========================= */
-
-function toNumLoose(v) {
-  const n = Number(String(v ?? "").replace(/,/g, ""));
+function toNum(v) {
+  if (v == null) return 0;
+  const n = Number(String(v).replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
 
-function pickFirst_(row, keys, fallback = null) {
-  for (const k of keys) {
-    const v = row?.[k];
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
-  }
-  return fallback;
+function yen(n) {
+  return new Intl.NumberFormat("ja-JP").format(Math.round(n || 0)) + "円";
 }
 
-function buildPalette_(labels) {
-  const n = Math.max(1, labels.length);
-  const outer = [];
-  const inner = [];
-
-  for (let i = 0; i < n; i++) {
-    const label = labels[i];
-
-    if (label === "未分類") {
-      outer.push("rgba(148,163,184,.95)");
-      inner.push("rgba(148,163,184,.35)");
-      continue;
-    }
-
-    const hue = Math.round((360 * i) / n);
-    outer.push(`hsla(${hue}, 85%, 55%, .95)`);
-    inner.push(`hsla(${hue}, 85%, 55%, .35)`);
-  }
-  return { outer, inner };
+function safeStr(v, fallback = "未分類") {
+  const s = String(v ?? "").trim();
+  return s ? s : fallback;
 }
 
-function getOrInitState_(state) {
-  if (!state) return { widget1Axis: DEFAULT_AXIS };
-  if (!state.widget1Axis) state.widget1Axis = DEFAULT_AXIS;
-  return state;
+function axisMeta(axisKey) {
+  return AXES.find(a => a.key === axisKey) || AXES[3]; // default: 景品ジャンル
 }
 
-/* =========================
-   集計
-   - 売上：総売上
-   - 台数：distinct(ブースID)
-   ========================= */
+function getAxisFromState_(state) {
+  // app.js の初期値：widget1Axis: "ジャンル" になっている場合があるので吸収
+  const raw = safeStr(state?.widget1Axis, "景品ジャンル");
+  if (raw === "ジャンル") return "景品ジャンル";
+  return raw;
+}
+
+/** 色：カテゴリkeyから安定生成（同じkeyは常に同色） */
+function hashHue_(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+function colorSolid_(key) {
+  const hue = hashHue_(String(key));
+  return `hsl(${hue} 80% 55%)`;
+}
+function colorSoft_(key) {
+  const hue = hashHue_(String(key));
+  return `hsl(${hue} 75% 70%)`;
+}
 
 function buildAgg_(rows, axisKey) {
+  // axisKey が rows に存在しない場合は全部「未分類」になる（今回の回数がそうだった）
   const map = new Map();
 
   for (const r of rows) {
-    const axisRaw = pickFirst_(r, [axisKey], "未分類");
-    const axisVal = String(axisRaw ?? "未分類").trim() || "未分類";
+    const k = safeStr(r?.[axisKey], "未分類");
 
-    const salesRaw = pickFirst_(r, ["総売上", "売上", "sales"], 0);
-    const sales = toNumLoose(salesRaw);
-
-    const boothRaw = pickFirst_(r, ["ブースID", "booth_id"], null);
-    const boothId = boothRaw != null ? String(boothRaw).trim() : null;
-
-    let o = map.get(axisVal);
+    let o = map.get(k);
     if (!o) {
-      o = { label: axisVal, sales: 0, booths: new Set() };
-      map.set(axisVal, o);
+      o = {
+        key: k,
+        label: k,
+        sales: 0,
+        booths: new Set(), // distinct booth_id
+      };
+      map.set(k, o);
     }
 
-    o.sales += sales;
-    if (boothId) o.booths.add(boothId);
+    o.sales += toNum(r?.sales);
+
+    // 1ステーション = booth_id（あなたの定義）
+    // booth_id が無い場合の救済はしない（無いなら upstream が壊れてる）
+    if (r?.booth_id != null) o.booths.add(String(r.booth_id));
   }
 
   const items = Array.from(map.values()).map(x => ({
+    key: x.key,
     label: x.label,
     sales: x.sales,
     booths: x.booths.size,
+    color: colorSolid_(x.key),
+    colorSoft: colorSoft_(x.key),
   }));
 
   items.sort((a, b) => b.sales - a.sales);
@@ -111,173 +112,209 @@ function buildABC_(items, totalSales) {
   let cum = 0;
   return items.map(x => {
     cum += x.sales;
-    const r = totalSales ? cum / totalSales : 0;
+    const r = totalSales ? (cum / totalSales) : 0;
     const rank = (r <= 0.7) ? "A" : (r <= 0.9) ? "B" : "C";
-    return { rank, label: x.label, sales: x.sales };
+    return { rank, label: x.label, sales: x.sales, color: x.color };
   });
 }
 
-/* =========================
-   DOM生成
-   ========================= */
-
 function ensureDom_(mount, actions, mode) {
-  if (mount.__w1_root) return;
+  if (mount.__w1_root) return mount.__w1_root;
 
-  const root = el("div", { class: "w1 card" });
+  const root = el("div", { class: `widget1 widget1-${mode}` });
 
-  const title = el("div", { class: "w1-title", text: "" });
-
-  const select = el("select", { class: "w1-axis" });
-  AXES.forEach(a => select.appendChild(el("option", { value: a.key, text: a.label })));
+  // header
+  const header = el("div", { class: "widget1Header" });
+  const title = el("div", { class: "widget1Title", text: "景品ジャンル別 売上 / ステーション構成比" });
+  const left = el("div", { class: "widget1HeaderLeft" }, [title]);
 
   const btnExpand = el("button", {
-    class: "w1-btn ghost",
+    class: "btn ghost",
     text: "拡大",
-    onClick: () => actions.onOpenFocus?.("widget1"),
+    onClick: () => actions.onOpenFocus?.("shareDonut"),
   });
 
-  const head = el("div", { class: "w1-head" }, [
-    title,
-    el("div", { class: "w1-headRight" }, [
-      mode === "normal" ? btnExpand : null,
-      select,
-    ].filter(Boolean)),
-  ]);
+  const selectWrap = el("div", { class: "widget1SelectWrap" });
+  const select = el("select", { class: "widget1Select" });
+  AXES.forEach(a => select.appendChild(el("option", { value: a.key, text: a.label })));
+  selectWrap.appendChild(select);
 
-  const canvas = el("canvas");
-  const left = el("div", { class: "w1-left" }, [canvas]);
-  const list = el("div", { class: "w1-list" });
-  const note = el("div", { class: "w1-note" });
+  const right = el("div", { class: "widget1HeaderRight" }, []);
+  if (mode === "normal") right.appendChild(btnExpand);
+  right.appendChild(selectWrap);
 
-  const body = el("div", { class: "w1-body" }, [
-    left,
-    el("div", { class: "w1-right" }, [list, note]),
-  ]);
+  header.appendChild(left);
+  header.appendChild(right);
 
-  root.appendChild(head);
+  // body
+  const body = el("div", { class: "widget1Body" });
+
+  const chartWrap = el("div", { class: "widget1ChartWrap" });
+  const canvas = el("canvas", { class: "widget1Canvas" });
+  chartWrap.appendChild(canvas);
+
+  const abcWrap = el("div", { class: "widget1ABC" });
+
+  body.appendChild(chartWrap);
+  body.appendChild(abcWrap);
+
+  root.appendChild(header);
   root.appendChild(body);
 
   clear(mount);
   mount.appendChild(root);
 
+  // refs
   mount.__w1_root = root;
   mount.__w1_title = title;
   mount.__w1_select = select;
   mount.__w1_canvas = canvas;
-  mount.__w1_list = list;
-  mount.__w1_note = note;
+  mount.__w1_abc = abcWrap;
 
+  // change handler（1回だけ）
   select.addEventListener("change", () => {
-    mount.__w1_state_ref.widget1Axis = select.value;
+    const axisKey = select.value;
+
+    // ✅ state直書き禁止：storeに確定
+    actions.onSetWidget1Axis?.(axisKey);
+
+    // 描画要求（store.setでrenderが回るなら不要だが保険）
     actions.requestRender?.();
   });
+
+  return root;
 }
 
-/* =========================
-   Chart.js
-   ========================= */
+function updateTitle_(mount, axisKey) {
+  const meta = axisMeta(axisKey);
+  const title = mount.__w1_title;
+  if (!title) return;
+
+  // タイトル要望：◯◯別 売上/構成比（あなたの「1ステーション」定義を反映）
+  title.textContent = `${meta.titleLabel}別 売上 / ステーション構成比`;
+}
+
+function updateSelect_(mount, axisKey) {
+  const sel = mount.__w1_select;
+  if (!sel) return;
+  if (sel.value !== axisKey) sel.value = axisKey;
+}
 
 function upsertChart_(mount, items, totalSales, totalBooths) {
   const Chart = window.Chart;
-  if (!Chart) return;
+  const canvas = mount.__w1_canvas;
+  if (!Chart || !canvas) return;
 
   const labels = items.map(x => x.label);
-  const dataBooths = items.map(x => totalBooths ? x.booths / totalBooths : 0);
-  const dataSales  = items.map(x => totalSales  ? x.sales  / totalSales  : 0);
 
-  const palette = buildPalette_(labels);
+  const dataBooths = items.map(x => (totalBooths ? x.booths / totalBooths : 0));
+  const dataSales = items.map(x => (totalSales ? x.sales / totalSales : 0));
+
+  // ✅ カテゴリごとの色（配列）にする
+  const colorsInner = items.map(x => x.colorSoft); // 内周：明るめ
+  const colorsOuter = items.map(x => x.color);     // 外周：濃いめ
 
   if (!mount.__w1_chart) {
-    mount.__w1_chart = new Chart(mount.__w1_canvas.getContext("2d"), {
+    mount.__w1_chart = new Chart(canvas.getContext("2d"), {
       type: "doughnut",
       data: {
         labels,
         datasets: [
           {
-            label: "マシン構成比",
+            label: "ステーション構成比",
             data: dataBooths,
-            backgroundColor: palette.inner,
+            backgroundColor: colorsInner,
+            borderColor: "rgba(10,15,20,.65)",
+            borderWidth: 1,
             radius: "55%",
           },
           {
             label: "売上構成比",
             data: dataSales,
-            backgroundColor: palette.outer,
+            backgroundColor: colorsOuter,
+            borderColor: "rgba(10,15,20,.65)",
+            borderWidth: 1,
             radius: "95%",
           },
         ],
       },
       options: {
-        animation: false,
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
         cutout: "40%",
+        animation: false,
+        resizeDelay: 80,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const i = ctx.dataIndex;
+                const it = items[i];
+                return `${it.label} / 売上 ${yen(it.sales)} / ステーション ${it.booths}`;
+              },
+            },
+          },
+        },
       },
     });
-  } else {
-    const ch = mount.__w1_chart;
-    ch.data.labels = labels;
-    ch.data.datasets[0].data = dataBooths;
-    ch.data.datasets[1].data = dataSales;
-    ch.data.datasets[0].backgroundColor = palette.inner;
-    ch.data.datasets[1].backgroundColor = palette.outer;
-    ch.update("none");
+    return;
   }
 
-  mount.__w1_colors = palette.outer;
+  const ch = mount.__w1_chart;
+  ch.data.labels = labels;
+
+  ch.data.datasets[0].data = dataBooths;
+  ch.data.datasets[0].backgroundColor = colorsInner;
+
+  ch.data.datasets[1].data = dataSales;
+  ch.data.datasets[1].backgroundColor = colorsOuter;
+
+  ch.update("none");
 }
 
-/* =========================
-   凡例
-   ========================= */
+function renderABC_(mount, abcRows, totalBooths) {
+  const box = mount.__w1_abc;
+  if (!box) return;
 
-function renderABC_(mount, abc) {
-  const box = mount.__w1_list;
   clear(box);
 
-  const colors = mount.__w1_colors || [];
-
-  abc.forEach((r, i) => {
-    const sw = el("span", { class: "w1-chip" });
-    if (colors[i]) sw.style.setProperty("--c", colors[i]);
-
+  abcRows.forEach(r => {
     box.appendChild(
-      el("div", { class: `w1-row rank-${r.rank}` }, [
-        sw,
-        el("span", { class: "w1-name", text: `${r.rank} ${r.label}` }),
-        el("span", { class: "w1-v", text: `${Math.round(r.sales).toLocaleString()}円` }),
+      el("div", { class: `widget1ABCRow rank-${r.rank}` }, [
+        el("span", { class: "rank", text: r.rank }),
+        el("span", { class: "label" }, [
+          el("span", { class: "w1chip", style: `background:${r.color};` }),
+          el("span", { text: r.label }),
+        ]),
+        el("span", { class: "value", text: yen(r.sales) }),
       ])
     );
   });
-}
 
-/* =========================
-   エントリポイント
-   ========================= */
+  // 右下注記（あなたの定義を明示）
+  box.appendChild(
+    el("div", { class: "widget1Note", text: `台数は 1ステーション（ブースID）単位で集計` + (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : "") })
+  );
+}
 
 export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   if (!mount) return;
   const mode = opts.mode || "normal";
 
   ensureDom_(mount, actions, mode);
-  mount.__w1_state_ref = state;
 
-  const st = getOrInitState_(state);
-  mount.__w1_select.value = st.widget1Axis;
+  const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
 
-  mount.__w1_title.textContent =
-    `${st.widget1Axis}別 売上 / マシン構成比`;
+  // 軸（stateの揺れを吸収）
+  const axisKey = getAxisFromState_(state);
+  updateSelect_(mount, axisKey);
+  updateTitle_(mount, axisKey);
 
-  const rows = Array.isArray(st.filteredRows) ? st.filteredRows : [];
-  const { items, totalSales, totalBooths } = buildAgg_(rows, st.widget1Axis);
+  const { items, totalSales, totalBooths } = buildAgg_(rows, axisKey);
 
   upsertChart_(mount, items, totalSales, totalBooths);
 
   const abc = buildABC_(items, totalSales);
-  renderABC_(mount, abc);
-
-  mount.__w1_note.textContent =
-    `台数は 1ステーション（ブースID）単位で集計（合計 ${totalBooths}）`;
+  renderABC_(mount, abc, totalBooths);
 }
