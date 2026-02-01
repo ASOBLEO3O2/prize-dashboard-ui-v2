@@ -67,6 +67,15 @@ const initialState = {
 const store = createStore(initialState);
 const root = document.getElementById("app");
 
+// ===== DEBUG: DevTools で state/rows を確認するための一時公開 =====
+window.store = store;
+window.getState = () => store.get();
+window.state = store.get();
+
+// store更新に追従（stateを常に最新に）
+store.subscribe(() => { window.state = store.get(); });
+
+
 // ===== actions =====
 const actions = {
   onPickGenre: (genreOrNull) => {
