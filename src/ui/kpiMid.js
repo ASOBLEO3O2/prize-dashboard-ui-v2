@@ -1,295 +1,354 @@
-// src/ui/kpiMid.js
+// src/ui/widget1ShareDonut.js
 import { el, clear } from "../utils/dom.js";
 import { fmtYen, fmtPct } from "../utils/format.js";
-import { GENRES } from "../constants.js";
-import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
 
 /**
- * 役割：
- * - 中段カードを描画
- *   - ✅ ウィジェット①（売上/ブース 構成比）← 中段KPIとして統一
- *   - 原価率分布（canvas器）
- *   - 散布図（canvas器）
- * - 下段（midCardsMount）は既存仕様のまま（無罪）
+ * Widget①: {軸}別 売上 / マシン構成比（2重ドーナツ）
+ * - 外側リング：売上構成比（Σ総売上）
+ * - 内側リング：マシン構成比（distinct(ブースID)）
+ * - 右：ABC（売上の累積比で A/B/C）
+ *
+ * 重要：
+ * - 台数は「1ステーション＝ブースID」で固定（ユーザー確定）
+ * - 軸が変わってもロジックは同じ（破綻防止）
  */
-export function renderMidKpi(mounts, state, actions) {
-  // ===== ウィジェット①（このカードはDOMを再生成しない） =====
-  renderWidgetCard_(mounts.midSlotSalesDonut, state, actions);
+export function renderWidget1ShareDonut(mount, state, actions, opt = {}) {
+  const mode = opt.mode ?? "normal"; // "normal" | "focus"（今はnormalだけでもOK）
 
-  // 旧「マシン構成比」枠は1回だけ消す（以降触らない）
-  if (mounts.midSlotMachineDonut && !mounts.midSlotMachineDonut.__hiddenOnce) {
-    clear(mounts.midSlotMachineDonut);
-    mounts.midSlotMachineDonut.style.display = "none";
-    mounts.midSlotMachineDonut.__hiddenOnce = true;
-  }
+  // ---- 参照する行（フィルタ後の“実データ”が入っている配列を優先） ----
+  const rows =
+    (Array.isArray(state.filteredRows) ? state.filteredRows : null) ||
+    (Array.isArray(state.rows) ? state.rows : null) ||
+    (Array.isArray(state.dataRows) ? state.dataRows : null) ||
+    [];
 
-  // ===== 原価率分布（canvas器） =====
-  renderChartCardOnce_(mounts.midSlotCostHist, {
-    title: "原価率 分布",
-    tools: el("div", { class: "chartTools" }, [
-      el("select", { class: "select", id: "costHistMode" }, [
-        el("option", { value: "count", text: "台数" }),
-        el("option", { value: "sales", text: "売上" }),
-      ])
-    ]),
-    canvasId: "costHistChart",
-    onFocus: () => actions.onOpenFocus?.("costHist"),
-  });
+  // ---- 軸：デフォは「景品ジャンル」（ユーザー確定） ----
+  // 既存stateに軸があれば尊重。無ければ mount に保持して継続。
+  const defaultAxis = "景品ジャンル";
+  const axisKey =
+    state.widget1Axis ||
+    state.midWidget1Axis ||
+    mount.__w1_axis ||
+    defaultAxis;
 
-  // ===== 散布図（canvas器） =====
-  renderChartCardOnce_(mounts.midSlotScatter, {
-    title: "売上 × 原価率（マトリクス）",
-    tools: null,
-    canvasId: "salesCostScatter",
-    onFocus: () => actions.onOpenFocus?.("scatter"),
-  });
+  // ---- 初回だけDOMを作る（以降は更新だけ） ----
+  if (!mount.__w1_root) {
+    clear(mount);
 
-  // ===== 下段（無罪） =====
-  renderLowerCards_(mounts.midCards, state, actions);
-}
+    const root = el("div", { class: "widget1" });
 
-/* =========================
-   上段：ウィジェット①カード（DOM再生成しない）
-   ========================= */
+    // header
+    const titleEl = el("div", { class: "widget1Title", text: "" });
 
-function renderWidgetCard_(slotMount, state, actions) {
-  if (!slotMount) return;
+    const headerLeft = el("div", { class: "widget1HeaderLeft" }, [titleEl]);
 
-  // 初回だけカード枠を作る
-  if (!slotMount.__w1_body) {
-    clear(slotMount);
-
-    const card = el("div", { class: "card midPanel" });
-    const body = el("div", { class: "midPanelBody" });
-
-    card.appendChild(body);
-    slotMount.appendChild(card);
-
-    slotMount.__w1_body = body;
-  }
-
-  // 毎回：中身だけ更新（ここが安定の要）
-  renderWidget1ShareDonut(slotMount.__w1_body, state, actions, { mode: "normal" });
-}
-
-/* =========================
-   上段：チャートカード（器）DOMは1回だけ
-   ========================= */
-
-function renderChartCardOnce_(slotMount, { title, tools, canvasId, onFocus }) {
-  if (!slotMount) return;
-
-  // 既に作ってあるなら何もしない（canvasを作り直さない）
-  if (slotMount.__built) return;
-  slotMount.__built = true;
-
-  clear(slotMount);
-  slotMount.style.display = "";
-
-  const card = el("div", { class: "card midPanel" });
-
-  const headerRight = el("div", { style: "display:flex; align-items:center; gap:10px;" }, []);
-  if (tools) headerRight.appendChild(tools);
-  headerRight.appendChild(el("button", {
-    class: "btn ghost midPanelBtn",
-    text: "拡大",
-    onClick: (e) => { e.preventDefault(); onFocus?.(); }
-  }));
-
-  const header = el("div", { class: "midPanelHeader" }, [
-    el("div", { class: "midPanelTitleWrap" }, [
-      el("div", { class: "midPanelTitle", text: title }),
-      el("div", { class: "midPanelSub", text: "" }),
-    ]),
-    headerRight
-  ]);
-
-  const body = el("div", { class: "midPanelBody chartBody", onClick: () => onFocus?.() }, [
-    el("canvas", { id: canvasId })
-  ]);
-
-  card.appendChild(header);
-  card.appendChild(body);
-  slotMount.appendChild(card);
-}
-
-/* =========================
-   下段（無罪：そのまま）
-   ========================= */
-
-function renderLowerCards_(cardsMount, state, actions) {
-  const axis = state.midAxis || "ジャンル";
-  const parentKey = state.midParentKey || null;
-
-  const view = buildMidView_(state, axis, parentKey);
-
-  clear(cardsMount);
-
-  const grid = el("div", { class: "midCards" });
-
-  if (view.level === "child") {
-    grid.appendChild(el("div", { class: "card genreCard", style: "padding:12px; cursor:default;" }, [
-      el("div", { style: "display:flex; align-items:center; justify-content:space-between; gap:10px;" }, [
-        el("div", { style: "font-weight:900;", text: `内訳：${view.parentLabel}` }),
-        el("button", {
-          class: "btn",
-          text: "上層にもどる",
-          onClick: (e) => {
-            e.preventDefault();
-            actions.onPickMidParent?.(null);
-          }
-        }),
-      ])
-    ]));
-  }
-
-  const sortKey = state.midSortKey || "sales";
-  const sortDir = state.midSortDir || "desc";
-  const items = sortItems_(view.items, sortKey, sortDir);
-
-  for (const it of items) {
-    const card = el("div", { class: "card genreCard" });
-
-    card.addEventListener("click", () => {
-      if (view.level === "parent" && it.hasChildren) actions.onPickMidParent?.(it.key);
+    const btnExpand = el("button", {
+      class: "btn ghost midPanelBtn",
+      text: "拡大",
+      onClick: (e) => {
+        e.preventDefault();
+        actions.onOpenFocus?.("widget1"); // 既存に合わせて必要なら変更
+      },
     });
 
-    card.appendChild(el("div", { class: "genreCardHeader" }, [
-      el("div", { class: "genreName", text: it.label }),
-      el("div", { class: "smallMeta", text: (view.level === "parent") ? "クリックで内訳" : "内訳" }),
-    ]));
+    const sel = el("select", {
+      class: "widget1Select",
+      onChange: (e) => {
+        const v = String(e.target.value || "").trim();
+        mount.__w1_axis = v || defaultAxis;
 
-    card.appendChild(el("div", { class: "metricGrid" }, [
-      metric("台数", `${it.machines ?? 0}台`),
-      metric("売上", fmtYen(it.sales ?? 0)),
-      metric("消化額", fmtYen(it.consume ?? 0)),
-      metric("原価率", fmtPct(it.costRate ?? 0, 1)),
-      metric("売上構成比", fmtPct(it.salesShare ?? 0, 1)),
-      metric("マシン構成比", fmtPct(it.machineShare ?? 0, 1)),
-      metric("平均売り上げ", fmtYen(it.avgSales ?? 0)),
-    ]));
+        // もし state に保存するアクションがあるなら呼ぶ（無ければDOM保持だけで動く）
+        actions.onSetWidget1Axis?.(mount.__w1_axis);
+        actions.onPickWidget1Axis?.(mount.__w1_axis);
 
-    grid.appendChild(card);
+        // 再描画
+        renderWidget1ShareDonut(mount, state, actions, opt);
+      },
+    });
+
+    const selWrap = el("div", { class: "widget1SelectWrap" }, [sel]);
+
+    const headerRight = el("div", { class: "widget1HeaderRight" }, [
+      btnExpand,
+      selWrap,
+    ]);
+
+    const header = el("div", { class: "widget1Header" }, [headerLeft, headerRight]);
+
+    // body
+    const chartWrap = el("div", { class: "widget1ChartWrap" }, [
+      el("canvas", { class: "w1Canvas" }),
+    ]);
+
+    const abc = el("div", { class: "widget1ABC" });
+
+    const body = el("div", { class: "widget1Body" }, [
+      el("div", { class: "widget1ChartWrap" }, [chartWrap.firstChild]),
+      abc,
+    ]);
+
+    root.appendChild(header);
+    root.appendChild(body);
+    mount.appendChild(root);
+
+    mount.__w1_root = root;
+    mount.__w1_title = titleEl;
+    mount.__w1_select = sel;
+    mount.__w1_canvas = root.querySelector("canvas.w1Canvas");
+    mount.__w1_abc = abc;
   }
 
-  cardsMount.appendChild(grid);
+  // ---- 軸候補（現状は“選べる”前提。state側に候補があるならそれを使う） ----
+  const axisOptions =
+    (Array.isArray(state.widget1AxisOptions) && state.widget1AxisOptions.length
+      ? state.widget1AxisOptions
+      : ["景品ジャンル", "料金", "投入法", "性別", "年代"]);
+
+  // select options 更新（初回だけじゃなく毎回整合させる）
+  syncSelect_(mount.__w1_select, axisOptions, axisKey, defaultAxis);
+
+  // タイトル（要望③）
+  mount.__w1_title.textContent = `${axisKey}別 売上 / マシン構成比`;
+
+  // ---- 集計（要望④：軸が変わっても壊れない） ----
+  const vm = buildVM_(rows, axisKey);
+
+  // ---- 色（要望②⑥：グラフと凡例で完全共通） ----
+  const labels = vm.items.map((x) => x.label);
+  const colors = buildPalette_(labels);
+
+  // ---- ドーナツ描画（2重：外=売上, 内=台数） ----
+  drawDoubleDonut_(mount.__w1_canvas, {
+    outer: vm.items.map((x) => x.salesShare),
+    inner: vm.items.map((x) => x.machineShare),
+    colors,
+  });
+
+  // ---- 凡例（ABC）：swatch / rank / name / value（CSS差し替え前提） ----
+  renderABC_(mount.__w1_abc, vm, colors);
 }
 
 /* =========================
-   view builder（下段用：既存）
+   集計（破綻しない仕様）
+   - 売上：Σ総売上
+   - 台数：distinct(ブースID)
    ========================= */
 
-function buildMidView_(state, axis, parentKey) {
-  if (axis !== "ジャンル") {
-    const items = (Array.isArray(state.byAxis?.[axis]) ? state.byAxis[axis] : []).map(x => ({
-      key: x.key,
-      label: x.label,
-      machines: x.machines ?? 0,
-      sales: x.sales ?? 0,
-      consume: x.consume ?? 0,
-      costRate: x.costRate ?? 0,
-      color: null,
-      hasChildren: false,
-    }));
-    return normalizeShares_(items, { level: "parent", parentLabel: axis });
-  }
+function buildVM_(rows, axisKey) {
+  const boothKey = "ブースID";
+  const salesKey = "総売上";
 
-  const genreTree = Array.isArray(state.byAxis?.["ジャンル"]) ? state.byAxis["ジャンル"] : [];
-
-  const genreMetaByKey = new Map(GENRES.map(g => [String(g.key), g]));
-  const genreMetaByLabel = new Map(GENRES.map(g => [String(g.label), g]));
-
-  const metaOf = (node) => {
-    return genreMetaByKey.get(String(node.key)) ||
-      genreMetaByLabel.get(String(node.label)) ||
-      null;
+  const safe = (v) => (v == null ? "" : String(v)).trim();
+  const toNum = (v) => {
+    const n = Number(String(v ?? "").replace(/,/g, ""));
+    return Number.isFinite(n) ? n : 0;
   };
 
-  if (!parentKey) {
-    const items = genreTree.map(p => {
-      const meta = metaOf(p);
-      return {
-        key: p.key,
-        label: meta?.label || p.label || p.key,
-        machines: p.machines ?? 0,
-        sales: p.sales ?? 0,
-        consume: p.consume ?? 0,
-        costRate: p.costRate ?? 0,
-        color: meta?.color || null,
-        hasChildren: Array.isArray(p.children) && p.children.length > 0,
-      };
-    });
+  const allBooths = new Set();
+  const map = new Map(); // label -> { salesSum, booths:Set }
 
-    items.sort((a, b) => (b.sales - a.sales));
+  let salesTotal = 0;
 
-    return normalizeShares_(items, { level: "parent", parentLabel: null });
+  for (const r of rows) {
+    const booth = safe(r[boothKey]);
+    if (booth) allBooths.add(booth);
+
+    const rawKey = safe(r[axisKey]);
+    const k = rawKey ? rawKey : "未分類";
+
+    const s = toNum(r[salesKey]);
+    salesTotal += s;
+
+    if (!map.has(k)) map.set(k, { salesSum: 0, booths: new Set() });
+    const g = map.get(k);
+    g.salesSum += s;
+    if (booth) g.booths.add(booth);
   }
 
-  const parentNode = genreTree.find(x => String(x.key) === String(parentKey)) || null;
-  const parentMeta = parentNode ? metaOf(parentNode) : null;
-  const parentLabel = parentMeta?.label || parentNode?.label || String(parentKey);
-  const children = Array.isArray(parentNode?.children) ? parentNode.children : [];
+  const machineTotal = allBooths.size;
 
-  const items = children.map(ch => ({
-    key: ch.key,
-    label: ch.label,
-    machines: ch.machines ?? 0,
-    sales: ch.sales ?? 0,
-    consume: ch.consume ?? 0,
-    costRate: ch.costRate ?? 0,
-    color: parentMeta?.color || null,
-    hasChildren: false,
-  }));
-
-  return normalizeShares_(items, { level: "child", parentLabel });
-}
-
-function normalizeShares_(items, meta) {
-  const totalSales = items.reduce((a, x) => a + (Number(x.sales) || 0), 0);
-  const totalMachines = items.reduce((a, x) => a + (Number(x.machines) || 0), 0);
-
-  const out = items.map(x => {
-    const machines = Number(x.machines) || 0;
-    const sales = Number(x.sales) || 0;
-    const avgSales = machines > 0 ? (sales / machines) : 0;
-
+  let items = Array.from(map.entries()).map(([label, g]) => {
+    const salesYen = g.salesSum;
+    const machineCount = g.booths.size;
     return {
-      ...x,
-      salesShare: totalSales > 0 ? (sales / totalSales) : 0,
-      machineShare: totalMachines > 0 ? (machines / totalMachines) : 0,
-      avgSales,
+      label,
+      salesYen,
+      machineCount,
+      salesShare: salesTotal > 0 ? salesYen / salesTotal : 0,
+      machineShare: machineTotal > 0 ? machineCount / machineTotal : 0,
     };
   });
 
-  return { ...meta, items: out };
+  // 売上降順
+  items.sort((a, b) => b.salesYen - a.salesYen);
+
+  // デフォは上位5 + その他はまだ無し（必要なら後で）
+  const topN = 5;
+  if (items.length > topN) items = items.slice(0, topN);
+
+  // ABCランク（売上累積比：A=70%まで / B=次20% / C=残り）
+  let cum = 0;
+  for (const it of items) {
+    cum += it.salesShare;
+    it.rank = cum <= 0.7 ? "A" : (cum <= 0.9 ? "B" : "C");
+  }
+
+  return {
+    items,
+    meta: {
+      axisKey,
+      salesTotal,
+      machineTotal,
+      onlyUnclassified: items.length === 1 && items[0].label === "未分類" && (salesTotal > 0 || machineTotal > 0),
+    },
+  };
 }
 
 /* =========================
-   helpers
+   凡例（ABC）
    ========================= */
 
-function metric(label, value) {
-  return el("div", { class: "metric" }, [
-    el("div", { class: "label", text: label }),
-    el("div", { class: "value", text: value, style: "white-space:nowrap;" }),
-  ]);
-}
+function renderABC_(mount, vm, colors) {
+  clear(mount);
 
-function sortItems_(items, key, dir) {
-  const sign = (dir === "asc") ? 1 : -1;
-  return [...items].sort((a, b) => {
-    const av = pick_(a, key);
-    const bv = pick_(b, key);
-    if (av === bv) return 0;
-    return (av < bv ? -1 : 1) * sign;
+  // （任意）未分類のみ警告をここに出すなら出せる（今は静かに）
+  // if (vm.meta.onlyUnclassified) { ... }
+
+  vm.items.forEach((x, i) => {
+    const row = el("div", { class: `widget1ABCRow rank-${x.rank}` });
+
+    // swatch（要望⑥：グラフと同一色）
+    const sw = el("span", { class: "swatch" });
+    sw.style.background = colors[i];
+
+    const rank = el("span", { class: "rank", text: x.rank });
+
+    const name = el("span", { class: "name", text: x.label });
+
+    const valueText =
+      `${fmtYen(x.salesYen)}  ` +
+      `(${x.machineCount}/${vm.meta.machineTotal}=${fmtPct(x.machineShare, 1)})`;
+
+    const value = el("span", { class: "value", text: valueText });
+
+    row.appendChild(sw);
+    row.appendChild(rank);
+    row.appendChild(name);
+    row.appendChild(value);
+
+    mount.appendChild(row);
   });
 }
 
-function pick_(x, key) {
-  if (key === "sales") return Number(x.sales) || 0;
-  if (key === "consume") return Number(x.consume) || 0;
-  if (key === "costRate") return Number(x.costRate) || 0;
-  if (key === "machines") return Number(x.machines) || 0;
-  if (key === "avgSales") return Number(x.avgSales) || 0;
-  return 0;
+/* =========================
+   select同期
+   ========================= */
+
+function syncSelect_(sel, options, current, fallback) {
+  const cur = current || fallback;
+
+  // options を作り直す（数が少ないので毎回でOK）
+  clear(sel);
+  for (const opt of options) {
+    sel.appendChild(el("option", { value: opt, text: opt }));
+  }
+
+  // 値が候補にないなら fallback
+  if (!options.includes(cur)) {
+    sel.value = fallback;
+  } else {
+    sel.value = cur;
+  }
+}
+
+/* =========================
+   見分けやすい配色（要望②）
+   - 未分類はグレー固定
+   ========================= */
+
+function buildPalette_(labels) {
+  const n = Math.max(1, labels.length);
+  const out = [];
+
+  for (let i = 0; i < n; i++) {
+    const label = labels[i];
+
+    if (label === "未分類") {
+      out.push("rgba(148,163,184,0.95)"); // グレー固定
+      continue;
+    }
+
+    // 色相を分散して識別性を上げる（ダーク背景前提）
+    const hue = Math.round((360 * i) / n);
+    out.push(`hsl(${hue} 85% 55%)`);
+  }
+
+  return out;
+}
+
+/* =========================
+   Canvas: 2重ドーナツ描画
+   - outer: 売上構成比
+   - inner: マシン構成比
+   ========================= */
+
+function drawDoubleDonut_(canvas, { outer, inner, colors }) {
+  if (!canvas) return;
+
+  // CSSフィット前提なので、実pixelを合わせる
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.floor(rect.width * dpr));
+  const h = Math.max(1, Math.floor(rect.height * dpr));
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const cx = w / 2;
+  const cy = h / 2;
+  const R = Math.min(w, h) * 0.42;
+  const outerW = R * 0.22;
+  const innerW = R * 0.18;
+
+  // 背景リング（薄く）
+  drawRing_(ctx, cx, cy, R, outerW, "rgba(148,163,184,0.12)");
+  drawRing_(ctx, cx, cy, R - outerW - 10 * (window.devicePixelRatio || 1), innerW, "rgba(148,163,184,0.08)");
+
+  // 外側：売上
+  drawSegments_(ctx, cx, cy, R, outerW, outer, colors);
+
+  // 内側：台数
+  const innerR = R - outerW - 10 * (window.devicePixelRatio || 1);
+  drawSegments_(ctx, cx, cy, innerR, innerW, inner, colors);
+}
+
+function drawRing_(ctx, cx, cy, r, w, stroke) {
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = w;
+  ctx.lineCap = "butt";
+  ctx.stroke();
+}
+
+function drawSegments_(ctx, cx, cy, r, w, shares, colors) {
+  let a = -Math.PI / 2;
+  for (let i = 0; i < shares.length; i++) {
+    const p = Number(shares[i]) || 0;
+    const da = p * Math.PI * 2;
+    if (da <= 0) continue;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, a, a + da);
+    ctx.strokeStyle = colors[i];
+    ctx.lineWidth = w;
+    ctx.lineCap = "butt";
+    ctx.stroke();
+
+    a += da;
+  }
 }
