@@ -2,7 +2,6 @@
    Widget 1: Double Donut
    ========================= */
 
-.w1.card,
 .widget1{
   padding:14px;
   border-radius:16px;
@@ -10,7 +9,6 @@
   border:1px solid rgba(148,163,184,.18);
 }
 
-.w1-head,
 .widget1Header{
   display:flex;
   align-items:center;
@@ -19,20 +17,17 @@
   margin-bottom:10px;
 }
 
-.w1-title,
 .widget1Title{
   font-weight:900;
   letter-spacing:.2px;
 }
 
-.w1-headRight,
 .widget1HeaderRight{
   display:flex;
   align-items:center;
   gap:8px;
 }
 
-.w1-axis,
 .widget1Select{
   background:rgba(15,23,42,.78);
   border:1px solid rgba(148,163,184,.25);
@@ -42,45 +37,31 @@
   font-weight:700;
 }
 
-.w1-btn{
-  border:1px solid rgba(148,163,184,.25);
-  border-radius:10px;
-  padding:8px 10px;
-  cursor:pointer;
-  color:var(--text,#e5e7eb);
-  background:rgba(15,23,42,.35);
-  font-weight:800;
-}
-
-.w1-body,
 .widget1Body{
   display:grid;
   grid-template-columns:260px 1fr;
   gap:14px;
 }
 
-.w1-left,
 .widget1ChartWrap{
-  min-height:240px;     /* ← 重要：canvasの高さが0にならない */
-  height:300px;         /* ← 重要：Chart.js が確実にレイアウト確定できる */
+  min-height:240px;
+  /* Chart.js がサイズを取れるようにする */
   position:relative;
 }
 
-.w1-canvas,
 .widget1Canvas{
   width:100% !important;
-  height:100% !important;
+  height:260px !important; /* ここは固定でOK（あなたのrectも取れてる） */
   display:block;
 }
 
-.w1-right,
 .widget1ABC{
   display:flex;
   flex-direction:column;
-  min-width:0;
 }
 
-.w1-list{
+.w1-list,
+.widget1List{
   display:flex;
   flex-direction:column;
   gap:8px;
@@ -99,8 +80,7 @@
   border:1px solid rgba(148,163,184,.14);
 }
 
-.w1-chip,
-.widget1Chip{
+.w1-chip{
   width:12px;
   height:12px;
   border-radius:4px;
@@ -119,8 +99,7 @@
   opacity:.95;
 }
 
-.w1-note,
-.widget1Note{
+.w1-note{
   margin-top:8px;
   font-size:12px;
   opacity:.75;
