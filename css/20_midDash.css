@@ -1,7 +1,7 @@
 /* =========================================
    Widget①: 売上 / ステーション 構成比（2重ドーナツ）
-   - 左: チャート
-   - 右: ABCリスト
+   - 左: ドーナツ（canvas）
+   - 右: ABC（凡例）
    ========================================= */
 
 .widget1{
@@ -11,6 +11,7 @@
   flex-direction:column;
 }
 
+/* header（左：タイトル / 右：拡大 + ドロップダウン） */
 .widget1Header{
   display:flex;
   align-items:center;
@@ -41,6 +42,7 @@
   min-width:0;
 }
 
+/* body（左: チャート / 右: ABC） */
 .widget1Body{
   flex:1;
   min-height:0;
@@ -50,130 +52,74 @@
   padding:10px;
 }
 
+/* ★ここが重要：Chart.jsが描画できる高さを必ず確保する */
 .widget1ChartWrap{
   min-height:0;
+  height:100%;
   display:flex;
   align-items:center;
   justify-content:center;
 }
 
-.widget1ChartWrap canvas{
+.widget1Canvas{
   width:100% !important;
   height:100% !important;
-  max-height:280px;
   display:block;
+  /* ドーナツが大きすぎない上限 */
+  max-height:280px;
 }
 
+/* ABC（凡例） */
 .widget1ABC{
   min-height:0;
   overflow:auto;
   font-size:12px;
   line-height:1.2;
   padding-right:4px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
 }
 
 .widget1ABCRow{
   display:grid;
-  grid-template-columns:20px 1fr auto;
+  grid-template-columns:22px 1fr auto;
   gap:8px;
-  padding:10px 10px;
-  border-radius:12px;
-  border:1px solid rgba(51,65,85,.6);
-  background:rgba(2,6,23,.25);
+  align-items:center;
+  padding:8px 0;
+  border-bottom:1px solid rgba(51,65,85,.6);
 }
 
 .widget1ABCRow .rank{
   font-weight:900;
   opacity:.9;
 }
+
 .widget1ABCRow.rank-A .rank{ opacity:1; }
 .widget1ABCRow.rank-B .rank{ opacity:.85; }
 .widget1ABCRow.rank-C .rank{ opacity:.75; }
 
-/* ラベル（色チップ + テキスト） */
-.widget1ABCRow .label{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  min-width:0;
-}
-.widget1ABCRow .label span:last-child{
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-
-.widget1ABCRow .value{
-  font-weight:900;
-  white-space:nowrap;
-}
-
-/* ✅ 凡例の色チップ（グラフ連動） */
-.widget1Chip{
+/* 凡例の色チップ（グラフ連動） */
+.w1chip{
+  display:inline-block;
   width:12px;
   height:12px;
   border-radius:4px;
-  display:inline-block;
-  flex:0 0 auto;
+  margin-right:8px;
+  vertical-align:middle;
 }
 
 /* 右下注記 */
 .widget1Note{
-  margin-top:6px;
+  margin-top:10px;
   font-size:12px;
   color:var(--muted);
-  opacity:.9;
-}
-
-/* dropdown polish（既存維持） */
-.widget1SelectWrap{
-  position:relative;
-  display:inline-flex;
-  align-items:center;
-  min-width:0;
-}
-.widget1Select{
-  -webkit-appearance:none;
-  appearance:none;
-
-  border:1px solid rgba(51,65,85,.9);
-  background:rgba(15,23,42,.78);
-  color:var(--text);
-
-  border-radius:999px;
-  padding:8px 34px 8px 12px;
-  font-weight:800;
-  cursor:pointer;
-  outline:none;
-
-  max-width:260px;
-}
-.widget1Select:hover{
-  border-color:rgba(109,211,251,.9);
-}
-.widget1Select:focus{
-  border-color:rgba(109,211,251,1);
-  box-shadow:0 0 0 3px rgba(109,211,251,.15);
-}
-.widget1SelectWrap::after{
-  content:"";
-  position:absolute;
-  right:12px;
-  width:0;
-  height:0;
-  border-left:6px solid transparent;
-  border-right:6px solid transparent;
-  border-top:7px solid rgba(229,231,235,.9);
-  pointer-events:none;
 }
 
 /* 狭い場合は縦並び */
 @media (max-width:900px){
   .widget1Body{
     grid-template-columns:1fr;
+  }
+  .widget1Canvas{
+    max-height:260px;
   }
   .widget1ABC{
     max-height:160px;
