@@ -147,9 +147,9 @@ function ensureDom_(mount, actions, mode) {
 
   // change handler（1回だけ）
   select.addEventListener("change", () => {
-    const axisKey = select.value;
-    actions.onSetWidget1Axis?.(axisKey);
-  });
+  actions.onSetWidget1Axis?.(select.value);
+  // actions.requestRender?.(); ← これは消す
+});
 
   return root;
 }
