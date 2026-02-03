@@ -18,6 +18,33 @@ import { buildViewModel } from "./logic/aggregate.js";
 import { renderCharts } from "./ui/charts.js";
 import { renderFocusOverlay } from "./ui/focusOverlay.js";
 
+/**
+ * ✅ booth_id の「潰れ」を防ぐための方針
+ * - どんな merge 順でも booth_id が上書きされないように、最後に確定して戻す
+ * - 優先順：
+ *   1) rows（r）の booth_id
+ *   2) rows（r）の "ブースID"
+ *   3) masterDict（m）の booth_id
+ *   4) masterDict（m）の "ブースID"
+ */
+function pickBoothId_(r, m) {
+  const cand = [
+    r?.booth_id,
+    r?.["ブースID"],
+    m?.booth_id,
+    m?.["ブースID"],
+  ];
+  for (const v of cand) {
+    const s = (v == null) ? "" : String(v).trim();
+    if (s) return s;
+  }
+  return ""; // upstream が壊れている場合のみ空
+}
+
+function safeStr_(v) {
+  return (v == null) ? "" : String(v).trim();
+}
+
 const initialState = {
   // data
   updatedDate: MOCK.updatedDate,
@@ -25,8 +52,8 @@ const initialState = {
   byGenre: structuredClone(MOCK.byGenre),
   details: structuredClone(MOCK.details),
 
-  // ✅ ウィジェット①：軸（中段KPIと同一）
-  widget1Axis: "ジャンル",
+  // ✅ ウィジェット①：軸（実列名に寄せる）
+  widget1Axis: "景品ジャンル",
 
   // チャート用（フィルタ後rows）
   filteredRows: [],
@@ -65,52 +92,7 @@ const initialState = {
 };
 
 const store = createStore(initialState);
-
-// ===== FIX: store.set を強制バッチ化（set再入で落ちるのを止める）=====
-{
-  const rawSet = store.set.bind(store);
-  let scheduled = false;
-  let pending = [];
-
-  store.set = (u) => {
-    pending.push(u);
-    if (scheduled) return;
-    scheduled = true;
-
-    queueMicrotask(() => {
-      scheduled = false;
-
-      // pending をまとめて 1回だけ rawSet する
-      let s = store.get();
-      const batch = pending;
-      pending = [];
-
-      for (const up of batch) {
-        s = (typeof up === "function") ? up(s) : up;
-      }
-
-      rawSet(s);
-    });
-  };
-
-  console.log("[FIX] store.set batched");
-}
-
-// window に出す（コンソール診断用）
-window.getState = () => store.get();
-
-
-
 const root = document.getElementById("app");
-
-// ===== DEBUG: DevTools で state/rows を確認するための一時公開 =====
-window.store = store;
-window.getState = () => store.get();
-window.state = store.get();
-
-// store更新に追従（stateを常に最新に）
-store.subscribe(() => { window.state = store.get(); });
-
 
 // ===== actions =====
 const actions = {
@@ -127,7 +109,9 @@ const actions = {
     store.set((s) => ({ ...s, midDetail: payloadOrNull }));
   },
 
-  requestRender: () => {},
+  requestRender: () => {
+    store.set((s) => ({ ...s }));
+  },
 
   onToggleDetail: (genre) => {
     store.set((s) => {
@@ -148,7 +132,7 @@ const actions = {
   onSetWidget1Axis: (axisKey) => {
     store.set((s) => ({
       ...s,
-      widget1Axis: axisKey || s.widget1Axis || "ジャンル",
+      widget1Axis: axisKey || s.widget1Axis || "景品ジャンル",
     }));
   },
 
@@ -159,7 +143,7 @@ const actions = {
   // ✅ フォーカス（上層レイヤー）
   onOpenFocus: (kind) => {
     const title =
-      (kind === "shareDonut") ? "売上 / ブース 構成比" :
+      (kind === "shareDonut") ? "売上 / ステーション 構成比" :
       (kind === "salesDonut") ? "売上構成比" :
       (kind === "machineDonut") ? "マシン構成比" :
       (kind === "costHist") ? "原価率 分布" :
@@ -244,23 +228,35 @@ async function hydrateFromRaw() {
     codebook = {};
   }
 
-  // ③ 正規化
+  // ③ 正規化（✅ booth_id を最後に確定して「潰れ」を防ぐ）
   const normalizedRows = rows.map((r) => {
-    const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
-    const m = key ? masterDict?.[key] : null;
+    const key = safeStr_(r?.symbol_raw ?? r?.raw ?? "");
+    const m = key ? (masterDict?.[key] ?? null) : null;
     const decoded = key ? decodeSymbol(key, codebook) : {};
 
-    return {
+    // ✅ ここで先に booth_id を確定（r と m だけを見る）
+    const booth_id_fixed = pickBoothId_(r, m);
+
+    // merge
+    const out = {
       ...r,
       ...(m || {}),
       ...decoded,
 
-      symbol_raw: r.symbol_raw,
-      raw: r.raw,
-      sales: r.sales,
-      claw: r.claw,
-      cost_rate: r.cost_rate,
+      // 重要：入力側の raw 参照を保持
+      symbol_raw: r?.symbol_raw,
+      raw: r?.raw,
+
+      // 数値系は rows を優先（decode/master が持っていても上書きしない）
+      sales: r?.sales,
+      claw: r?.claw,
+      cost_rate: r?.cost_rate,
     };
+
+    // ✅ 最後に booth_id を戻して「絶対に潰れない」ようにする
+    if (booth_id_fixed) out.booth_id = booth_id_fixed;
+
+    return out;
   });
 
   // ④ フィルタ
