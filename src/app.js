@@ -18,33 +18,6 @@ import { buildViewModel } from "./logic/aggregate.js";
 import { renderCharts } from "./ui/charts.js";
 import { renderFocusOverlay } from "./ui/focusOverlay.js";
 
-/**
- * ✅ booth_id の「潰れ」を防ぐための方針
- * - どんな merge 順でも booth_id が上書きされないように、最後に確定して戻す
- * - 優先順：
- *   1) rows（r）の booth_id
- *   2) rows（r）の "ブースID"
- *   3) masterDict（m）の booth_id
- *   4) masterDict（m）の "ブースID"
- */
-function pickBoothId_(r, m) {
-  const cand = [
-    r?.booth_id,
-    r?.["ブースID"],
-    m?.booth_id,
-    m?.["ブースID"],
-  ];
-  for (const v of cand) {
-    const s = (v == null) ? "" : String(v).trim();
-    if (s) return s;
-  }
-  return ""; // upstream が壊れている場合のみ空
-}
-
-function safeStr_(v) {
-  return (v == null) ? "" : String(v).trim();
-}
-
 const initialState = {
   // data
   updatedDate: MOCK.updatedDate,
@@ -52,7 +25,7 @@ const initialState = {
   byGenre: structuredClone(MOCK.byGenre),
   details: structuredClone(MOCK.details),
 
-  // ✅ ウィジェット①：軸（実列名に寄せる）
+  // ✅ ウィジェット①：軸
   widget1Axis: "景品ジャンル",
 
   // チャート用（フィルタ後rows）
@@ -78,9 +51,9 @@ const initialState = {
   // ✅ フォーカス（上層レイヤー）
   focus: {
     open: false,
-    kind: null,      // "shareDonut" | "costHist" | "scatter" | ...
+    kind: null,
     title: "",
-    parentKey: null, // 拡大内のドリル用
+    parentKey: null,
   },
 
   // 詳細（テーブル）の並び替え
@@ -94,13 +67,16 @@ const initialState = {
 const store = createStore(initialState);
 const root = document.getElementById("app");
 
+// ✅ デバッグ用（任意）
+// コンソールで window.getState() が使えるようにする（壊れない安全なやつ）
+window.getState = () => store.get();
+
 // ===== actions =====
 const actions = {
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
 
-  // 下段（無罪）
   onPickMidParent: (keyOrNull) => {
     store.set((s) => ({ ...s, midParentKey: keyOrNull }));
   },
@@ -110,6 +86,7 @@ const actions = {
   },
 
   requestRender: () => {
+    // これ自体はOK（renderループ内で呼ばれない限り無限ループしない）
     store.set((s) => ({ ...s }));
   },
 
@@ -128,7 +105,7 @@ const actions = {
     }));
   },
 
-  // ✅ ウィジェット①：軸を store に確定（state直書き禁止）
+  // ✅ ウィジェット①：軸
   onSetWidget1Axis: (axisKey) => {
     store.set((s) => ({
       ...s,
@@ -140,12 +117,12 @@ const actions = {
   onOpenDrawer: () => store.set((s) => ({ ...s, drawerOpen: true })),
   onCloseDrawer: () => store.set((s) => ({ ...s, drawerOpen: false })),
 
-  // ✅ フォーカス（上層レイヤー）
+  // ✅ フォーカス
   onOpenFocus: (kind) => {
     const title =
-      (kind === "shareDonut") ? "売上 / ステーション 構成比" :
+      (kind === "shareDonut") ? "売上 / 台数 構成比" :
       (kind === "salesDonut") ? "売上構成比" :
-      (kind === "machineDonut") ? "マシン構成比" :
+      (kind === "machineDonut") ? "台数構成比" :
       (kind === "costHist") ? "原価率 分布" :
       (kind === "scatter") ? "売上 × 原価率（マトリクス）" :
       "詳細";
@@ -189,19 +166,14 @@ function renderAll(state) {
 
   renderTopKpi(mounts.topKpi, state.topKpi);
 
-  // 中段（ウィジェット① + ヒスト + 散布 + 下段）
   renderMidKpi(mounts, state, actions);
 
-  // charts.js は「ヒスト/散布」の更新だけ担当
   renderCharts(mounts, state);
 
-  // フォーカス（上層レイヤー）
   renderFocusOverlay(mounts.focusOverlay, mounts.focusModal, state, actions);
 
-  // 詳細
   renderDetail(mounts.detailMount, state, actions);
 
-  // ドロワー
   renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
 }
 
@@ -219,7 +191,7 @@ async function hydrateFromRaw() {
   const summary = raw?.summary ?? null;
   const masterDict = raw?.masterDict ?? {};
 
-  // ② codebook
+  // codebook
   let codebook = {};
   try {
     const res = await fetch("./data/master/codebook.json", { cache: "no-store" });
@@ -228,46 +200,40 @@ async function hydrateFromRaw() {
     codebook = {};
   }
 
-  // ③ 正規化（✅ booth_id を最後に確定して「潰れ」を防ぐ）
+  // ✅ 正規化：rawの booth_id を絶対に守る
   const normalizedRows = rows.map((r) => {
-    const key = safeStr_(r?.symbol_raw ?? r?.raw ?? "");
-    const m = key ? (masterDict?.[key] ?? null) : null;
+    const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
+    const m = key ? masterDict?.[key] : null;
     const decoded = key ? decodeSymbol(key, codebook) : {};
 
-    // ✅ ここで先に booth_id を確定（r と m だけを見る）
-    const booth_id_fixed = pickBoothId_(r, m);
-
-    // merge
-    const out = {
+    return {
       ...r,
       ...(m || {}),
       ...decoded,
 
-      // 重要：入力側の raw 参照を保持
+      // ✅ 最後に raw を再代入して “上書き防止”
+      booth_id: r?.booth_id,
+      machine_name: r?.machine_name,
+      machine_key: r?.machine_key,
+      label_id: r?.label_id,
+
       symbol_raw: r?.symbol_raw,
       raw: r?.raw,
-
-      // 数値系は rows を優先（decode/master が持っていても上書きしない）
       sales: r?.sales,
       claw: r?.claw,
       cost_rate: r?.cost_rate,
     };
-
-    // ✅ 最後に booth_id を戻して「絶対に潰れない」ようにする
-    if (booth_id_fixed) out.booth_id = booth_id_fixed;
-
-    return out;
   });
 
-  // ④ フィルタ
+  // フィルタ
   const st = store.get();
   const filtered = applyFilters(normalizedRows, st.filters);
 
-  // ⑤ 集計
+  // 集計
   const vm = buildViewModel(filtered, summary);
   const axis = buildByAxis(filtered);
 
-  // ⑥ state 更新（widget1Axis は維持）
+  // state 更新
   store.set((s) => ({
     ...s,
     updatedDate: vm.updatedDate || s.updatedDate,
