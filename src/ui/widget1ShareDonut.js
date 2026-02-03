@@ -2,14 +2,14 @@
 import { el, clear } from "../utils/dom.js";
 
 /**
- * Widget①: 売上 / ブース(=booth_id=1行) 構成比（2重ドーナツ）
+ * Widget①: 売上 / ブース(=1行) 構成比（2重ドーナツ）
  * - 外周: 売上構成比
  * - 内周: 台数（=ブース数）構成比
  *
- * ✅ 最重要（あなたの定義）
- * - 1ブース = 1行（filteredRows の 1要素）
+ * ✅ あなたの定義（最重要）
+ * - 1ブース = filteredRows の 1行
  * - 台数(ブース数) = rows.length
- * - booth_id を distinct で数え直すのは禁止（= 192バグの温床）
+ * - booth_id を distinct で数え直すのは禁止（= 192 の原因）
  */
 
 const AXES = [
@@ -74,8 +74,7 @@ function pct(v) {
 /**
  * ✅ 集計：rows をそのまま group by
  * - booths(台数) は「行数カウント」
- * - totalBooths は rows.length
- * - booth_id の distinct は一切しない
+ * - totalBooths は rows.length（=正しい台数）
  */
 function buildAgg_(rows, axisKey) {
   const map = new Map();
@@ -103,7 +102,7 @@ function buildAgg_(rows, axisKey) {
   items.sort((a, b) => (b.sales - a.sales) || (b.booths - a.booths) || String(a.label).localeCompare(String(b.label), "ja"));
 
   const totalSales = items.reduce((a, x) => a + (Number(x.sales) || 0), 0);
-  const totalBooths = rows.length; // ✅ ここが母数（278）
+  const totalBooths = rows.length;
 
   return { items, totalSales, totalBooths };
 }
@@ -111,44 +110,47 @@ function buildAgg_(rows, axisKey) {
 function ensureDom_(mount, actions, mode) {
   if (mount.__w1_root) return mount.__w1_root;
 
-  const root = el("div", { class: `widget1 widget1-${mode}` });
+  // ✅ あなたのCSS(.w1-*)に合わせる
+  const root = el("div", { class: "w1 card" });
 
-  // header
-  const header = el("div", { class: "widget1Header" });
-  const title = el("div", { class: "widget1Title", text: "景品ジャンル別 売上 / ブース構成比" });
-  const left = el("div", { class: "widget1HeaderLeft" }, [title]);
+  const head = el("div", { class: "w1-head" });
+
+  const title = el("div", { class: "w1-title", text: "景品ジャンル別 売上 / ブース構成比" });
+
+  const headRight = el("div", { class: "w1-headRight" });
 
   const btnExpand = el("button", {
-    class: "btn ghost",
+    class: "w1-btn",
     text: "拡大",
     onClick: () => actions.onOpenFocus?.("shareDonut"),
   });
 
-  const selectWrap = el("div", { class: "widget1SelectWrap" });
-  const select = el("select", { class: "widget1Select" });
+  const select = el("select", { class: "w1-axis" });
   AXES.forEach(a => select.appendChild(el("option", { value: a.key, text: a.label })));
-  selectWrap.appendChild(select);
 
-  const right = el("div", { class: "widget1HeaderRight" }, []);
-  if (mode === "normal") right.appendChild(btnExpand);
-  right.appendChild(selectWrap);
+  if (mode === "normal") headRight.appendChild(btnExpand);
+  headRight.appendChild(select);
 
-  header.appendChild(left);
-  header.appendChild(right);
+  head.appendChild(title);
+  head.appendChild(headRight);
 
-  // body
-  const body = el("div", { class: "widget1Body" });
+  const body = el("div", { class: "w1-body" });
 
-  const chartWrap = el("div", { class: "widget1ChartWrap" });
-  const canvas = el("canvas", { class: "widget1Canvas" });
-  chartWrap.appendChild(canvas);
+  const left = el("div", { class: "w1-left" });
+  const canvas = el("canvas", { class: "w1-canvas" }); // classはCSSに無いが問題なし（識別用）
+  left.appendChild(canvas);
 
-  const listWrap = el("div", { class: "widget1ABC" });
+  const right = el("div", { class: "w1-right" });
+  const list = el("div", { class: "w1-list" });
+  const note = el("div", { class: "w1-note", text: "" });
 
-  body.appendChild(chartWrap);
-  body.appendChild(listWrap);
+  right.appendChild(list);
+  right.appendChild(note);
 
-  root.appendChild(header);
+  body.appendChild(left);
+  body.appendChild(right);
+
+  root.appendChild(head);
   root.appendChild(body);
 
   clear(mount);
@@ -159,14 +161,15 @@ function ensureDom_(mount, actions, mode) {
   mount.__w1_title = title;
   mount.__w1_select = select;
   mount.__w1_canvas = canvas;
-  mount.__w1_list = listWrap;
+  mount.__w1_list = list;
+  mount.__w1_note = note;
 
   // change handler（1回だけ）
   select.addEventListener("change", () => {
     const axisKey = select.value;
     // ✅ state直書き禁止：storeに確定
     actions.onSetWidget1Axis?.(axisKey);
-    // store.set で render が回る前提。二重更新を避けるので requestRender は呼ばない。
+    // store.setでrenderが回る前提。ここで requestRender を追加しない（無限レンダの火種）
   });
 
   return root;
@@ -192,13 +195,11 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
 
   const labels = items.map(x => x.label);
 
-  // 比率（0..1）
   const dataBooths = items.map(x => (totalBooths ? x.booths / totalBooths : 0));
   const dataSales  = items.map(x => (totalSales ? x.sales / totalSales : 0));
 
-  // 色
-  const colorsInner = items.map(x => x.colorSoft || "#93c5fd");
-  const colorsOuter = items.map(x => x.color || "#2563eb");
+  const colorsInner = items.map(x => x.colorSoft);
+  const colorsOuter = items.map(x => x.color);
 
   // ✅ Tooltip: 台数〇台（ブース）/ 構成比〇%
   const tooltipLabel = (ctx) => {
@@ -242,7 +243,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
         plugins: {
           legend: { display: false },
           tooltip: {
-            enabled: true,                 // ✅ 強制ON
+            enabled: true,
             callbacks: { label: tooltipLabel },
           },
         },
@@ -252,7 +253,6 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   }
 
   const ch = mount.__w1_chart;
-
   ch.data.labels = labels;
 
   ch.data.datasets[0].data = dataBooths;
@@ -261,7 +261,6 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   ch.data.datasets[1].data = dataSales;
   ch.data.datasets[1].backgroundColor = colorsOuter;
 
-  // ✅ updateでも tooltip を強制維持
   ch.options.plugins = ch.options.plugins || {};
   ch.options.plugins.tooltip = {
     enabled: true,
@@ -272,49 +271,40 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
 }
 
 function renderList_(mount, items, totalSales, totalBooths) {
-  const box = mount.__w1_list;
-  if (!box) return;
+  const list = mount.__w1_list;
+  const note = mount.__w1_note;
+  if (!list || !note) return;
 
-  clear(box);
-
-  if (!items.length) {
-    box.appendChild(el("div", { class: "widget1Empty", text: "データなし" }));
-    box.appendChild(el("div", { class: "widget1Note", text: `台数は ブースID（=1行）単位で集計（合計 ${totalBooths}）` }));
-    return;
-  }
+  clear(list);
 
   for (const it of items) {
     const salesShare = totalSales ? (it.sales / totalSales) : 0;
 
-    box.appendChild(
-      el("div", { class: "widget1Row" }, [
-        el("span", { class: "w1chip", style: `background:${it.color};` }),
-        el("div", { class: "widget1RowMain" }, [
-          el("div", { class: "widget1RowLabel", text: it.label }),
-          el("div", { class: "widget1RowSub", text: `台数 ${it.booths}台（ブース） / 売上構成比 ${pct(salesShare)}` }),
+    list.appendChild(
+      el("div", { class: "w1-row" }, [
+        // ✅ CSSの w1-chip を使う（色はCSS変数 --c で注入）
+        el("span", { class: "w1-chip", style: `--c:${it.color}` }),
+        el("div", {}, [
+          el("div", { class: "w1-name", text: it.label }),
+          el("div", { class: "w1-note", style: "margin-top:2px; opacity:.75; font-size:12px;" , text: `台数 ${it.booths}台（ブース） / 売上構成比 ${pct(salesShare)}` }),
         ]),
-        el("div", { class: "widget1RowValue", text: yen(it.sales) }),
+        el("div", { class: "w1-v", text: yen(it.sales) }),
       ])
     );
   }
 
-  box.appendChild(
-    el("div", {
-      class: "widget1Note",
-      text: `台数は ブースID（=1行）単位で集計（合計 ${totalBooths}）`
-    })
-  );
+  // ✅ 注記：合計は rows.length（=ブース数）
+  note.textContent = `台数は ブースID（=1行）単位で集計（合計 ${totalBooths}）`;
 }
 
 export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   if (!mount) return;
-  const mode = opts.mode || "normal";
 
+  const mode = opts.mode || "normal";
   ensureDom_(mount, actions, mode);
 
   const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
 
-  // 軸（stateの揺れを吸収）
   const axisKey = getAxisFromState_(state);
   updateSelect_(mount, axisKey);
   updateTitle_(mount, axisKey);
