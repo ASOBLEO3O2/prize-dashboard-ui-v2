@@ -182,100 +182,98 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   const dataBooths = items.map(x => (totalBooths ? x.booths / totalBooths : 0));
   const dataSales  = items.map(x => (totalSales ? x.sales / totalSales : 0));
 
-  const colorsInner = items.map(x => x.colorSoft);
-  const colorsOuter = items.map(x => x.color);
+  const colorsInner = items.map(x => x.colorSoft || "#93c5fd");
+  const colorsOuter = items.map(x => x.color || "#2563eb");
+
+  const pct = (v) => (Number.isFinite(v) ? (v * 100).toFixed(1) : "0.0") + "%";
 
   const tooltipLabel = (ctx) => {
     const i = ctx.dataIndex;
     const it = items[i];
-    const share = (ctx.datasetIndex === 0) ? dataBooths[i] : dataSales[i];
-    return `${it.label} / 台数 ${it.booths}台 / 構成比 ${pct(share)}`;
+    const isInner = (ctx.datasetIndex === 0);
+    const share = isInner ? dataBooths[i] : dataSales[i];
+    return `${it.label} / 台数 ${it.booths}台（ブース） / 構成比 ${pct(share)}`;
   };
 
-  if (!mount.__w1_chart) {
-    mount.__w1_chart = new Chart(canvas.getContext("2d"), {
-      type: "doughnut",
-      data: {
-        labels,
-        datasets: [
-          {
-            label: "台数構成比",
-            data: dataBooths,
-            backgroundColor: colorsInner,
-            borderColor: "rgba(10,15,20,.65)",
-            borderWidth: 1,
-            radius: "55%",
-          },
-          {
-            label: "売上構成比",
-            data: dataSales,
-            backgroundColor: colorsOuter,
-            borderColor: "rgba(10,15,20,.65)",
-            borderWidth: 1,
-            radius: "95%",
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: "40%",
-        animation: false,
-        resizeDelay: 80,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            enabled: true,
-            callbacks: { label: tooltipLabel },
-          },
-        },
-      },
-    });
+  // ✅ 重要：既存チャートが「別canvas」に紐付いてたら破棄して作り直す
+  if (mount.__w1_chart && mount.__w1_chart.canvas !== canvas) {
+    try { mount.__w1_chart.destroy(); } catch (e) {}
+    mount.__w1_chart = null;
+  }
+
+  // 既存チャートがあれば更新
+  if (mount.__w1_chart) {
+    const ch = mount.__w1_chart;
+
+    ch.data.labels = labels;
+
+    ch.data.datasets[0].data = dataBooths;
+    ch.data.datasets[0].backgroundColor = colorsInner;
+
+    ch.data.datasets[1].data = dataSales;
+    ch.data.datasets[1].backgroundColor = colorsOuter;
+
+    ch.options.plugins = ch.options.plugins || {};
+    ch.options.plugins.tooltip = {
+      enabled: true,
+      callbacks: { label: tooltipLabel }
+    };
+
+    // hoverが弱い環境対策（当たり判定）
+    ch.options.interaction = { mode: "nearest", intersect: true };
+
+    ch.update("none");
     return;
   }
 
-  const ch = mount.__w1_chart;
-  ch.data.labels = labels;
-
-  ch.data.datasets[0].data = dataBooths;
-  ch.data.datasets[0].backgroundColor = colorsInner;
-
-  ch.data.datasets[1].data = dataSales;
-  ch.data.datasets[1].backgroundColor = colorsOuter;
-
-  ch.options.plugins = ch.options.plugins || {};
-  ch.options.plugins.tooltip = ch.options.plugins.tooltip || {};
-  ch.options.plugins.tooltip.enabled = true;
-  ch.options.plugins.tooltip.callbacks = { label: tooltipLabel };
-
-  ch.update("none");
-}
-
-function renderList_(mount, items, totalBooths) {
-  const box = mount.__w1_abc;
-  if (!box) return;
-
-  clear(box);
-
-  // リスト（右側）
-  items.forEach(it => {
-    const share = totalBooths ? (it.booths / totalBooths) : 0;
-    box.appendChild(
-      el("div", { class: "w1-row" }, [
-        el("span", { class: "w1-chip", style: `background:${it.color};` }),
-        el("span", { class: "w1-name", text: it.label }),
-        el("span", { class: "w1-v", text: `${yen(it.sales)}（${it.booths}台 / ${pct(share)}）` }),
-      ])
-    );
+  // ✅ 新規作成
+  mount.__w1_chart = new Chart(canvas.getContext("2d"), {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "台数（ステーション）構成比",
+          data: dataBooths,
+          backgroundColor: colorsInner,
+          borderColor: "rgba(10,15,20,.65)",
+          borderWidth: 1,
+          radius: "55%",
+        },
+        {
+          label: "売上構成比",
+          data: dataSales,
+          backgroundColor: colorsOuter,
+          borderColor: "rgba(10,15,20,.65)",
+          borderWidth: 1,
+          radius: "95%",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "40%",
+      animation: false,
+      resizeDelay: 80,
+      interaction: { mode: "nearest", intersect: true },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          callbacks: { label: tooltipLabel },
+        },
+      },
+    },
   });
 
-  // 注記
-  box.appendChild(
-    el("div", {
-      class: "w1-note",
-      text: `台数は ブースID（=1行）単位で集計（合計 ${Number.isFinite(totalBooths) ? totalBooths : 0}）`
-    })
-  );
+  // ✅ 初回だけ「確実に一回描け」対策（初期レイアウト確定後に再計算）
+  requestAnimationFrame(() => {
+    try {
+      mount.__w1_chart?.resize();
+      mount.__w1_chart?.update("none");
+    } catch (e) {}
+  });
 }
 
 export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
