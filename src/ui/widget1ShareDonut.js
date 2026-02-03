@@ -1,248 +1,297 @@
-// src/app.js
-import { createStore } from "./state/store.js";
-import { mountLayout } from "./ui/layout.js";
-import { renderTopKpi } from "./ui/kpiTop.js";
-import { renderMidKpi } from "./ui/kpiMid.js";
-import { renderDetail } from "./ui/detail.js";
-import { renderDrawer } from "./ui/drawer.js";
-import { buildByAxis } from "./logic/byAxis.js";
+// src/ui/widget1ShareDonut.js
+import { el, clear } from "../utils/dom.js";
 
-import { MOCK } from "./constants.js";
-import { fmtDate } from "./utils/format.js";
-import { decodeSymbol } from "./logic/decodeSymbol.js";
+/**
+ * Widget①: 売上 / 台数 構成比（2重ドーナツ）
+ * - 外周: 売上構成比
+ * - 内周: 台数構成比（= rows.length を母集団、カテゴリ内は行数）
+ *
+ * 台数の定義（確定）:
+ * - 1行 = 1台（= booth_id がキー）
+ * - 台数合計 = filteredRows.length
+ */
 
-import { loadRawData } from "./data/load.js";
-import { applyFilters } from "./logic/filter.js";
-import { buildViewModel } from "./logic/aggregate.js";
+const AXES = [
+  { key: "料金", label: "① 料金", titleLabel: "料金" },
+  { key: "回数", label: "② プレイ回数", titleLabel: "プレイ回数" }, // 実列名は「回数」
+  { key: "投入法", label: "③ 投入法", titleLabel: "投入法" },
+  { key: "景品ジャンル", label: "④ 景品ジャンル", titleLabel: "景品ジャンル" },
+  { key: "ターゲット", label: "⑤ ターゲット", titleLabel: "ターゲット" },
+  { key: "年代", label: "⑥ 年代", titleLabel: "年代" },
+  { key: "キャラ", label: "⑦ キャラ", titleLabel: "キャラ" },
+  { key: "映画", label: "⑧ 映画", titleLabel: "映画" },
+  { key: "予約", label: "⑨ 予約", titleLabel: "予約" },
+  { key: "WLオリジナル", label: "⑩ WLオリジナル", titleLabel: "WLオリジナル" },
+];
 
-import { renderCharts } from "./ui/charts.js";
-import { renderFocusOverlay } from "./ui/focusOverlay.js";
-
-const initialState = {
-  // data
-  updatedDate: MOCK.updatedDate,
-  topKpi: structuredClone(MOCK.topKpi),
-  byGenre: structuredClone(MOCK.byGenre),
-  details: structuredClone(MOCK.details),
-
-  // ✅ ウィジェット①：軸
-  widget1Axis: "景品ジャンル",
-
-  // チャート用（フィルタ後rows）
-  filteredRows: [],
-
-  // 中段KPI：軸別集計
-  byAxis: {},
-
-  // 下段（無罪：既存）
-  midAxis: "ジャンル",
-  midParentKey: null,
-  midSortKey: "sales",
-  midSortDir: "desc",
-
-  // filters
-  filters: {},
-
-  // UI state
-  focusGenre: null,
-  openDetailGenre: null,
-  drawerOpen: false,
-
-  // ✅ フォーカス（上層レイヤー）
-  focus: {
-    open: false,
-    kind: null,
-    title: "",
-    parentKey: null,
-  },
-
-  // 詳細（テーブル）の並び替え
-  detailSortKey: "sales",
-  detailSortDir: "desc",
-
-  // errors
-  loadError: null,
-};
-
-const store = createStore(initialState);
-const root = document.getElementById("app");
-
-// ✅ デバッグ用（任意）
-// コンソールで window.getState() が使えるようにする（壊れない安全なやつ）
-window.getState = () => store.get();
-
-// ===== actions =====
-const actions = {
-  onPickGenre: (genreOrNull) => {
-    store.set((s) => ({ ...s, focusGenre: genreOrNull }));
-  },
-
-  onPickMidParent: (keyOrNull) => {
-    store.set((s) => ({ ...s, midParentKey: keyOrNull }));
-  },
-
-  onOpenMidDetail: (payloadOrNull) => {
-    store.set((s) => ({ ...s, midDetail: payloadOrNull }));
-  },
-
-  requestRender: () => {
-    // これ自体はOK（renderループ内で呼ばれない限り無限ループしない）
-    store.set((s) => ({ ...s }));
-  },
-
-  onToggleDetail: (genre) => {
-    store.set((s) => {
-      const next = (s.openDetailGenre === genre) ? null : genre;
-      return { ...s, openDetailGenre: next };
-    });
-  },
-
-  onSetDetailSort: (key, dir) => {
-    store.set((s) => ({
-      ...s,
-      detailSortKey: key ?? s.detailSortKey,
-      detailSortDir: dir ?? s.detailSortDir,
-    }));
-  },
-
-  // ✅ ウィジェット①：軸
-  onSetWidget1Axis: (axisKey) => {
-    store.set((s) => ({
-      ...s,
-      widget1Axis: axisKey || s.widget1Axis || "景品ジャンル",
-    }));
-  },
-
-  // Drawer
-  onOpenDrawer: () => store.set((s) => ({ ...s, drawerOpen: true })),
-  onCloseDrawer: () => store.set((s) => ({ ...s, drawerOpen: false })),
-
-  // ✅ フォーカス
-  onOpenFocus: (kind) => {
-    const title =
-      (kind === "shareDonut") ? "売上 / 台数 構成比" :
-      (kind === "salesDonut") ? "売上構成比" :
-      (kind === "machineDonut") ? "台数構成比" :
-      (kind === "costHist") ? "原価率 分布" :
-      (kind === "scatter") ? "売上 × 原価率（マトリクス）" :
-      "詳細";
-
-    store.set((s) => ({
-      ...s,
-      focus: { open: true, kind, title, parentKey: null }
-    }));
-  },
-
-  onCloseFocus: () => {
-    store.set((s) => ({
-      ...s,
-      focus: { open: false, kind: null, title: "", parentKey: null }
-    }));
-  },
-
-  onSetFocusParentKey: (keyOrNull) => {
-    store.set((s) => ({
-      ...s,
-      focus: { ...s.focus, parentKey: keyOrNull }
-    }));
-  },
-
-  // Refresh
-  onRefresh: async () => {
-    await hydrateFromRaw();
-  },
-};
-
-// ===== mount =====
-const mounts = mountLayout(root, {
-  onOpenDrawer: actions.onOpenDrawer,
-  onCloseDrawer: actions.onCloseDrawer,
-  onRefresh: actions.onRefresh,
-});
-
-// ===== render loop =====
-function renderAll(state) {
-  mounts.updatedBadge.textContent = `更新日: ${fmtDate(state.updatedDate)}`;
-
-  renderTopKpi(mounts.topKpi, state.topKpi);
-
-  renderMidKpi(mounts, state, actions);
-
-  renderCharts(mounts, state);
-
-  renderFocusOverlay(mounts.focusOverlay, mounts.focusModal, state, actions);
-
-  renderDetail(mounts.detailMount, state, actions);
-
-  renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
+function toNum(v) {
+  if (v == null) return 0;
+  const n = Number(String(v).replace(/,/g, ""));
+  return Number.isFinite(n) ? n : 0;
 }
 
-renderAll(store.get());
-store.subscribe(renderAll);
+function yen(n) {
+  return new Intl.NumberFormat("ja-JP").format(Math.round(n || 0)) + "円";
+}
 
-hydrateFromRaw().catch((e) => {
-  console.error(e);
-  store.set((s) => ({ ...s, loadError: String(e?.message || e) }));
-});
+function safeStr(v, fallback = "未分類") {
+  const s = String(v ?? "").trim();
+  return s ? s : fallback;
+}
 
-async function hydrateFromRaw() {
-  const raw = await loadRawData();
-  const rows = Array.isArray(raw?.rows) ? raw.rows : [];
-  const summary = raw?.summary ?? null;
-  const masterDict = raw?.masterDict ?? {};
+function axisMeta(axisKey) {
+  return AXES.find(a => a.key === axisKey) || AXES[3];
+}
 
-  // codebook
-  let codebook = {};
-  try {
-    const res = await fetch("./data/master/codebook.json", { cache: "no-store" });
-    if (res.ok) codebook = await res.json();
-  } catch (e) {
-    codebook = {};
+function getAxisFromState_(state) {
+  const raw = safeStr(state?.widget1Axis, "景品ジャンル");
+  if (raw === "ジャンル") return "景品ジャンル"; // 旧値吸収
+  return raw;
+}
+
+// 安定色（カテゴリごと固定）
+function hashHue_(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+function colorSolid_(key) {
+  const hue = hashHue_(String(key));
+  return `hsl(${hue} 80% 55%)`;
+}
+function colorSoft_(key) {
+  const hue = hashHue_(String(key));
+  return `hsl(${hue} 75% 70%)`;
+}
+
+function buildAgg_(rows, axisKey) {
+  const map = new Map();
+
+  for (const r of rows) {
+    const k = safeStr(r?.[axisKey], "未分類");
+    let o = map.get(k);
+    if (!o) {
+      o = { key: k, label: k, sales: 0, count: 0 };
+      map.set(k, o);
+    }
+    o.sales += toNum(r?.sales);
+    o.count += 1; // ✅ 台数＝行数（確定）
   }
 
-  // ✅ 正規化：rawの booth_id を絶対に守る
-  const normalizedRows = rows.map((r) => {
-    const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
-    const m = key ? masterDict?.[key] : null;
-    const decoded = key ? decodeSymbol(key, codebook) : {};
+  const items = Array.from(map.values()).map(x => ({
+    key: x.key,
+    label: x.label,
+    sales: x.sales,
+    booths: x.count, // 表示名は booths で維持（UI側の互換）
+    color: colorSolid_(x.key),
+    colorSoft: colorSoft_(x.key),
+  }));
 
-    return {
-      ...r,
-      ...(m || {}),
-      ...decoded,
+  items.sort((a, b) => b.sales - a.sales);
 
-      // ✅ 最後に raw を再代入して “上書き防止”
-      booth_id: r?.booth_id,
-      machine_name: r?.machine_name,
-      machine_key: r?.machine_key,
-      label_id: r?.label_id,
+  const totalSales = items.reduce((a, x) => a + x.sales, 0);
+  const totalBooths = rows.length; // ✅ 母集団＝rows.length（確定）
 
-      symbol_raw: r?.symbol_raw,
-      raw: r?.raw,
-      sales: r?.sales,
-      claw: r?.claw,
-      cost_rate: r?.cost_rate,
-    };
+  return { items, totalSales, totalBooths };
+}
+
+function ensureDom_(mount, actions, mode) {
+  if (mount.__w1_root) return mount.__w1_root;
+
+  const root = el("div", { class: `widget1 widget1-${mode}` });
+
+  const header = el("div", { class: "widget1Header" });
+  const title = el("div", { class: "widget1Title", text: "景品ジャンル別 売上 / 台数 構成比" });
+  const left = el("div", { class: "widget1HeaderLeft" }, [title]);
+
+  const btnExpand = el("button", {
+    class: "btn ghost",
+    text: "拡大",
+    onClick: () => actions.onOpenFocus?.("shareDonut"),
   });
 
-  // フィルタ
-  const st = store.get();
-  const filtered = applyFilters(normalizedRows, st.filters);
+  const selectWrap = el("div", { class: "widget1SelectWrap" });
+  const select = el("select", { class: "widget1Select" });
+  AXES.forEach(a => select.appendChild(el("option", { value: a.key, text: a.label })));
+  selectWrap.appendChild(select);
 
-  // 集計
-  const vm = buildViewModel(filtered, summary);
-  const axis = buildByAxis(filtered);
+  const right = el("div", { class: "widget1HeaderRight" }, []);
+  if (mode === "normal") right.appendChild(btnExpand);
+  right.appendChild(selectWrap);
 
-  // state 更新
-  store.set((s) => ({
-    ...s,
-    updatedDate: vm.updatedDate || s.updatedDate,
-    topKpi: vm.topKpi,
-    byGenre: vm.byGenre,
-    details: vm.details,
-    byAxis: axis,
-    filters: vm.filters ?? s.filters,
-    filteredRows: filtered,
-    loadError: null,
-  }));
+  header.appendChild(left);
+  header.appendChild(right);
+
+  const body = el("div", { class: "widget1Body" });
+
+  const chartWrap = el("div", { class: "widget1ChartWrap" });
+  const canvas = el("canvas", { class: "widget1Canvas" });
+  chartWrap.appendChild(canvas);
+
+  const listWrap = el("div", { class: "widget1ABC" });
+
+  body.appendChild(chartWrap);
+  body.appendChild(listWrap);
+
+  root.appendChild(header);
+  root.appendChild(body);
+
+  clear(mount);
+  mount.appendChild(root);
+
+  mount.__w1_root = root;
+  mount.__w1_title = title;
+  mount.__w1_select = select;
+  mount.__w1_canvas = canvas;
+  mount.__w1_abc = listWrap;
+
+  // change handler（1回だけ）
+  select.addEventListener("change", () => {
+    const axisKey = select.value;
+    actions.onSetWidget1Axis?.(axisKey);
+  });
+
+  return root;
+}
+
+function updateTitle_(mount, axisKey) {
+  const meta = axisMeta(axisKey);
+  const title = mount.__w1_title;
+  if (!title) return;
+  title.textContent = `${meta.titleLabel}別 売上 / 台数 構成比`;
+}
+
+function updateSelect_(mount, axisKey) {
+  const sel = mount.__w1_select;
+  if (!sel) return;
+  if (sel.value !== axisKey) sel.value = axisKey;
+}
+
+function pct(v) {
+  if (!Number.isFinite(v)) return "0.0%";
+  return (v * 100).toFixed(1) + "%";
+}
+
+function upsertChart_(mount, items, totalSales, totalBooths) {
+  const Chart = window.Chart;
+  const canvas = mount.__w1_canvas;
+  if (!Chart || !canvas) return;
+
+  const labels = items.map(x => x.label);
+
+  const dataBooths = items.map(x => (totalBooths ? x.booths / totalBooths : 0));
+  const dataSales  = items.map(x => (totalSales ? x.sales / totalSales : 0));
+
+  const colorsInner = items.map(x => x.colorSoft);
+  const colorsOuter = items.map(x => x.color);
+
+  const tooltipLabel = (ctx) => {
+    const i = ctx.dataIndex;
+    const it = items[i];
+    const share = (ctx.datasetIndex === 0) ? dataBooths[i] : dataSales[i];
+    return `${it.label} / 台数 ${it.booths}台 / 構成比 ${pct(share)}`;
+  };
+
+  if (!mount.__w1_chart) {
+    mount.__w1_chart = new Chart(canvas.getContext("2d"), {
+      type: "doughnut",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "台数構成比",
+            data: dataBooths,
+            backgroundColor: colorsInner,
+            borderColor: "rgba(10,15,20,.65)",
+            borderWidth: 1,
+            radius: "55%",
+          },
+          {
+            label: "売上構成比",
+            data: dataSales,
+            backgroundColor: colorsOuter,
+            borderColor: "rgba(10,15,20,.65)",
+            borderWidth: 1,
+            radius: "95%",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "40%",
+        animation: false,
+        resizeDelay: 80,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: true,
+            callbacks: { label: tooltipLabel },
+          },
+        },
+      },
+    });
+    return;
+  }
+
+  const ch = mount.__w1_chart;
+  ch.data.labels = labels;
+
+  ch.data.datasets[0].data = dataBooths;
+  ch.data.datasets[0].backgroundColor = colorsInner;
+
+  ch.data.datasets[1].data = dataSales;
+  ch.data.datasets[1].backgroundColor = colorsOuter;
+
+  ch.options.plugins = ch.options.plugins || {};
+  ch.options.plugins.tooltip = ch.options.plugins.tooltip || {};
+  ch.options.plugins.tooltip.enabled = true;
+  ch.options.plugins.tooltip.callbacks = { label: tooltipLabel };
+
+  ch.update("none");
+}
+
+function renderList_(mount, items, totalBooths) {
+  const box = mount.__w1_abc;
+  if (!box) return;
+
+  clear(box);
+
+  // リスト（右側）
+  items.forEach(it => {
+    const share = totalBooths ? (it.booths / totalBooths) : 0;
+    box.appendChild(
+      el("div", { class: "w1-row" }, [
+        el("span", { class: "w1-chip", style: `background:${it.color};` }),
+        el("span", { class: "w1-name", text: it.label }),
+        el("span", { class: "w1-v", text: `${yen(it.sales)}（${it.booths}台 / ${pct(share)}）` }),
+      ])
+    );
+  });
+
+  // 注記
+  box.appendChild(
+    el("div", {
+      class: "w1-note",
+      text: `台数は ブースID（=1行）単位で集計（合計 ${Number.isFinite(totalBooths) ? totalBooths : 0}）`
+    })
+  );
+}
+
+export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
+  if (!mount) return;
+  const mode = opts.mode || "normal";
+
+  ensureDom_(mount, actions, mode);
+
+  const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
+  const axisKey = getAxisFromState_(state);
+
+  updateSelect_(mount, axisKey);
+  updateTitle_(mount, axisKey);
+
+  const { items, totalSales, totalBooths } = buildAgg_(rows, axisKey);
+
+  upsertChart_(mount, items, totalSales, totalBooths);
+  renderList_(mount, items, totalBooths);
 }
