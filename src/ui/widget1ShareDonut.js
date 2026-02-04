@@ -6,13 +6,8 @@ import { el, clear } from "../utils/dom.js";
  * - 外周: 売上構成比
  * - 内周: ステーション構成比（distinct booth_id）
  *
- * ✅ 変更点（唯一）:
- * - 「順位（A/B/C）」は完全に削除（表示もしない）
- *
- * ✅ それ以外は元に戻す:
- * - upsertChart 方式（update中心、壊れたらdestroy→recreateで復旧）
- * - 凡例（右側リスト）は残す
- * - 箱サイズやレイアウト前提は触らない
+ * ✅ A/B/C ランクは削除（右側は「凡例リスト」として維持）
+ * ✅ tooltip は「そのチャートの最新集計」を必ず参照する（ステーション0化を潰す）
  */
 
 const AXES = [
@@ -43,8 +38,13 @@ function safeStr(v, fallback = "未分類") {
   return s ? s : fallback;
 }
 
+function pct(v) {
+  if (!Number.isFinite(v)) return "0.0%";
+  return (v * 100).toFixed(1) + "%";
+}
+
 function axisMeta(axisKey) {
-  return AXES.find((a) => a.key === axisKey) || AXES[3];
+  return AXES.find(a => a.key === axisKey) || AXES[3];
 }
 
 function getAxisFromState_(state) {
@@ -53,7 +53,7 @@ function getAxisFromState_(state) {
   return raw;
 }
 
-/** 色：カテゴリkeyから安定生成 */
+/** 色：カテゴリkeyから安定生成（Chart.js が確実に解釈できる hsl） */
 function hashHue_(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
@@ -83,10 +83,12 @@ function buildAgg_(rows, axisKey) {
     o.sales += toNum(r?.sales);
 
     // 1ステーション = booth_id
-    if (r?.booth_id != null) o.booths.add(String(r.booth_id));
+    if (r?.booth_id != null && String(r.booth_id).trim() !== "") {
+      o.booths.add(String(r.booth_id));
+    }
   }
 
-  const items = Array.from(map.values()).map((x) => ({
+  const items = Array.from(map.values()).map(x => ({
     key: x.key,
     label: x.label,
     sales: x.sales,
@@ -121,7 +123,7 @@ function ensureDom_(mount, actions, mode) {
 
   const selectWrap = el("div", { class: "widget1SelectWrap" });
   const select = el("select", { class: "widget1Select" });
-  AXES.forEach((a) => select.appendChild(el("option", { value: a.key, text: a.label })));
+  AXES.forEach(a => select.appendChild(el("option", { value: a.key, text: a.label })));
   selectWrap.appendChild(select);
 
   const right = el("div", { class: "widget1HeaderRight" }, []);
@@ -138,8 +140,7 @@ function ensureDom_(mount, actions, mode) {
   const canvas = el("canvas", { class: "widget1Canvas" });
   chartWrap.appendChild(canvas);
 
-  // ✅ 凡例（右側）
-  const legendWrap = el("div", { class: "widget1ABC" });
+  const legendWrap = el("div", { class: "widget1ABC" }); // 既存CSS名を維持（中身は凡例として使う）
 
   body.appendChild(chartWrap);
   body.appendChild(legendWrap);
@@ -154,7 +155,7 @@ function ensureDom_(mount, actions, mode) {
   mount.__w1_title = title;
   mount.__w1_select = select;
   mount.__w1_canvas = canvas;
-  mount.__w1_abc = legendWrap;
+  mount.__w1_legend = legendWrap;
 
   // change handler（1回だけ）
   select.addEventListener("change", () => {
@@ -179,63 +180,31 @@ function updateSelect_(mount, axisKey) {
   if (sel.value !== axisKey) sel.value = axisKey;
 }
 
-function pct(v) {
-  if (!Number.isFinite(v)) return "0.0%";
-  return (v * 100).toFixed(1) + "%";
-}
-
 /**
- * ✅ Chart.js:
- * - update中心
- * - 壊れたら destroy→recreate で復旧
- *
- * ✅ tooltip:
- * - items配列参照で落ちないよう、ctx.raw / ctx.label を主に使う
+ * ✅ 重要：tooltip の参照先を「そのチャート自身」に固定する
+ * - ch.$w1 = { items, totalSales, totalBooths, dataSales, dataBooths }
+ * - callback は ctx.chart.$w1 を見る（closureでitemsを掴まない）
  */
 function upsertChart_(mount, items, totalSales, totalBooths) {
   const Chart = window.Chart;
   const canvas = mount.__w1_canvas;
   if (!Chart || !canvas) return;
 
-  const labels = items.map((x) => x.label);
+  const labels = items.map(x => x.label);
 
-  const dataBooths = items.map((x) => (totalBooths ? x.booths / totalBooths : 0));
-  const dataSales = items.map((x) => (totalSales ? x.sales / totalSales : 0));
+  const dataBooths = items.map(x => (totalBooths ? x.booths / totalBooths : 0));
+  const dataSales  = items.map(x => (totalSales ? x.sales / totalSales : 0));
 
-  const colorsInner = items.map((x) => x.colorSoft || "#93c5fd");
-  const colorsOuter = items.map((x) => x.color || "#2563eb");
-
-  const tooltipLabel = (ctx) => {
-    // ctx.label は data.labels 由来（安全）
-    const label = String(ctx.label ?? "");
-    const ds = ctx.datasetIndex ?? 0;
-    const i = ctx.dataIndex ?? -1;
-
-    const share =
-      ds === 0
-        ? (Number.isFinite(dataBooths[i]) ? dataBooths[i] : (toNum(ctx.raw) || 0))
-        : (Number.isFinite(dataSales[i]) ? dataSales[i] : (toNum(ctx.raw) || 0));
-
-    // itemsがズレても落ちないように
-    const it = items[i] || null;
-    const booths = it ? it.booths : 0;
-
-    // 内周/外周で出し分け（必要最小限）
-    if (ds === 0) {
-      return `${label} / ステーション ${booths} / 構成比 ${pct(share)}`;
-    }
-    return `${label} / 構成比 ${pct(share)}`;
-  };
+  const colorsInner = items.map(x => x.colorSoft || "#93c5fd");
+  const colorsOuter = items.map(x => x.color || "#2563eb");
 
   // 既存が別canvasなら破棄
   if (mount.__w1_chart && mount.__w1_chart.canvas !== canvas) {
-    try {
-      mount.__w1_chart.destroy();
-    } catch (e) {}
+    try { mount.__w1_chart.destroy(); } catch (_) {}
     mount.__w1_chart = null;
   }
 
-  // update（落ちたら recreate）
+  // update
   if (mount.__w1_chart) {
     const ch = mount.__w1_chart;
     try {
@@ -247,19 +216,20 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
       ch.data.datasets[1].data = dataSales;
       ch.data.datasets[1].backgroundColor = colorsOuter;
 
+      // ✅ 最新の参照をチャートに載せる（これが “ステーション0化” の対策）
+      ch.$w1 = { items, totalSales, totalBooths, dataSales, dataBooths };
+
       ch.update("none");
       return;
     } catch (e) {
-      try {
-        ch.destroy();
-      } catch (_) {}
+      try { ch.destroy(); } catch (_) {}
       mount.__w1_chart = null;
     }
   }
 
   // create
   try {
-    mount.__w1_chart = new Chart(canvas.getContext("2d"), {
+    const ch = new Chart(canvas.getContext("2d"), {
       type: "doughnut",
       data: {
         labels,
@@ -293,28 +263,59 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
           legend: { display: false },
           tooltip: {
             enabled: true,
-            callbacks: { label: tooltipLabel },
+            callbacks: {
+              title: (itemsArr) => {
+                const it0 = itemsArr?.[0];
+                const idx = it0?.dataIndex;
+                const meta = it0?.chart?.$w1;
+                const item = meta?.items?.[idx];
+                return item?.label ?? "";
+              },
+              label: (ctx) => {
+                const meta = ctx?.chart?.$w1;
+                if (!meta) return "";
+                const i = ctx.dataIndex;
+                const it = meta.items?.[i];
+                if (!it) return "";
+
+                const boothsShare = meta.dataBooths?.[i] ?? 0;
+                const salesShare  = meta.dataSales?.[i] ?? 0;
+
+                // datasetIndex 0=内（ステーション）, 1=外（売上）
+                if (ctx.datasetIndex === 0) {
+                  return [
+                    `ステーション: ${it.booths}（${pct(boothsShare)}）`,
+                    `売上: ${yen(it.sales)}（${pct(salesShare)}）`,
+                  ];
+                } else {
+                  return [
+                    `売上: ${yen(it.sales)}（${pct(salesShare)}）`,
+                    `ステーション: ${it.booths}（${pct(boothsShare)}）`,
+                  ];
+                }
+              },
+            },
           },
         },
       },
     });
+
+    // ✅ 最新参照を載せる（create直後）
+    ch.$w1 = { items, totalSales, totalBooths, dataSales, dataBooths };
+
+    mount.__w1_chart = ch;
   } catch (e) {
     console.error("[W1] Chart create failed:", e);
   }
 }
 
-/**
- * ✅ 凡例（右側リスト）
- * - 「順位」は出さない
- * - 色＋ラベル＋売上（円）だけ
- */
 function renderLegend_(mount, items, totalBooths) {
-  const box = mount.__w1_abc;
+  const box = mount.__w1_legend;
   if (!box) return;
 
   clear(box);
 
-  // 上から売上降順の items をそのまま表示
+  // 右側：凡例（順位なし）
   items.forEach((it) => {
     box.appendChild(
       el("div", { class: "widget1ABCRow" }, [
@@ -330,9 +331,7 @@ function renderLegend_(mount, items, totalBooths) {
   box.appendChild(
     el("div", {
       class: "widget1Note",
-      text:
-        `台数は 1ステーション（ブースID）単位で集計` +
-        (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""),
+      text: `台数は 1ステーション（ブースID）単位で集計` + (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""),
     })
   );
 }
@@ -352,7 +351,5 @@ export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   const { items, totalSales, totalBooths } = buildAgg_(rows, axisKey);
 
   upsertChart_(mount, items, totalSales, totalBooths);
-
-  // ✅ 凡例（順位なし）
   renderLegend_(mount, items, totalBooths);
 }
