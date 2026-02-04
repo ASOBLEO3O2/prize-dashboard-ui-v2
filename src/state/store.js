@@ -14,16 +14,13 @@ export function createStore(initialState) {
   function flush() {
     scheduled = false;
 
-    // pending がなければ終了
     if (pending == null) return;
 
-    // pending を確定して通知（この通知中に set が来ても次tickに回る）
     state = pending;
     pending = null;
 
     for (const fn of listeners) fn(state);
 
-    // 通知中にまた pending が積まれていたら次tickへ
     if (pending != null && !scheduled) {
       scheduled = true;
       queueMicrotask(flush);
@@ -31,12 +28,12 @@ export function createStore(initialState) {
   }
 
   function set(updater) {
-    const next = (typeof updater === "function") ? updater(state) : updater;
+    // ✅ ここが重要：同一tick内の連続 set は pending を基準に積み上げる
+    const base = (pending != null) ? pending : state;
+    const next = (typeof updater === "function") ? updater(base) : updater;
 
-    // 同一参照は無視（無限レンダーの最大要因）
-    if (next === state) return;
+    if (next === base) return; // 同一参照は無視
 
-    // いまのtickでは state を即座に変えず、pending に積む
     pending = next;
 
     if (!scheduled) {
