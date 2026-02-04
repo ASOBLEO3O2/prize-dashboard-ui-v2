@@ -101,12 +101,13 @@ function buildAgg_(rows, axisKey) {
 function buildABC_(items, totalSales) {
   let cum = 0;
   return items.map(x => {
+    const prev = totalSales ? (cum / totalSales) : 0; // ✅ 加算前
+    const rank = (prev < 0.7) ? "A" : (prev < 0.9) ? "B" : "C";
     cum += x.sales;
-    const r = totalSales ? (cum / totalSales) : 0;
-    const rank = (r <= 0.7) ? "A" : (r <= 0.9) ? "B" : "C";
     return { rank, label: x.label, sales: x.sales, color: x.color };
   });
 }
+
 
 function ensureDom_(mount, actions, mode) {
   // mode が変わったら作り直し（normal→expanded などで事故らないように）
