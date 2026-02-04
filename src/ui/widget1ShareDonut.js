@@ -5,8 +5,8 @@ import { el, clear } from "../utils/dom.js";
  * - 外周: 売上構成比
  * - 内周: ステーション構成比
  *
- * ※ A/B/C ランクは完全削除
- * ※ 軸切り替え時は Chart を必ず作り直す
+ * A/B/C ランクは完全削除
+ * 凡例・ツールチップは必ず表示
  */
 
 const AXES = [
@@ -121,6 +121,7 @@ function ensureDom_(mount, actions, mode) {
   mount.__w1_title = title;
   mount.__w1_select = select;
   mount.__w1_canvas = canvas;
+  mount.__w1_chart = null;
   mount.__w1_axis = null;
 
   select.addEventListener("change", () => {
@@ -129,25 +130,26 @@ function ensureDom_(mount, actions, mode) {
   });
 }
 
-/* ===== Chart ===== */
-function pct(v) {
-  return (v * 100).toFixed(1) + "%";
-}
-
-function recreateChart_(mount, items, totalSales, totalBooths) {
+/* ===== Chart（upsert） ===== */
+function upsertChart_(mount, items, totalSales, totalBooths) {
   const Chart = window.Chart;
   const canvas = mount.__w1_canvas;
   if (!Chart || !canvas) return;
 
-  // 🔴 必ず破棄
-  if (mount.__w1_chart) {
-    try { mount.__w1_chart.destroy(); } catch {}
-    mount.__w1_chart = null;
-  }
-
   const labels = items.map(x => x.label);
   const dataBooths = items.map(x => totalBooths ? x.booths / totalBooths : 0);
   const dataSales  = items.map(x => totalSales  ? x.sales  / totalSales  : 0);
+
+  if (mount.__w1_chart) {
+    const ch = mount.__w1_chart;
+    ch.data.labels = labels;
+    ch.data.datasets[0].data = dataBooths;
+    ch.data.datasets[0].backgroundColor = items.map(x => x.colorSoft);
+    ch.data.datasets[1].data = dataSales;
+    ch.data.datasets[1].backgroundColor = items.map(x => x.color);
+    ch.update("none");
+    return;
+  }
 
   mount.__w1_chart = new Chart(canvas.getContext("2d"), {
     type: "doughnut",
@@ -155,11 +157,13 @@ function recreateChart_(mount, items, totalSales, totalBooths) {
       labels,
       datasets: [
         {
+          label: "ステーション構成比",
           data: dataBooths,
           backgroundColor: items.map(x => x.colorSoft),
           radius: "55%",
         },
         {
+          label: "売上構成比",
           data: dataSales,
           backgroundColor: items.map(x => x.color),
           radius: "95%",
@@ -170,10 +174,12 @@ function recreateChart_(mount, items, totalSales, totalBooths) {
       responsive: true,
       maintainAspectRatio: false,
       cutout: "40%",
-      animation: false,
       interaction: { mode: "nearest", intersect: true },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          position: "bottom",
+        },
         tooltip: {
           callbacks: {
             label: (ctx) => {
@@ -181,7 +187,7 @@ function recreateChart_(mount, items, totalSales, totalBooths) {
               const it = items[i];
               if (!it) return "";
               const share = ctx.datasetIndex === 0 ? dataBooths[i] : dataSales[i];
-              return `${it.label} / ${pct(share)}`;
+              return `${it.label}：${(share * 100).toFixed(1)}%`;
             },
           },
         },
@@ -198,9 +204,15 @@ export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   ensureDom_(mount, actions, mode);
 
   const axisKey = getAxisFromState_(state);
+
   if (mount.__w1_axis !== axisKey) {
     mount.__w1_axis = axisKey;
     if (mount.__w1_select) mount.__w1_select.value = axisKey;
+
+    if (mount.__w1_chart) {
+      mount.__w1_chart.destroy();
+      mount.__w1_chart = null;
+    }
   }
 
   const meta = axisMeta(axisKey);
@@ -211,5 +223,5 @@ export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
   const { items, totalSales, totalBooths } = buildAgg_(rows, axisKey);
 
-  recreateChart_(mount, items, totalSales, totalBooths);
+  upsertChart_(mount, items, totalSales, totalBooths);
 }
