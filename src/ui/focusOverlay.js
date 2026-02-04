@@ -1,10 +1,49 @@
 // src/ui/focusOverlay.js
-console.log("FOCUS_OVERLAY_BUILD 2026-01-31 r1");
+console.log("FOCUS_OVERLAY_BUILD 2026-01-31 r2");
 
 import { el, clear } from "../utils/dom.js";
 import { renderDonut } from "../charts/donut.js?v=20260131";
 import { GENRES } from "../constants.js";
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
+
+/**
+ * modalEl 配下の Chart.js を破棄（DOM clear だけでは Chart が残るため）
+ * - Chart.getChart(canvas) が使える場合はそれを優先
+ * - だめなら Chart.instances から拾う（互換）
+ */
+function destroyChartsUnder_(rootEl) {
+  const Chart = window.Chart;
+  if (!Chart || !rootEl) return;
+
+  const canvases = rootEl.querySelectorAll?.("canvas");
+  if (!canvases || canvases.length === 0) return;
+
+  // v3/v4: Chart.getChart
+  const getChart = typeof Chart.getChart === "function"
+    ? (c) => Chart.getChart(c)
+    : null;
+
+  // fallback: Chart.instances（配列/Map/オブジェクト）
+  const listInstances = () => {
+    const inst = Chart.instances;
+    if (!inst) return [];
+    if (Array.isArray(inst)) return inst.filter(Boolean);
+    if (inst instanceof Map) return Array.from(inst.values()).filter(Boolean);
+    if (typeof inst === "object") return Object.values(inst).filter(Boolean);
+    return [];
+  };
+
+  const all = getChart ? null : listInstances();
+
+  canvases.forEach((cv) => {
+    try {
+      const ch = getChart ? getChart(cv) : all.find(x => x?.canvas === cv);
+      if (ch && typeof ch.destroy === "function") ch.destroy();
+    } catch (e) {
+      // 無視（破棄失敗しても次でリカバリされる）
+    }
+  });
+}
 
 export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   const focus = state?.focus || { open: false };
@@ -13,14 +52,25 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   // close
   if (!focus.open) {
     overlayEl.classList.remove("open");
+
+    // ✅ ここが重要：DOMを消す前に Chart を必ず破棄する
+    destroyChartsUnder_(modalEl);
+
     clear(modalEl);
     document.body.style.overflow = "";
+
+    // 念のためクリックハンドラも解除（積み上がり防止）
+    overlayEl.onclick = null;
     return;
   }
 
   // open
   overlayEl.classList.add("open");
+
+  // open時に一旦掃除（前回の残骸がある場合の保険）
+  destroyChartsUnder_(modalEl);
   clear(modalEl);
+
   document.body.style.overflow = "hidden";
 
   overlayEl.onclick = (e) => {
