@@ -1,3 +1,4 @@
+// src/ui/widget1ShareDonut.js
 import { el, clear } from "../utils/dom.js";
 
 /**
@@ -5,12 +6,13 @@ import { el, clear } from "../utils/dom.js";
  * - 外周: 売上構成比
  * - 内周: ステーション構成比（distinct booth_id）
  *
- * ✔ 右側：数値付き凡例（売上金額）
- * ✔ 注記あり
- * ✔ ツールチップ安定
- * ✔ 軸切替OK
- * ✔ 拡大OK
- * ✔ A/B/Cランクなし
+ * ✅ 変更点（唯一）:
+ * - 「順位（A/B/C）」は完全に削除（表示もしない）
+ *
+ * ✅ それ以外は元に戻す:
+ * - upsertChart 方式（update中心、壊れたらdestroy→recreateで復旧）
+ * - 凡例（右側リスト）は残す
+ * - 箱サイズやレイアウト前提は触らない
  */
 
 const AXES = [
@@ -26,56 +28,74 @@ const AXES = [
   { key: "WLオリジナル", label: "⑩ WLオリジナル", titleLabel: "WLオリジナル" },
 ];
 
-const toNum = (v) => {
-  const n = Number(String(v ?? "").replace(/,/g, ""));
+function toNum(v) {
+  if (v == null) return 0;
+  const n = Number(String(v).replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
-};
-const yen = (n) =>
-  new Intl.NumberFormat("ja-JP").format(Math.round(n || 0)) + "円";
-const safeStr = (v, fb = "未分類") => {
+}
+
+function yen(n) {
+  return new Intl.NumberFormat("ja-JP").format(Math.round(n || 0)) + "円";
+}
+
+function safeStr(v, fallback = "未分類") {
   const s = String(v ?? "").trim();
-  return s || fb;
-};
-const axisMeta = (k) => AXES.find(a => a.key === k) || AXES[3];
+  return s ? s : fallback;
+}
+
+function axisMeta(axisKey) {
+  return AXES.find((a) => a.key === axisKey) || AXES[3];
+}
 
 function getAxisFromState_(state) {
   const raw = safeStr(state?.widget1Axis, "景品ジャンル");
-  return raw === "ジャンル" ? "景品ジャンル" : raw;
+  if (raw === "ジャンル") return "景品ジャンル";
+  return raw;
 }
 
-/* ===== 色 ===== */
+/** 色：カテゴリkeyから安定生成 */
 function hashHue_(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
   return h % 360;
 }
-const colorSolid_ = (k) => `hsl(${hashHue_(String(k))},80%,55%)`;
-const colorSoft_  = (k) => `hsl(${hashHue_(String(k))},75%,70%)`;
+function colorSolid_(key) {
+  const hue = hashHue_(String(key));
+  return `hsl(${hue}, 80%, 55%)`;
+}
+function colorSoft_(key) {
+  const hue = hashHue_(String(key));
+  return `hsl(${hue}, 75%, 70%)`;
+}
 
-/* ===== 集計 ===== */
 function buildAgg_(rows, axisKey) {
   const map = new Map();
 
   for (const r of rows) {
-    const k = safeStr(r?.[axisKey]);
-    if (!map.has(k)) {
-      map.set(k, { key: k, label: k, sales: 0, booths: new Set() });
+    const k = safeStr(r?.[axisKey], "未分類");
+
+    let o = map.get(k);
+    if (!o) {
+      o = { key: k, label: k, sales: 0, booths: new Set() };
+      map.set(k, o);
     }
-    const o = map.get(k);
+
     o.sales += toNum(r?.sales);
+
+    // 1ステーション = booth_id
     if (r?.booth_id != null) o.booths.add(String(r.booth_id));
   }
 
-  const items = [...map.values()]
-    .map(x => ({
-      key: x.key,
-      label: x.label,
-      sales: x.sales,
-      booths: x.booths.size,
-      color: colorSolid_(x.key),
-      colorSoft: colorSoft_(x.key),
-    }))
-    .sort((a, b) => b.sales - a.sales);
+  const items = Array.from(map.values()).map((x) => ({
+    key: x.key,
+    label: x.label,
+    sales: x.sales,
+    booths: x.booths.size,
+    color: colorSolid_(x.key),
+    colorSoft: colorSoft_(x.key),
+  }));
+
+  items.sort((a, b) => b.sales - a.sales);
 
   const totalSales = items.reduce((a, x) => a + x.sales, 0);
   const totalBooths = items.reduce((a, x) => a + x.booths, 0);
@@ -83,20 +103,15 @@ function buildAgg_(rows, axisKey) {
   return { items, totalSales, totalBooths };
 }
 
-/* ===== DOM ===== */
 function ensureDom_(mount, actions, mode) {
-  if (mount.__w1_root) return;
+  if (mount.__w1_root) return mount.__w1_root;
 
   const root = el("div", { class: `widget1 widget1-${mode}` });
 
+  // header
   const header = el("div", { class: "widget1Header" });
-  const title  = el("div", { class: "widget1Title" });
-  const left   = el("div", { class: "widget1HeaderLeft" }, [title]);
-
-  const select = el("select", { class: "widget1Select" });
-  AXES.forEach(a =>
-    select.appendChild(el("option", { value: a.key, text: a.label }))
-  );
+  const title = el("div", { class: "widget1Title", text: "景品ジャンル別 売上 / ステーション構成比" });
+  const left = el("div", { class: "widget1HeaderLeft" }, [title]);
 
   const btnExpand = el("button", {
     class: "btn ghost",
@@ -104,22 +119,30 @@ function ensureDom_(mount, actions, mode) {
     onClick: () => actions.onOpenFocus?.("shareDonut"),
   });
 
-  const right = el("div", { class: "widget1HeaderRight" });
+  const selectWrap = el("div", { class: "widget1SelectWrap" });
+  const select = el("select", { class: "widget1Select" });
+  AXES.forEach((a) => select.appendChild(el("option", { value: a.key, text: a.label })));
+  selectWrap.appendChild(select);
+
+  const right = el("div", { class: "widget1HeaderRight" }, []);
   if (mode === "normal") right.appendChild(btnExpand);
-  right.appendChild(select);
+  right.appendChild(selectWrap);
 
   header.appendChild(left);
   header.appendChild(right);
 
+  // body
   const body = el("div", { class: "widget1Body" });
-  const wrap = el("div", { class: "widget1ChartWrap" });
+
+  const chartWrap = el("div", { class: "widget1ChartWrap" });
   const canvas = el("canvas", { class: "widget1Canvas" });
-  wrap.appendChild(canvas);
+  chartWrap.appendChild(canvas);
 
-  const list = el("div", { class: "widget1ABC" });
+  // ✅ 凡例（右側）
+  const legendWrap = el("div", { class: "widget1ABC" });
 
-  body.appendChild(wrap);
-  body.appendChild(list);
+  body.appendChild(chartWrap);
+  body.appendChild(legendWrap);
 
   root.appendChild(header);
   root.appendChild(body);
@@ -131,88 +154,172 @@ function ensureDom_(mount, actions, mode) {
   mount.__w1_title = title;
   mount.__w1_select = select;
   mount.__w1_canvas = canvas;
-  mount.__w1_list = list;
+  mount.__w1_abc = legendWrap;
 
+  // change handler（1回だけ）
   select.addEventListener("change", () => {
-    actions.onSetWidget1Axis?.(select.value);
+    const axisKey = select.value;
+    actions.onSetWidget1Axis?.(axisKey);
     actions.requestRender?.();
   });
+
+  return root;
 }
 
-/* ===== Chart ===== */
+function updateTitle_(mount, axisKey) {
+  const meta = axisMeta(axisKey);
+  const title = mount.__w1_title;
+  if (!title) return;
+  title.textContent = `${meta.titleLabel}別 売上 / ステーション構成比`;
+}
+
+function updateSelect_(mount, axisKey) {
+  const sel = mount.__w1_select;
+  if (!sel) return;
+  if (sel.value !== axisKey) sel.value = axisKey;
+}
+
 function pct(v) {
+  if (!Number.isFinite(v)) return "0.0%";
   return (v * 100).toFixed(1) + "%";
 }
 
+/**
+ * ✅ Chart.js:
+ * - update中心
+ * - 壊れたら destroy→recreate で復旧
+ *
+ * ✅ tooltip:
+ * - items配列参照で落ちないよう、ctx.raw / ctx.label を主に使う
+ */
 function upsertChart_(mount, items, totalSales, totalBooths) {
   const Chart = window.Chart;
   const canvas = mount.__w1_canvas;
   if (!Chart || !canvas) return;
 
-  if (mount.__w1_chart) {
-    try { mount.__w1_chart.destroy(); } catch {}
+  const labels = items.map((x) => x.label);
+
+  const dataBooths = items.map((x) => (totalBooths ? x.booths / totalBooths : 0));
+  const dataSales = items.map((x) => (totalSales ? x.sales / totalSales : 0));
+
+  const colorsInner = items.map((x) => x.colorSoft || "#93c5fd");
+  const colorsOuter = items.map((x) => x.color || "#2563eb");
+
+  const tooltipLabel = (ctx) => {
+    // ctx.label は data.labels 由来（安全）
+    const label = String(ctx.label ?? "");
+    const ds = ctx.datasetIndex ?? 0;
+    const i = ctx.dataIndex ?? -1;
+
+    const share =
+      ds === 0
+        ? (Number.isFinite(dataBooths[i]) ? dataBooths[i] : (toNum(ctx.raw) || 0))
+        : (Number.isFinite(dataSales[i]) ? dataSales[i] : (toNum(ctx.raw) || 0));
+
+    // itemsがズレても落ちないように
+    const it = items[i] || null;
+    const booths = it ? it.booths : 0;
+
+    // 内周/外周で出し分け（必要最小限）
+    if (ds === 0) {
+      return `${label} / ステーション ${booths} / 構成比 ${pct(share)}`;
+    }
+    return `${label} / 構成比 ${pct(share)}`;
+  };
+
+  // 既存が別canvasなら破棄
+  if (mount.__w1_chart && mount.__w1_chart.canvas !== canvas) {
+    try {
+      mount.__w1_chart.destroy();
+    } catch (e) {}
     mount.__w1_chart = null;
   }
 
-  const dataBooths = items.map(x => totalBooths ? x.booths / totalBooths : 0);
-  const dataSales  = items.map(x => totalSales  ? x.sales  / totalSales  : 0);
+  // update（落ちたら recreate）
+  if (mount.__w1_chart) {
+    const ch = mount.__w1_chart;
+    try {
+      ch.data.labels = labels;
 
-  mount.__w1_chart = new Chart(canvas.getContext("2d"), {
-    type: "doughnut",
-    data: {
-      labels: items.map(x => x.label),
-      datasets: [
-        {
-          data: dataBooths,
-          backgroundColor: items.map(x => x.colorSoft),
-          radius: "55%",
-        },
-        {
-          data: dataSales,
-          backgroundColor: items.map(x => x.color),
-          radius: "95%",
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: "40%",
-      animation: false,
-      interaction: { mode: "nearest", intersect: true },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const i = ctx.dataIndex;
-              const it = items[i];
-              if (!it) return "";
-              const share = ctx.datasetIndex === 0 ? dataBooths[i] : dataSales[i];
-              return `${it.label} / 売上 ${yen(it.sales)} / 構成比 ${pct(share)}`;
-            },
+      ch.data.datasets[0].data = dataBooths;
+      ch.data.datasets[0].backgroundColor = colorsInner;
+
+      ch.data.datasets[1].data = dataSales;
+      ch.data.datasets[1].backgroundColor = colorsOuter;
+
+      ch.update("none");
+      return;
+    } catch (e) {
+      try {
+        ch.destroy();
+      } catch (_) {}
+      mount.__w1_chart = null;
+    }
+  }
+
+  // create
+  try {
+    mount.__w1_chart = new Chart(canvas.getContext("2d"), {
+      type: "doughnut",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "ステーション構成比",
+            data: dataBooths,
+            backgroundColor: colorsInner,
+            borderColor: "rgba(10,15,20,.65)",
+            borderWidth: 1,
+            radius: "55%",
+          },
+          {
+            label: "売上構成比",
+            data: dataSales,
+            backgroundColor: colorsOuter,
+            borderColor: "rgba(10,15,20,.65)",
+            borderWidth: 1,
+            radius: "95%",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "40%",
+        animation: false,
+        resizeDelay: 80,
+        interaction: { mode: "nearest", intersect: true },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: true,
+            callbacks: { label: tooltipLabel },
           },
         },
       },
-    },
-  });
+    });
+  } catch (e) {
+    console.error("[W1] Chart create failed:", e);
+  }
 }
 
-/* ===== 凡例 ===== */
+/**
+ * ✅ 凡例（右側リスト）
+ * - 「順位」は出さない
+ * - 色＋ラベル＋売上（円）だけ
+ */
 function renderLegend_(mount, items, totalBooths) {
-  const box = mount.__w1_list;
+  const box = mount.__w1_abc;
   if (!box) return;
 
   clear(box);
 
-  items.forEach(it => {
+  // 上から売上降順の items をそのまま表示
+  items.forEach((it) => {
     box.appendChild(
       el("div", { class: "widget1ABCRow" }, [
         el("span", { class: "label" }, [
-          el("span", {
-            class: "w1chip",
-            style: `background:${it.color};`
-          }),
+          el("span", { class: "w1chip", style: `background:${it.color};` }),
           el("span", { text: it.label }),
         ]),
         el("span", { class: "value", text: yen(it.sales) }),
@@ -223,30 +330,29 @@ function renderLegend_(mount, items, totalBooths) {
   box.appendChild(
     el("div", {
       class: "widget1Note",
-      text: `台数は 1ステーション（ブースID）単位で集計（合計 ${totalBooths}）`,
+      text:
+        `台数は 1ステーション（ブースID）単位で集計` +
+        (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""),
     })
   );
 }
 
-/* ===== render ===== */
 export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   if (!mount) return;
-
   const mode = opts.mode || "normal";
+
   ensureDom_(mount, actions, mode);
 
-  const axisKey = getAxisFromState_(state);
-  if (mount.__w1_select) mount.__w1_select.value = axisKey;
-
-  const meta = axisMeta(axisKey);
-  if (mount.__w1_title) {
-    mount.__w1_title.textContent =
-      `${meta.titleLabel}別 売上 / ステーション構成比`;
-  }
-
   const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
+
+  const axisKey = getAxisFromState_(state);
+  updateSelect_(mount, axisKey);
+  updateTitle_(mount, axisKey);
+
   const { items, totalSales, totalBooths } = buildAgg_(rows, axisKey);
 
   upsertChart_(mount, items, totalSales, totalBooths);
+
+  // ✅ 凡例（順位なし）
   renderLegend_(mount, items, totalBooths);
 }
