@@ -48,7 +48,7 @@ function getAxisFromState_(state) {
   return raw;
 }
 
-/** 色：カテゴリkeyから安定生成（Chart.js 互換の “カンマ区切り hsl” を使う） */
+/** 色：カテゴリkeyから安定生成 */
 function hashHue_(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
@@ -56,7 +56,6 @@ function hashHue_(str) {
 }
 function colorSolid_(key) {
   const hue = hashHue_(String(key));
-  // ✅ Chart.js の色解釈が確実な形式
   return `hsl(${hue}, 80%, 55%)`;
 }
 function colorSoft_(key) {
@@ -110,7 +109,20 @@ function buildABC_(items, totalSales) {
 }
 
 function ensureDom_(mount, actions, mode) {
-  if (mount.__w1_root) return mount.__w1_root;
+  // mode が変わったら作り直し（normal→expanded などで事故らないように）
+  if (mount.__w1_root) {
+    const curMode = mount.__w1_mode || "normal";
+    if (curMode === mode) return mount.__w1_root;
+
+    // 既存 Chart を破棄してから作り直す
+    if (mount.__w1_chart) {
+      try { mount.__w1_chart.destroy(); } catch (e) {}
+      mount.__w1_chart = null;
+    }
+    mount.__w1_root = null;
+  }
+
+  mount.__w1_mode = mode;
 
   const root = el("div", { class: `widget1 widget1-${mode}` });
 
@@ -162,11 +174,14 @@ function ensureDom_(mount, actions, mode) {
   mount.__w1_abc = abcWrap;
 
   // change handler（1回だけ）
-  select.addEventListener("change", () => {
-    const axisKey = select.value;
-    actions.onSetWidget1Axis?.(axisKey);
-    actions.requestRender?.();
-  });
+  if (!select.__bound) {
+    select.addEventListener("change", () => {
+      const axisKey = select.value;
+      actions.onSetWidget1Axis?.(axisKey);
+      actions.requestRender?.();
+    });
+    select.__bound = true;
+  }
 
   return root;
 }
@@ -190,9 +205,9 @@ function pct(v) {
 }
 
 /**
- * ✅ ここが本丸：Chart.js が落ちたら destroy→recreate で復旧
- * - update時に options をいじり倒さない
- * - 色は確実に string（hsl/hex）にする
+ * ✅ 修正版：
+ * - tooltip が items[i] 前提で落ちない（ガード）
+ * - update でも tooltip callback を差し替える（stale参照を作らない）
  */
 function upsertChart_(mount, items, totalSales, totalBooths) {
   const Chart = window.Chart;
@@ -207,12 +222,19 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   const colorsInner = items.map(x => x.colorSoft || "#93c5fd");
   const colorsOuter = items.map(x => x.color || "#2563eb");
 
+  // ✅ 落ちない tooltip（items が取れない場合もフォールバック）
   const tooltipLabel = (ctx) => {
-    const i = ctx.dataIndex;
-    const it = items[i];
-    const isInner = (ctx.datasetIndex === 0);
-    const share = isInner ? dataBooths[i] : dataSales[i];
-    return `${it.label} / 台数 ${it.booths}台（ブース） / 構成比 ${pct(share)}`;
+    const i = ctx?.dataIndex ?? -1;
+    const it = (i >= 0 && i < items.length) ? items[i] : null;
+
+    const isInner = (ctx?.datasetIndex === 0);
+    const shareArr = isInner ? dataBooths : dataSales;
+    const share = (i >= 0 && i < shareArr.length) ? shareArr[i] : 0;
+
+    const label = it?.label ?? String(ctx?.label ?? "—");
+    const booths = it?.booths ?? 0;
+
+    return `${label} / 台数 ${booths}台（ブース） / 構成比 ${pct(share)}`;
   };
 
   // 既存が別canvasなら破棄
@@ -233,7 +255,16 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
       ch.data.datasets[1].data = dataSales;
       ch.data.datasets[1].backgroundColor = colorsOuter;
 
-      // ✅ optionsは触りすぎない（破綻要因）
+      // ✅ ここが必須：tooltip callback を “最新items” に差し替える
+      ch.options.plugins = ch.options.plugins || {};
+      ch.options.plugins.tooltip = ch.options.plugins.tooltip || {};
+      ch.options.plugins.tooltip.enabled = true;
+      ch.options.plugins.tooltip.callbacks = ch.options.plugins.tooltip.callbacks || {};
+      ch.options.plugins.tooltip.callbacks.label = tooltipLabel;
+
+      // 当たり判定は少し緩める（任意だが体感が良くなる）
+      ch.options.interaction = { mode: "nearest", intersect: false };
+
       ch.update("none");
       return;
     } catch (e) {
@@ -273,7 +304,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
         cutout: "40%",
         animation: false,
         resizeDelay: 80,
-        interaction: { mode: "nearest", intersect: true },
+        interaction: { mode: "nearest", intersect: false },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -284,7 +315,6 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
       },
     });
   } catch (e) {
-    // ここに来るなら Chart.js 本体か他プラグインが壊れてる
     console.error("[W1] Chart create failed:", e);
   }
 }
