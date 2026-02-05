@@ -6,16 +6,12 @@ import { el, clear } from "../utils/dom.js";
  * - 外周: 売上構成比
  * - 内周: ステーション構成比（distinct booth_id）
  *
- * ✅ A/B/C ランクは削除（右側は「凡例リスト」として維持）
+ * ✅ 右側は「凡例（判断ブロック）」として表示
  * ✅ tooltip は「そのチャートの最新集計」を必ず参照する（ステーション0化を潰す）
  *
- * === Phase 1 (Legend only / Non-breaking) ===
- * ✅ 右側凡例を「1カテゴリ=判断ブロック」へ拡張
- *    - ■(グラフ同色), カテゴリ名
- *    - 売上（大）
- *    - 売上構成比 / マシン(ステーション)構成比
- *    - 平均売上 / 消化額合計 / 原価率
- * ✅ グラフ本体/軸切替/色/tooltipは触らない
+ * Phase 1:
+ * - 凡例：■(同色) + カテゴリ名 / 売上(大) / 売上構成比 / マシン構成比 / 平均売上 / 消化額合計 / 原価率
+ * - 既存のドーナツ・軸切替・tooltipは壊さない
  */
 
 const AXES = [
@@ -36,6 +32,18 @@ function toNum(v) {
   const n = Number(String(v).replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
+function toNumOrNull(v) {
+  if (v == null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  const s = String(v).trim().replace(/,/g, "");
+  if (!s) return null;
+  if (s.endsWith("%")) {
+    const n = Number(s.slice(0, -1));
+    return Number.isFinite(n) ? n / 100 : null;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
 
 function yen(n) {
   return new Intl.NumberFormat("ja-JP").format(Math.round(n || 0)) + "円";
@@ -49,6 +57,14 @@ function safeStr(v, fallback = "未分類") {
 function pct(v) {
   if (!Number.isFinite(v)) return "0.0%";
   return (v * 100).toFixed(1) + "%";
+}
+function fmtMaybeYen_(n, fallback = "—") {
+  if (n == null || !Number.isFinite(n)) return fallback;
+  return yen(n);
+}
+function fmtMaybePct_(v, fallback = "—") {
+  if (v == null || !Number.isFinite(v)) return fallback;
+  return pct(v);
 }
 
 function axisMeta(axisKey) {
@@ -76,50 +92,32 @@ function colorSoft_(key) {
   return `hsl(${hue}, 75%, 70%)`;
 }
 
-/** ===== Phase1: Legend用の数値ピック（存在する列だけ使う / 無ければnull） ===== */
+/** ===== Phase1: 行から数値を拾う（列名ゆらぎ吸収 / 無ければnull） ===== */
 function pickNum_(r, keys) {
   for (const k of keys) {
     const v = r?.[k];
-    if (v == null || v === "") continue;
-    const n = Number(String(v).replace(/,/g, ""));
-    if (Number.isFinite(n)) return n;
+    const n = toNumOrNull(v);
+    if (n != null) return n;
   }
   return null;
 }
 
-// 消化額っぽい候補（必要ならここは後であなたの実データに合わせて絞る）
+// 消化額（列名は環境差あり：候補を広めに）
 function pickConsume_(r) {
   return pickNum_(r, [
-    "consume", "consume_yen", "consume_amount", "consumption", "spent",
     "消化額", "消化額合計", "総消化額", "消化",
+    "consume", "consume_yen", "consume_amount", "consumption", "spent",
     "cost", "cost_yen",
   ]);
 }
 
-// 行に原価率があれば拾う（0-1 / 0-100 どちらも許容）
+// 原価率（charts.js と一致させる：cost_rate / 原価率）
 function pickCostRate_(r) {
-  const v = pickNum_(r, ["costRate", "cost_rate", "原価率"]);
+  const v = pickNum_(r, ["cost_rate", "原価率", "costRate", "cost_rate_pct", "cost_rate_percent"]);
   if (v == null) return null;
-  return v > 1.5 ? (v / 100) : v;
+  return v > 1.5 ? (v / 100) : v; // 0-100%が来ても0-1に揃える
 }
 
-function fmtMaybeYen_(n, fallback = "—") {
-  if (n == null || !Number.isFinite(n)) return fallback;
-  return yen(n);
-}
-function fmtMaybePct_(v, fallback = "—") {
-  if (v == null || !Number.isFinite(v)) return fallback;
-  return pct(v);
-}
-
-/**
- * 集計：
- * - sales（必須）
- * - booths（distinct booth_id）
- * - consume（取れた時だけ）
- * - avgSales（sales/booths）
- * - costRate（優先：行の原価率平均 / 次点：consume*1.1/sales）
- */
 function buildAgg_(rows, axisKey) {
   const map = new Map();
 
@@ -133,25 +131,28 @@ function buildAgg_(rows, axisKey) {
         label: k,
         sales: 0,
         booths: new Set(),
+
         consumeSum: 0,
         consumeSeen: false,
+
         costRateSum: 0,
         costRateCount: 0,
       };
       map.set(k, o);
     }
 
+    // 売上（現仕様：rowsは sales を持つ）
     o.sales += toNum(r?.sales);
 
-    // 1ステーション = booth_id
+    // booth_id distinct
     if (r?.booth_id != null && String(r.booth_id).trim() !== "") {
       o.booths.add(String(r.booth_id));
     }
 
     // 消化額（あれば）
-    const c = pickConsume_(r);
-    if (c != null) {
-      o.consumeSum += c;
+    const cons = pickConsume_(r);
+    if (cons != null) {
+      o.consumeSum += cons;
       o.consumeSeen = true;
     }
 
@@ -165,15 +166,15 @@ function buildAgg_(rows, axisKey) {
 
   const items = Array.from(map.values()).map(x => {
     const booths = x.booths.size;
-
     const consume = x.consumeSeen ? x.consumeSum : null;
-    const avgSales = (booths > 0) ? (x.sales / booths) : null;
+    const avgSales = booths > 0 ? (x.sales / booths) : null;
 
+    // 原価率：優先：行の平均 / 次点：消化額×1.1 / 売上
     let costRate = null;
     if (x.costRateCount > 0) {
-      costRate = x.costRateSum / x.costRateCount; // 行の原価率平均（安全）
+      costRate = x.costRateSum / x.costRateCount;
     } else if (consume != null && x.sales > 0) {
-      costRate = (consume * 1.1) / x.sales; // 次点：消化額から推定（あなたの定義に寄せる）
+      costRate = (consume * 1.1) / x.sales;
     }
 
     return {
@@ -308,7 +309,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
       ch.data.datasets[1].data = dataSales;
       ch.data.datasets[1].backgroundColor = colorsOuter;
 
-      // ✅ 最新の参照をチャートに載せる（これが “ステーション0化” の対策）
+      // ✅ 最新の参照をチャートに載せる（“ステーション0化”対策）
       ch.$w1 = { items, totalSales, totalBooths, dataSales, dataBooths };
 
       ch.update("none");
@@ -420,23 +421,16 @@ function renderLegend_(mount, items, totalSales, totalBooths) {
 
     box.appendChild(
       el("div", { class: "w1LegendItem" }, [
-        // head: ■ + name
         el("div", { class: "w1LegendHead" }, [
           el("span", { class: "w1LegendSwatch", style: `background:${it.color};` }),
           el("span", { class: "w1LegendLabel", text: it.label }),
         ]),
-
-        // sales big
         el("div", { class: "w1LegendSales", text: fmtMaybeYen_(it.sales, "—") }),
-
-        // shares
         el("div", { class: "w1LegendShares" }, [
           el("span", { class: "w1LegendShare", text: `売上構成比：${fmtMaybePct_(salesShare, "—")}` }),
           el("span", { class: "w1LegendShareSep", text: "｜" }),
           el("span", { class: "w1LegendShare", text: `マシン構成比：${fmtMaybePct_(boothShare, "—")}` }),
         ]),
-
-        // meta rows
         el("div", { class: "w1LegendMeta" }, [
           el("div", { class: "w1LegendMetaRow" }, [
             el("span", { class: "k", text: "平均売上：" }),
@@ -455,13 +449,10 @@ function renderLegend_(mount, items, totalSales, totalBooths) {
     );
   });
 
-  // 末尾ノート（既存維持）
   box.appendChild(
     el("div", {
       class: "widget1Note",
-      text:
-        `台数は 1ステーション（ブースID）単位で集計` +
-        (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""),
+      text: `台数は 1ステーション（ブースID）単位で集計` + (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""),
     })
   );
 }
