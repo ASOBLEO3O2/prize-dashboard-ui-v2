@@ -147,6 +147,137 @@
   white-space:nowrap;
 }
 
+/* =========================================================
+   Phase1 追加：右側凡例を「判断ブロック」にする（非破壊）
+   - renderLegend_ が .w1Legend* を出す想定
+   - 既存 .widget1Row は残す（他で使っても壊れない）
+   ========================================================= */
+
+/* スクロールは既に widget1ABC にあるので、ここは追加の微調整のみ */
+.widget1ABC{
+  padding-right:8px; /* スクロールバーと干渉しにくく */
+}
+
+/* 1カテゴリ=1ブロック */
+.w1LegendItem{
+  border:1px solid rgba(148,163,184,.14);
+  background:rgba(15,23,42,.45);
+  border-radius:12px;
+  padding:10px 10px;
+}
+.w1LegendItem:hover{
+  border-color: rgba(109,211,251,.35);
+  background:rgba(15,23,42,.60);
+}
+
+/* head: ■ + name */
+.w1LegendHead{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:6px;
+}
+.w1LegendSwatch{
+  width:12px;
+  height:12px;
+  border-radius:2px; /* ■ */
+  flex:0 0 auto;
+  box-shadow:0 0 0 2px rgba(0,0,0,.18) inset;
+}
+.w1LegendLabel{
+  font-weight:900;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* 売上（大） */
+.w1LegendSales{
+  font-size:18px;
+  font-weight:900;
+  letter-spacing:.2px;
+  margin:2px 0 6px 0;
+  white-space:nowrap;
+}
+
+/* 構成比行 */
+.w1LegendShares{
+  color:rgba(148,163,184,.92);
+  font-size:12px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:center;
+  margin-bottom:8px;
+}
+.w1LegendShareSep{
+  opacity:.65;
+}
+
+/* 小指標 */
+.w1LegendMeta{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  font-size:12px;
+}
+.w1LegendMetaRow{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+}
+.w1LegendMetaRow .k{
+  color:rgba(148,163,184,.92);
+  white-space:nowrap;
+}
+.w1LegendMetaRow .v{
+  font-weight:900;
+  white-space:nowrap;
+}
+
+/* widget1Note は既存のまま使う前提（無ければ追加で） */
+.widget1Note{
+  margin-top:6px;
+  color:rgba(148,163,184,.92);
+  font-size:12px;
+  line-height:1.35;
+}
+
+/* =========================================================
+   互換（保険）：古いクラス名が残ってても最低限崩れない
+   - widget1ABCRow / label / value がもし出ても見た目が破綻しない
+   ========================================================= */
+.widget1ABCRow{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+
+  padding:9px 10px;
+  border-radius:12px;
+  background:rgba(15,23,42,.45);
+  border:1px solid rgba(148,163,184,.14);
+}
+.widget1ABCRow:hover{
+  border-color: rgba(109,211,251,.35);
+  background:rgba(15,23,42,.60);
+}
+.widget1ABCRow .label{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-weight:900;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.widget1ABCRow .value{
+  font-weight:900;
+  opacity:.95;
+  white-space:nowrap;
+}
+
 /* responsive */
 @media (max-width: 980px){
   .widget1Body{
