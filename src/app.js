@@ -201,31 +201,36 @@ async function hydrateFromRaw() {
   }
 
   // ✅ 正規化：rawの booth_id を絶対に守る
-  const normalizedRows = rows.map((r) => {
-    const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
-    const m = key ? masterDict?.[key] : null;
-    const decoded = key ? decodeSymbol(key, codebook) : {};
+const normalizedRows = rows.map((r) => {
+  const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
+  const m = key ? masterDict?.[key] : null;
+  const decoded = key ? decodeSymbol(key, codebook) : {};
 
-    return {
-      ...r,
-      ...(m || {}),
-      ...decoded,
+  return {
+    ...r,
+    ...(m || {}),
+    ...decoded,
 
-      // ✅ 最後に raw を再代入して “上書き防止”
-      booth_id: r?.booth_id,
-      machine_name: r?.machine_name,
-      machine_key: r?.machine_key,
-      label_id: r?.label_id,
+    // ✅ 最後に raw を再代入して “上書き防止”
+    booth_id: r?.booth_id,
+    machine_name: r?.machine_name,
+    machine_key: r?.machine_key,
+    label_id: r?.label_id,
 
-      symbol_raw: r?.symbol_raw,
-      raw: r?.raw,
-      sales: r?.sales,
-      claw: r?.claw,
-      cost_rate: r?.cost_rate,
-      consume: r?.claw,      // ✅ 追加：凡例/詳細で使う統一キー
-      costRate: r?.cost_rate // ✅ 追加：detail.js とキー統一（任意だが安全）    };
-  });
+    symbol_raw: r?.symbol_raw,
+    raw: r?.raw,
 
+    sales: r?.sales,
+    claw: r?.claw,
+    cost_rate: r?.cost_rate,
+
+    // ✅ 追加：凡例/詳細で使う統一キー
+    consume: r?.claw,
+    costRate: r?.cost_rate,
+  };
+});
+
+  
   // フィルタ
   const st = store.get();
   const filtered = applyFilters(normalizedRows, st.filters);
