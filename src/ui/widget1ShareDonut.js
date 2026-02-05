@@ -8,6 +8,14 @@ import { el, clear } from "../utils/dom.js";
  *
  * ✅ A/B/C ランクは削除（右側は「凡例リスト」として維持）
  * ✅ tooltip は「そのチャートの最新集計」を必ず参照する（ステーション0化を潰す）
+ *
+ * === Phase 1 (Legend only / Non-breaking) ===
+ * ✅ 右側凡例を「1カテゴリ=判断ブロック」へ拡張
+ *    - ■(グラフ同色), カテゴリ名
+ *    - 売上（大）
+ *    - 売上構成比 / マシン(ステーション)構成比
+ *    - 平均売上 / 消化額合計 / 原価率
+ * ✅ グラフ本体/軸切替/色/tooltipは触らない
  */
 
 const AXES = [
@@ -68,6 +76,50 @@ function colorSoft_(key) {
   return `hsl(${hue}, 75%, 70%)`;
 }
 
+/** ===== Phase1: Legend用の数値ピック（存在する列だけ使う / 無ければnull） ===== */
+function pickNum_(r, keys) {
+  for (const k of keys) {
+    const v = r?.[k];
+    if (v == null || v === "") continue;
+    const n = Number(String(v).replace(/,/g, ""));
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+// 消化額っぽい候補（必要ならここは後であなたの実データに合わせて絞る）
+function pickConsume_(r) {
+  return pickNum_(r, [
+    "consume", "consume_yen", "consume_amount", "consumption", "spent",
+    "消化額", "消化額合計", "総消化額", "消化",
+    "cost", "cost_yen",
+  ]);
+}
+
+// 行に原価率があれば拾う（0-1 / 0-100 どちらも許容）
+function pickCostRate_(r) {
+  const v = pickNum_(r, ["costRate", "cost_rate", "原価率"]);
+  if (v == null) return null;
+  return v > 1.5 ? (v / 100) : v;
+}
+
+function fmtMaybeYen_(n, fallback = "—") {
+  if (n == null || !Number.isFinite(n)) return fallback;
+  return yen(n);
+}
+function fmtMaybePct_(v, fallback = "—") {
+  if (v == null || !Number.isFinite(v)) return fallback;
+  return pct(v);
+}
+
+/**
+ * 集計：
+ * - sales（必須）
+ * - booths（distinct booth_id）
+ * - consume（取れた時だけ）
+ * - avgSales（sales/booths）
+ * - costRate（優先：行の原価率平均 / 次点：consume*1.1/sales）
+ */
 function buildAgg_(rows, axisKey) {
   const map = new Map();
 
@@ -76,7 +128,16 @@ function buildAgg_(rows, axisKey) {
 
     let o = map.get(k);
     if (!o) {
-      o = { key: k, label: k, sales: 0, booths: new Set() };
+      o = {
+        key: k,
+        label: k,
+        sales: 0,
+        booths: new Set(),
+        consumeSum: 0,
+        consumeSeen: false,
+        costRateSum: 0,
+        costRateCount: 0,
+      };
       map.set(k, o);
     }
 
@@ -86,16 +147,47 @@ function buildAgg_(rows, axisKey) {
     if (r?.booth_id != null && String(r.booth_id).trim() !== "") {
       o.booths.add(String(r.booth_id));
     }
+
+    // 消化額（あれば）
+    const c = pickConsume_(r);
+    if (c != null) {
+      o.consumeSum += c;
+      o.consumeSeen = true;
+    }
+
+    // 原価率（あれば）
+    const cr = pickCostRate_(r);
+    if (cr != null) {
+      o.costRateSum += cr;
+      o.costRateCount += 1;
+    }
   }
 
-  const items = Array.from(map.values()).map(x => ({
-    key: x.key,
-    label: x.label,
-    sales: x.sales,
-    booths: x.booths.size,
-    color: colorSolid_(x.key),
-    colorSoft: colorSoft_(x.key),
-  }));
+  const items = Array.from(map.values()).map(x => {
+    const booths = x.booths.size;
+
+    const consume = x.consumeSeen ? x.consumeSum : null;
+    const avgSales = (booths > 0) ? (x.sales / booths) : null;
+
+    let costRate = null;
+    if (x.costRateCount > 0) {
+      costRate = x.costRateSum / x.costRateCount; // 行の原価率平均（安全）
+    } else if (consume != null && x.sales > 0) {
+      costRate = (consume * 1.1) / x.sales; // 次点：消化額から推定（あなたの定義に寄せる）
+    }
+
+    return {
+      key: x.key,
+      label: x.label,
+      sales: x.sales,
+      booths,
+      consume,
+      avgSales,
+      costRate,
+      color: colorSolid_(x.key),
+      colorSoft: colorSoft_(x.key),
+    };
+  });
 
   items.sort((a, b) => b.sales - a.sales);
 
@@ -309,29 +401,67 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   }
 }
 
-function renderLegend_(mount, items, totalBooths) {
+/**
+ * Phase1: 右側凡例を「判断ブロック」形式で描画
+ * - ■(同色) + カテゴリ名
+ * - 売上（大）
+ * - 売上構成比 / マシン(ステーション)構成比
+ * - 平均売上 / 消化額合計 / 原価率
+ */
+function renderLegend_(mount, items, totalSales, totalBooths) {
   const box = mount.__w1_legend;
   if (!box) return;
 
   clear(box);
 
-  // 右側：凡例（順位なし）
   items.forEach((it) => {
+    const salesShare = totalSales ? (it.sales / totalSales) : null;
+    const boothShare = totalBooths ? (it.booths / totalBooths) : null;
+
     box.appendChild(
-      el("div", { class: "widget1ABCRow" }, [
-        el("span", { class: "label" }, [
-          el("span", { class: "w1chip", style: `background:${it.color};` }),
-          el("span", { text: it.label }),
+      el("div", { class: "w1LegendItem" }, [
+        // head: ■ + name
+        el("div", { class: "w1LegendHead" }, [
+          el("span", { class: "w1LegendSwatch", style: `background:${it.color};` }),
+          el("span", { class: "w1LegendLabel", text: it.label }),
         ]),
-        el("span", { class: "value", text: yen(it.sales) }),
+
+        // sales big
+        el("div", { class: "w1LegendSales", text: fmtMaybeYen_(it.sales, "—") }),
+
+        // shares
+        el("div", { class: "w1LegendShares" }, [
+          el("span", { class: "w1LegendShare", text: `売上構成比：${fmtMaybePct_(salesShare, "—")}` }),
+          el("span", { class: "w1LegendShareSep", text: "｜" }),
+          el("span", { class: "w1LegendShare", text: `マシン構成比：${fmtMaybePct_(boothShare, "—")}` }),
+        ]),
+
+        // meta rows
+        el("div", { class: "w1LegendMeta" }, [
+          el("div", { class: "w1LegendMetaRow" }, [
+            el("span", { class: "k", text: "平均売上：" }),
+            el("span", { class: "v", text: fmtMaybeYen_(it.avgSales, "—") }),
+          ]),
+          el("div", { class: "w1LegendMetaRow" }, [
+            el("span", { class: "k", text: "消化額合計：" }),
+            el("span", { class: "v", text: fmtMaybeYen_(it.consume, "—") }),
+          ]),
+          el("div", { class: "w1LegendMetaRow" }, [
+            el("span", { class: "k", text: "原価率：" }),
+            el("span", { class: "v", text: fmtMaybePct_(it.costRate, "—") }),
+          ]),
+        ]),
       ])
     );
   });
 
+  // 末尾ノート（既存維持）
   box.appendChild(
     el("div", {
       class: "widget1Note",
-      text: `台数は 1ステーション（ブースID）単位で集計` + (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""),
+      text:
+        `台数は 1ステーション（ブースID）単位で集計` +
+        (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""),
     })
   );
 }
@@ -351,5 +481,5 @@ export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   const { items, totalSales, totalBooths } = buildAgg_(rows, axisKey);
 
   upsertChart_(mount, items, totalSales, totalBooths);
-  renderLegend_(mount, items, totalBooths);
+  renderLegend_(mount, items, totalSales, totalBooths);
 }
