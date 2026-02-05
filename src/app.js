@@ -222,7 +222,8 @@ async function hydrateFromRaw() {
       sales: r?.sales,
       claw: r?.claw,
       cost_rate: r?.cost_rate,
-    };
+      consume: r?.claw,      // ✅ 追加：凡例/詳細で使う統一キー
+      costRate: r?.cost_rate // ✅ 追加：detail.js とキー統一（任意だが安全）    };
   });
 
   // フィルタ
