@@ -7,13 +7,18 @@ import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
 /**
  * 役割：
  * - 中段カードを描画
- *   - ✅ ウィジェット①（売上/ブース 構成比）← 中段KPIとして統一
- *   - 原価率分布（canvas器）
- *   - 散布図（canvas器）
+ *   - ✅ ウィジェット①（売上/ブース 構成比）
+ *   - ✅ ウィジェット②（原価率分布：canvas器）
+ *   - ✅ 散布図（canvas器）
  * - 下段（midCardsMount）は既存仕様のまま（無罪）
+ *
+ * 重要：
+ * - 2×2の描画範囲を固定するため、上段カードは全て
+ *   「midPanelHeader（固定高） + midPanelBody（残り全部）」の構造に統一する。
+ * - canvas は作り直さない（Chart.js が死ぬので __built でガード）
  */
 export function renderMidKpi(mounts, state, actions) {
-  // ===== ウィジェット①（このカードはDOMを再生成しない） =====
+  // ===== ウィジェット①（DOM再生成しない：器は統一） =====
   renderWidgetCard_(mounts.midSlotSalesDonut, state, actions);
 
   // 旧「マシン構成比」枠は1回だけ消す（以降触らない）
@@ -50,18 +55,27 @@ export function renderMidKpi(mounts, state, actions) {
 
 /* =========================
    上段：ウィジェット①カード（DOM再生成しない）
+   - ✅ midPanelHeader + midPanelBody の構造に統一（描画範囲固定）
    ========================= */
 
 function renderWidgetCard_(slotMount, state, actions) {
   if (!slotMount) return;
 
-  // 初回だけカード枠を作る
+  // 初回だけカード枠を作る（ヘッダー付きで統一）
   if (!slotMount.__w1_body) {
     clear(slotMount);
 
     const card = el("div", { class: "card midPanel" });
+
+    const header = buildHeader_({
+      title: "構成比",
+      tools: null,
+      onFocus: () => actions.onOpenFocus?.("shareDonut"),
+    });
+
     const body = el("div", { class: "midPanelBody" });
 
+    card.appendChild(header);
     card.appendChild(body);
     slotMount.appendChild(card);
 
@@ -88,12 +102,33 @@ function renderChartCardOnce_(slotMount, { title, tools, canvasId, onFocus }) {
 
   const card = el("div", { class: "card midPanel" });
 
+  const header = buildHeader_({ title, tools, onFocus });
+
+  const body = el(
+    "div",
+    { class: "midPanelBody chartBody", onClick: () => onFocus?.() },
+    [el("canvas", { id: canvasId })]
+  );
+
+  card.appendChild(header);
+  card.appendChild(body);
+  slotMount.appendChild(card);
+}
+
+/* =========================
+   ヘッダー（共通）
+   - ここを統一すると、2×2 の描画領域（body）が完全に揃う
+   ========================= */
+
+function buildHeader_({ title, tools, onFocus }) {
   const headerRight = el(
     "div",
     { style: "display:flex; align-items:center; gap:10px;" },
     []
   );
+
   if (tools) headerRight.appendChild(tools);
+
   headerRight.appendChild(
     el("button", {
       class: "btn ghost midPanelBtn",
@@ -105,23 +140,13 @@ function renderChartCardOnce_(slotMount, { title, tools, canvasId, onFocus }) {
     })
   );
 
-  const header = el("div", { class: "midPanelHeader" }, [
+  return el("div", { class: "midPanelHeader" }, [
     el("div", { class: "midPanelTitleWrap" }, [
       el("div", { class: "midPanelTitle", text: title }),
       el("div", { class: "midPanelSub", text: "" }),
     ]),
     headerRight,
   ]);
-
-  const body = el(
-    "div",
-    { class: "midPanelBody chartBody", onClick: () => onFocus?.() },
-    [el("canvas", { id: canvasId })]
-  );
-
-  card.appendChild(header);
-  card.appendChild(body);
-  slotMount.appendChild(card);
 }
 
 /* =========================
