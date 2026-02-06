@@ -394,3 +394,7 @@
   .widget1Body{ grid-template-columns:1fr; }
   .widget1ABC{ max-height:260px; }
 }
+
+.widget1Canvas{
+  max-height: none; /* ← いったん外す */
+}
