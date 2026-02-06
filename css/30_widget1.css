@@ -322,3 +322,75 @@
   color:var(--text,#e5e7eb);
   text-shadow:0 6px 18px rgba(0,0,0,.35);
 }
+/* =================================================
+   Widget① 拡大前：左右1:1 / 凡例スクロール / tooltipは領域内固定
+   ================================================= */
+
+/* 左右 1:1 */
+.widget1Body{
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap:12px;
+}
+
+/* ドーナツ側：はみ出し禁止（tooltipを確実に中に閉じる） */
+.widget1ChartWrap{
+  position:relative;
+  overflow:hidden;   /* ✅ tooltipが外へ出ない */
+}
+
+/* 凡例：中でスクロール */
+.widget1ABC{
+  overflow:auto;
+  overscroll-behavior: contain;
+}
+
+/* ドーナツ領域内 tooltip（下部固定） */
+.w1Tip{
+  position:absolute;
+  left:10px;
+  right:10px;
+  bottom:10px;
+
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(148,163,184,.18);
+  background:rgba(2,6,23,.78);
+  backdrop-filter: blur(6px);
+
+  box-shadow: 0 10px 26px rgba(0,0,0,.35);
+
+  opacity:0;
+  transform: translateY(6px);
+  transition: opacity .12s ease, transform .12s ease;
+
+  pointer-events:none;
+  z-index:5;
+}
+
+.w1Tip.show{
+  opacity:1;
+  transform: translateY(0);
+}
+
+.w1TipTitle{
+  font-weight:900;
+  margin-bottom:4px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.w1TipLine{
+  font-weight:800;
+  opacity:.95;
+  line-height:1.35;
+}
+
+/* 中央表示と被るなら少し上に逃がす（任意） */
+/* .w1Tip{ bottom:14px; } */
+
+/* スマホは下に落とす（保険） */
+@media (max-width: 720px){
+  .widget1Body{ grid-template-columns:1fr; }
+  .widget1ABC{ max-height:260px; }
+}
