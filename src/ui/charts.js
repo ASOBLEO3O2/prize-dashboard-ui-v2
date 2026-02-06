@@ -1,7 +1,5 @@
 // src/ui/charts.js
-
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
-
 
 let costHistChart = null;
 let salesCostScatter = null;
@@ -31,12 +29,22 @@ function toNum(v) {
 }
 
 function findCanvasAndMode(mounts) {
-  // layout.js が返す mounts を信用しすぎない（崩れ防止）
-  // DOMにあるものを毎回探す（軽い）
+  // mounts を信用しすぎず、毎回DOMから拾う（崩れ防止）
   const costCanvas = document.getElementById("costHistChart");
   const scatterCanvas = document.getElementById("salesCostScatter");
   const modeSelect = document.getElementById("costHistMode");
   return { costCanvas, scatterCanvas, modeSelect };
+}
+
+/**
+ * ★初回描画対策：
+ * canvas がDOMに存在しても「親の高さが未確定(=0)」だとChart.jsが0サイズで確定して崩れる。
+ * → 実寸が十分になるまで new Chart をしない。
+ */
+function canvasReady(canvas) {
+  if (!canvas) return false;
+  const rect = canvas.getBoundingClientRect();
+  return rect.width >= 120 && rect.height >= 120;
 }
 
 function ensureCharts() {
@@ -44,6 +52,10 @@ function ensureCharts() {
   if (!Chart) return;
 
   const { costCanvas, scatterCanvas } = findCanvasAndMode();
+
+  // ★ここが重要：サイズが確定するまで初期化しない
+  if (!canvasReady(costCanvas) || !canvasReady(scatterCanvas)) return;
+
   const c1 = costCanvas?.getContext?.("2d");
   const c2 = scatterCanvas?.getContext?.("2d");
   if (!c1 || !c2) return;
@@ -52,13 +64,12 @@ function ensureCharts() {
     costHistChart = new Chart(c1, {
       type: "bar",
       data: {
-        labels: COST_BINS.map(b => b.label),
-        datasets: [{ label: "台数", data: [0,0,0,0,0] }],
+        labels: COST_BINS.map((b) => b.label),
+        datasets: [{ label: "台数", data: [0, 0, 0, 0, 0] }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: "40%",
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false } },
@@ -74,6 +85,7 @@ function ensureCharts() {
       afterDraw(chart) {
         const { ctx, chartArea, scales } = chart;
         if (!chartArea) return;
+
         const x = scales.x.getPixelForValue(10000);
         const y = scales.y.getPixelForValue(0.05);
 
@@ -139,10 +151,10 @@ function computeCostHistogram(rows, mode) {
     const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
     if (rate == null) continue;
 
-    const idx = COST_BINS.findIndex(b => rate >= b.min && rate < b.max);
+    const idx = COST_BINS.findIndex((b) => rate >= b.min && rate < b.max);
     if (idx < 0) continue;
 
-    arr[idx] += (mode === "sales") ? sales : 1;
+    arr[idx] += mode === "sales" ? sales : 1;
   }
   return arr;
 }
@@ -165,7 +177,12 @@ function computeScatter(rows) {
 
 export function renderCharts(mounts, state) {
   ensureCharts();
-  if (!costHistChart || !salesCostScatter) return;
+
+  // ★初回描画対策：まだ初期化できてないなら次フレームで再試行
+  if (!costHistChart || !salesCostScatter) {
+    requestAnimationFrame(() => renderCharts(mounts, state));
+    return;
+  }
 
   const rows = Array.isArray(state.filteredRows) ? state.filteredRows : [];
 
@@ -175,7 +192,7 @@ export function renderCharts(mounts, state) {
   // ① 原価率分布
   const hist = computeCostHistogram(rows, mode);
   costHistChart.data.datasets[0].data = hist;
-  costHistChart.data.datasets[0].label = (mode === "sales") ? "売上" : "台数";
+  costHistChart.data.datasets[0].label = mode === "sales" ? "売上" : "台数";
   costHistChart.update();
 
   // ② 売上×原価率（散布）
@@ -188,10 +205,4 @@ export function renderCharts(mounts, state) {
     modeSelect.addEventListener("change", () => renderCharts(mounts, state));
     modeSelect.__bound = true;
   }
-
-  // ★スロット入替直後に「旧サイズ」で描かれるのを避ける（1フレーム遅延でresize）
-  requestAnimationFrame(() => {
-    costHistChart?.resize();
-    salesCostScatter?.resize();
-  });
 }
