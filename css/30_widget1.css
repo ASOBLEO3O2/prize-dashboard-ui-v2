@@ -1,8 +1,6 @@
-/* =========================================
-   Widget①: 売上 / ステーション 構成比（2重ドーナツ）
-   - 左: ドーナツ（canvas）
-   - 右: ABC（凡例）
-   ========================================= */
+/* =======================================================
+   Widget① : 売上 / ステーション 構成比
+   ======================================================= */
 
 .widget1{
   height: 100%;
@@ -11,7 +9,7 @@
   flex-direction: column;
 }
 
-/* header（左：タイトル / 右：拡大 + ドロップダウン） */
+/* Header */
 .widget1Header{
   flex: 0 0 auto;
   display: flex;
@@ -21,13 +19,6 @@
   padding: 10px 10px 0;
 }
 
-.widget1HeaderLeft{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
 .widget1Title{
   font-weight: 900;
   white-space: nowrap;
@@ -35,26 +26,18 @@
   text-overflow: ellipsis;
 }
 
-.widget1HeaderRight{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-/* body（左: チャート / 右: ABC） */
+/* Body（残り高さを全部使う） */
 .widget1Body{
   flex: 1 1 auto;
-  min-height: 0;     /* ★暴走防止の本丸 */
-  overflow: hidden;  /* ★はみ出し防止 */
-
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
   gap: 12px;
   padding: 10px;
+  overflow: hidden;
 }
 
-/* Chart領域 */
+/* チャート領域 */
 .widget1ChartWrap{
   min-height: 0;
   height: 100%;
@@ -63,14 +46,15 @@
   justify-content: center;
 }
 
+/* canvas は上限を持たない */
 .widget1Canvas{
   width: 100% !important;
   height: 100% !important;
   display: block;
-  max-height: none; /* 上限固定は禁止（セル高とズレる） */
+  max-height: none;
 }
 
-/* ABC（凡例） */
+/* 凡例 */
 .widget1ABC{
   min-height: 0;
   overflow: auto;
@@ -79,45 +63,9 @@
   padding-right: 4px;
 }
 
-.widget1ABCRow{
-  display: grid;
-  grid-template-columns: 22px 1fr auto;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(51,65,85,.6);
-}
-
-.widget1ABCRow .rank{
-  font-weight: 900;
-  opacity: .9;
-}
-
-.widget1ABCRow.rank-A .rank{ opacity: 1; }
-.widget1ABCRow.rank-B .rank{ opacity: .85; }
-.widget1ABCRow.rank-C .rank{ opacity: .75; }
-
-.w1chip{
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
-  margin-right: 8px;
-  vertical-align: middle;
-}
-
-.widget1Note{
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* 狭い場合は縦並び */
+/* 狭い画面では縦並び */
 @media (max-width: 900px){
   .widget1Body{
     grid-template-columns: 1fr;
-  }
-  .widget1ABC{
-    max-height: 160px;
   }
 }
