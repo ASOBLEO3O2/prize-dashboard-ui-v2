@@ -1,89 +1,144 @@
-// src/ui/layout.js
-import { el } from "../utils/dom.js";
+// src/ui/kpiMid.js
+import { el, clear } from "../utils/dom.js";
 
-export function mountLayout(root, actions) {
-  const container = el("div", { class: "container" });
+/**
+ * 中段KPI（フェーズ：器固定）
+ * - 2×2の4枚を「同じ枠（card midPanel）」で必ず描画
+ * - widget1 はいったん placeholder（被さり切り分け）
+ * - costHist / scatter は canvas器だけ出す（charts.js が描く）
+ * - 下段は今は不要 → 非表示
+ */
+export function renderMidKpi(mounts, state, actions) {
+  console.log("[KPI_MID] LOADED dummy-phase 2026-02-06 r2");
 
-  const topbar = el("div", { class: "topbar" }, [
-    el("div", { class: "left" }, [
-      el("div", { class: "brand", text: "プライズシート" }),
-      el("div", { class: "badge", id: "updatedBadge", text: "更新日: —" }),
-    ]),
-    el("div", { class: "right" }, [
-      el("button", { class: "btn ghost", onClick: actions.onRefresh, text: "更新（モック）" }),
-      el("button", { class: "btn primary", onClick: actions.onOpenDrawer, text: "ドロワー" }),
-    ])
-  ]);
+  // 旧「マシン構成比」枠は一旦ダミーにする（表示は維持）
+  renderDummyCardOnce_(mounts.midSlotMachineDonut, {
+    title: "（予約）4枠目",
+    body: buildDummyBox_("slot2 placeholder"),
+    onFocus: () => actions.onOpenFocus?.("dummy2"),
+  });
 
-  const topKpi = el("div", { class: "kpiTop", id: "topKpi" });
+  // ①（左上）：構成比（ドーナツ）＝今はダミー
+  renderDummyCardOnce_(mounts.midSlotSalesDonut, {
+    title: "構成比（ドーナツ）",
+    body: buildDummyBox_("widget1 placeholder"),
+    onFocus: () => actions.onOpenFocus?.("shareDonut"),
+  });
 
-  // =========================
-  // 中段：器だけ（#midDash を復活）
-  //  - 2×2固定（5枠なし）
-  //  - 中身はゼロ（kpiMid 側が後で差し込む）
-  // =========================
-  const midDash = el("div", { id: "midDash" }, [
-    el("div", { class: "midPanel dashPanel", id: "midSlotSalesDonut" }),
-    el("div", { class: "midPanel dashPanel", id: "midSlotMachineDonut" }),
-    el("div", { class: "midPanel dashPanel", id: "midSlotCostHist" }),
-    el("div", { class: "midPanel dashPanel", id: "midSlotScatter" }),
-  ]);
-
-  const section = el("div", { class: "section" }, [
-    el("div", { class: "sectionHeader" }, [
-      el("div", { class: "sectionTitle", text: "中段KPI" }),
-      el("div", { class: "sectionHint", text: "カードをタップ → 拡大表示（ドーナツは下層へ）" }),
-    ]),
-    el("div", { class: "midKpiWrap", id: "midKpiWrap" }, [
-      // ✅ 上段：2×2の器（#midDash）
-      el("div", { class: "midTop", id: "midTop" }, [
-        midDash,
+  // ②（右上）：原価率分布（器）
+  renderCanvasCardOnce_(mounts.midSlotCostHist, {
+    title: "原価率 分布",
+    tools: el("div", { class: "chartTools" }, [
+      el("select", { class: "select", id: "costHistMode" }, [
+        el("option", { value: "count", text: "台数" }),
+        el("option", { value: "sales", text: "売上" }),
       ]),
-      // ✅ 下段（既存の下段カード：無罪・触らない）
-      el("div", { class: "midCardsMount", id: "midCards" }),
     ]),
-    el("div", { id: "detailMount" }),
+    canvasId: "costHistChart",
+    onFocus: () => actions.onOpenFocus?.("costHist"),
+  });
+
+  // ③（左下）：散布図（器）
+  renderCanvasCardOnce_(mounts.midSlotScatter, {
+    title: "売上 × 原価率（マトリクス）",
+    tools: null,
+    canvasId: "salesCostScatter",
+    onFocus: () => actions.onOpenFocus?.("scatter"),
+  });
+
+  // 下段：今は不要
+  if (mounts.midCards) {
+    clear(mounts.midCards);
+    mounts.midCards.style.display = "none";
+  }
+}
+
+/* =========================
+   共通：ヘッダー（統一）
+   ========================= */
+
+function buildHeader_({ title, tools, onFocus }) {
+  const right = el(
+    "div",
+    { style: "display:flex; align-items:center; gap:10px;" },
+    []
+  );
+
+  if (tools) right.appendChild(tools);
+
+  right.appendChild(
+    el("button", {
+      class: "btn ghost midPanelBtn",
+      text: "拡大",
+      onClick: (e) => {
+        e.preventDefault();
+        onFocus?.();
+      },
+    })
+  );
+
+  return el("div", { class: "midPanelHeader" }, [
+    el("div", { class: "midPanelTitleWrap" }, [
+      el("div", { class: "midPanelTitle", text: title }),
+      el("div", { class: "midPanelSub", text: "" }),
+    ]),
+    right,
   ]);
+}
 
-  container.appendChild(topbar);
-  container.appendChild(topKpi);
-  container.appendChild(section);
-  root.appendChild(container);
+/* =========================
+   ダミーカード：毎回作り直さない
+   ========================= */
 
-  // =========================
-  // フォーカス（上層レイヤー）
-  //  - 中段カードを拡大表示するための器だけ
-  // =========================
-  const focusOverlay = el("div", { class: "focusOverlay", id: "focusOverlay" });
-  const focusModal = el("div", { class: "focusModal", id: "focusModal" });
-  focusOverlay.appendChild(focusModal);
-  root.appendChild(focusOverlay);
+function renderDummyCardOnce_(slotMount, { title, body, onFocus }) {
+  if (!slotMount) return;
+  if (slotMount.__built) return;
+  slotMount.__built = true;
 
-  // Drawer mount
-  const overlay = el("div", { class: "drawerOverlay", id: "drawerOverlay", onClick: actions.onCloseDrawer });
-  const drawer = el("div", { class: "drawer", id: "drawer" });
-  root.appendChild(overlay);
-  root.appendChild(drawer);
+  clear(slotMount);
 
-  return {
-    updatedBadge: container.querySelector("#updatedBadge"),
-    topKpi,
+  const card = el("div", { class: "card midPanel" });
+  const header = buildHeader_({ title, tools: null, onFocus });
+  const panelBody = el("div", { class: "midPanelBody" }, [body]);
 
-    // ✅ 中段4スロット（midDash 内に実体あり）
-    midSlotSalesDonut: container.querySelector("#midSlotSalesDonut"),
-    midSlotMachineDonut: container.querySelector("#midSlotMachineDonut"),
-    midSlotCostHist: container.querySelector("#midSlotCostHist"),
-    midSlotScatter: container.querySelector("#midSlotScatter"),
+  card.appendChild(header);
+  card.appendChild(panelBody);
+  slotMount.appendChild(card);
+}
 
-    // ✅ 既存：下段カード（無罪）
-    midCards: container.querySelector("#midCards"),
-    detailMount: container.querySelector("#detailMount"),
+/* =========================
+   canvasカード：器だけ（毎回作り直さない）
+   ========================= */
 
-    // ✅ フォーカス（上層レイヤー）
-    focusOverlay,
-    focusModal,
+function renderCanvasCardOnce_(slotMount, { title, tools, canvasId, onFocus }) {
+  if (!slotMount) return;
+  if (slotMount.__built) return;
+  slotMount.__built = true;
 
-    drawer,
-    drawerOverlay: overlay,
-  };
+  clear(slotMount);
+
+  const card = el("div", { class: "card midPanel" });
+  const header = buildHeader_({ title, tools, onFocus });
+
+  const panelBody = el(
+    "div",
+    { class: "midPanelBody chartBody", onClick: () => onFocus?.() },
+    [el("canvas", { id: canvasId })]
+  );
+
+  card.appendChild(header);
+  card.appendChild(panelBody);
+  slotMount.appendChild(card);
+}
+
+/* =========================
+   ダミー中身
+   ========================= */
+
+function buildDummyBox_(text) {
+  return el("div", {
+    style:
+      "height:100%; width:100%; display:flex; align-items:center; justify-content:center; opacity:.55; border:1px dashed rgba(148,163,184,.5); border-radius:12px;",
+    text,
+  });
 }
