@@ -2,38 +2,30 @@
 import { el, clear } from "../utils/dom.js";
 
 /**
- * 目的（ダミー固定フェーズ）：
- * - 中段KPI（2×2）の「4枚の既定カード」を必ず表示して
- *   レイアウト（高さ/幅/被さり）を確定させる。
- *
- * このファイルでは：
- * - ✅ 上段4枚：ダミー固定（header + body 統一）
- * - ✅ canvas：2枚（costHistChart / salesCostScatter）は “器だけ” 出す
- * - ✅ widget1 の実描画は一旦止める（被さり原因の切り分け）
- * - ✅ 下段（midCards）は一旦表示しない（もう不要、とのことなので）
- *
- * ※この後：レイアウトが固まったら widget1 を “同じ枠” に戻す
+ * 中段KPI（フェーズ：器固定）
+ * - 2×2の4枚を「同じ枠（card midPanel）」で必ず描画
+ * - widget1 はいったん placeholder（被さり切り分け）
+ * - costHist / scatter は canvas器だけ出す（charts.js が描く）
+ * - 下段は今は不要 → 非表示
  */
 export function renderMidKpi(mounts, state, actions) {
+  console.log("[KPI_MID] LOADED dummy-phase 2026-02-06 r2");
 
-  console.log("[KPI_MID] LOADED dummy-phase 2026-02-06 r1");  // スロットが無い場合は何もしない
- 
-  if (!mounts) return;
+  // 旧「マシン構成比」枠は一旦ダミーにする（表示は維持）
+  renderDummyCardOnce_(mounts.midSlotMachineDonut, {
+    title: "（予約）4枠目",
+    body: buildDummyBox_("slot2 placeholder"),
+    onFocus: () => actions.onOpenFocus?.("dummy2"),
+  });
 
-  // 旧「マシン構成比」枠が残っていれば隠す（保険）
-  if (mounts.midSlotMachineDonut && !mounts.midSlotMachineDonut.__hiddenOnce) {
-    clear(mounts.midSlotMachineDonut);
-    mounts.midSlotMachineDonut.style.display = "none";
-    mounts.midSlotMachineDonut.__hiddenOnce = true;
-  }
-
-  // ===== 4枚：既定カード（ダミー） =====
+  // ①（左上）：構成比（ドーナツ）＝今はダミー
   renderDummyCardOnce_(mounts.midSlotSalesDonut, {
     title: "構成比（ドーナツ）",
     body: buildDummyBox_("widget1 placeholder"),
     onFocus: () => actions.onOpenFocus?.("shareDonut"),
   });
 
+  // ②（右上）：原価率分布（器）
   renderCanvasCardOnce_(mounts.midSlotCostHist, {
     title: "原価率 分布",
     tools: el("div", { class: "chartTools" }, [
@@ -46,6 +38,7 @@ export function renderMidKpi(mounts, state, actions) {
     onFocus: () => actions.onOpenFocus?.("costHist"),
   });
 
+  // ③（左下）：散布図（器）
   renderCanvasCardOnce_(mounts.midSlotScatter, {
     title: "売上 × 原価率（マトリクス）",
     tools: null,
@@ -53,24 +46,7 @@ export function renderMidKpi(mounts, state, actions) {
     onFocus: () => actions.onOpenFocus?.("scatter"),
   });
 
-  // 4枚目（今は“空き”になっている想定の枠があればそこに出す）
-  // ※mount名がプロジェクトで違う可能性があるので「存在するなら」だけ描く
-  //    ここはあなたのlayout.jsのmount名に合わせて後で調整します。
-  const slot4 =
-    mounts.midSlotExtra ||
-    mounts.midSlot4 ||
-    mounts.midSlotMachineDonut || // もし4枠目として使い回すなら
-    null;
-
-  if (slot4 && slot4 !== mounts.midSlotMachineDonut) {
-    renderDummyCardOnce_(slot4, {
-      title: "ダミー枠（4枚目）",
-      body: buildDummyBox_("slot4 placeholder"),
-      onFocus: () => actions.onOpenFocus?.("dummy4"),
-    });
-  }
-
-  // ===== 下段：今は不要 → 非表示 =====
+  // 下段：今は不要
   if (mounts.midCards) {
     clear(mounts.midCards);
     mounts.midCards.style.display = "none";
@@ -111,7 +87,7 @@ function buildHeader_({ title, tools, onFocus }) {
 }
 
 /* =========================
-   ダミーカード：1回だけ作る
+   ダミーカード：毎回作り直さない
    ========================= */
 
 function renderDummyCardOnce_(slotMount, { title, body, onFocus }) {
@@ -120,11 +96,9 @@ function renderDummyCardOnce_(slotMount, { title, body, onFocus }) {
   slotMount.__built = true;
 
   clear(slotMount);
-  slotMount.style.display = "";
 
   const card = el("div", { class: "card midPanel" });
   const header = buildHeader_({ title, tools: null, onFocus });
-
   const panelBody = el("div", { class: "midPanelBody" }, [body]);
 
   card.appendChild(header);
@@ -133,7 +107,7 @@ function renderDummyCardOnce_(slotMount, { title, body, onFocus }) {
 }
 
 /* =========================
-   canvasカード：1回だけ作る（器だけ）
+   canvasカード：器だけ（毎回作り直さない）
    ========================= */
 
 function renderCanvasCardOnce_(slotMount, { title, tools, canvasId, onFocus }) {
@@ -142,7 +116,6 @@ function renderCanvasCardOnce_(slotMount, { title, tools, canvasId, onFocus }) {
   slotMount.__built = true;
 
   clear(slotMount);
-  slotMount.style.display = "";
 
   const card = el("div", { class: "card midPanel" });
   const header = buildHeader_({ title, tools, onFocus });
@@ -163,13 +136,9 @@ function renderCanvasCardOnce_(slotMount, { title, tools, canvasId, onFocus }) {
    ========================= */
 
 function buildDummyBox_(text) {
-  return el(
-    "div",
-    {
-      style:
-        "height:100%; width:100%; display:flex; align-items:center; justify-content:center; opacity:.6; border:1px dashed rgba(148,163,184,.5); border-radius:12px;",
-      text,
-    },
-    []
-  );
+  return el("div", {
+    style:
+      "height:100%; width:100%; display:flex; align-items:center; justify-content:center; opacity:.55; border:1px dashed rgba(148,163,184,.5); border-radius:12px;",
+    text,
+  });
 }
