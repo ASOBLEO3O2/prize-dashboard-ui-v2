@@ -110,6 +110,7 @@ const root = document.getElementById("app");
 // ✅ デバッグ用（任意）
 // コンソールで window.getState() が使えるようにする（壊れない安全なやつ）
 window.getState = () => store.get();
+window.store = store; // Consoleから store.get()/set() を使うため（デバッグ専用）
 
 // ===== actions =====
 const actions = {
