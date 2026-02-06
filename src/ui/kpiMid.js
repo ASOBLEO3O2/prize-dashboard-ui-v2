@@ -1,117 +1,102 @@
 // src/ui/kpiMid.js
 import { el, clear } from "../utils/dom.js";
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
-import { renderWidget2CostHist } from "./widget2CostHist.js";
+import { renderCharts } from "./charts.js";
 
 /**
- * 中段KPI（4枠）の描画
- * - state.midSlots（確定）に従って 4スロットを描き分け
- * - 「type が変わったら必ず clear → 作り直し」して残骸/重なりを根絶
- * - 各スロットに __slotType を保持（Consoleで確認できる）
- *
- * 想定 slotType:
- *  - "widget1"
- *  - "widget2"
- *  - "dummyA" "dummyB" "dummyC" "dummyD"
+ * 中段KPI
+ * - 2×2 固定スロット
+ * - 全スロット同一DOM構造
+ * - widgetは「bodyの中身だけ」を描画
  */
+
 export function renderMidKpi(mounts, state, actions) {
-  // 4枠の mount（layout.js で返してるやつ）
-  const slots = [
-    mounts.midSlotSalesDonut,
-    mounts.midSlotMachineDonut,
-    mounts.midSlotCostHist,
-    mounts.midSlotScatter,
-  ].filter(Boolean);
+  // ===== 上段4スロット =====
+  renderSlot_(mounts.midSlotSalesDonut, {
+    title: "売上 / ステーション 構成比",
+    type: "widget1",
+    renderBody: (body) =>
+      renderWidget1ShareDonut(body, state, actions, { mode: "normal" }),
+  });
 
-  // 念のため：スロット配列が無い/短い場合はデフォルト
-  const midSlots = Array.isArray(state.midSlots) ? state.midSlots : ["widget1", "widget2", "dummyA", "dummyB"];
+  renderSlot_(mounts.midSlotMachineDonut, {
+    title: "（ダミー）スロット2",
+    type: "dummy",
+  });
 
-  for (let i = 0; i < 4; i++) {
-    const mount = slots[i];
-    const type = midSlots[i] || "dummyA";
-    if (!mount) continue;
-    renderSlot_(mount, type, state, actions, i);
-  }
+  renderSlot_(mounts.midSlotCostHist, {
+    title: "原価率 分布",
+    type: "chart",
+    canvasId: "costHistChart",
+  });
+
+  renderSlot_(mounts.midSlotScatter, {
+    title: "売上 × 原価率",
+    type: "chart",
+    canvasId: "salesCostScatter",
+  });
+
+  // チャート更新（canvasが揃った後）
+  renderCharts(mounts, state);
 }
 
-/* =========================
-   core: slot rebuild control
-   ========================= */
+/* =========================================================
+   共通：スロット1枚分の骨格（全スロット完全一致）
+   ========================================================= */
 
-function ensureSlotType_(mount, type) {
-  // typeが変わったら必ず作り直す（残骸/重なり防止の本丸）
-  if (mount.__slotType !== type) {
-    clear(mount);
-    mount.__slotType = type;
-    mount.__built = false;
-  }
-}
+function renderSlot_(slotMount, { title, type, renderBody, canvasId }) {
+  if (!slotMount) return;
 
-function renderSlot_(mount, type, state, actions, idx) {
-  ensureSlotType_(mount, type);
+  // 初回のみDOM生成
+  if (!slotMount.__built) {
+    clear(slotMount);
 
-  // 初回だけ「器」を作るタイプ（dummy/共通枠）もあるが、
-  // widget1/widget2 は各レンダラ側が全部組む前提でもOK。
-  switch (type) {
-    case "widget1": {
-      // ここで __slotType が必ず入る（= undefined 問題を潰す）
-      // widget1 側が mount 内を全描画
-      renderWidget1ShareDonut(mount, state, actions);
-      mount.__built = true;
-      return;
-    }
+    const card = el("div", { class: "card midPanel" });
 
-    case "widget2": {
-      // widget2CostHist 側が mount 内を全描画
-      renderWidget2CostHist(mount, state, actions);
-      mount.__built = true;
-      return;
-    }
-
-    case "dummyA":
-    case "dummyB":
-    case "dummyC":
-    case "dummyD":
-    default: {
-      renderDummy_(mount, type, idx, actions);
-      mount.__built = true;
-      return;
-    }
-  }
-}
-
-/* =========================
-   dummy cards (4つ)
-   ========================= */
-
-function renderDummy_(mount, type, idx, actions) {
-  // 既存CSSに寄せる：.card / header / body（最低限）
-  clear(mount);
-
-  const titleMap = {
-    dummyA: "ダミー①",
-    dummyB: "ダミー②",
-    dummyC: "ダミー③",
-    dummyD: "ダミー④",
-  };
-
-  const title = titleMap[type] || `ダミー(${type})`;
-
-  const card = el("div", { class: "card kpiCard" }, [
-    el("div", { class: "midPanelHeader" }, [
+    const header = el("div", { class: "midPanelHeader" }, [
       el("div", { class: "midPanelTitle", text: title }),
-      el("div", { class: "midPanelControls" }, [
-        el("button", {
-          class: "btn ghost",
-          text: "拡大",
-          onClick: () => actions?.onOpenFocus?.({ slotIndex: idx, slotType: type }),
-        }),
-      ]),
-    ]),
-    el("div", { class: "midPanelBody" }, [
-      el("div", { class: "placeholder", text: `${type} placeholder` }),
-    ]),
-  ]);
+    ]);
 
-  mount.appendChild(card);
+    const body = el("div", {
+      class: "midPanelBody",
+    });
+
+    card.appendChild(header);
+    card.appendChild(body);
+    slotMount.appendChild(card);
+
+    slotMount.__card = card;
+    slotMount.__body = body;
+    slotMount.__built = true;
+  }
+
+  const body = slotMount.__body;
+
+  // 中身だけ毎回更新
+  clear(body);
+
+  // ===== 中身の描画 =====
+  if (type === "widget1" && renderBody) {
+    renderBody(body);
+    return;
+  }
+
+  if (type === "chart" && canvasId) {
+    body.appendChild(
+      el("canvas", {
+        id: canvasId,
+        style: "width:100%;height:100%;display:block;",
+      })
+    );
+    return;
+  }
+
+  // ダミー
+  body.appendChild(
+    el("div", {
+      style:
+        "height:100%;display:flex;align-items:center;justify-content:center;opacity:.4;",
+      text: "DUMMY",
+    })
+  );
 }
