@@ -1,6 +1,7 @@
 // src/ui/kpiMid.js
 import { el, clear } from "../utils/dom.js";
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
+import { renderWidget2CostHist } from "./widget2CostHist.js";
 
 /**
  * 役割：
@@ -8,17 +9,16 @@ import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
  * - ✅ ドロワーOPEN中は draft をプレビュー（決定前でも切替が見える）
  * - ✅ 下段（midCards）は当面 “無効化”（不要表示を止める）
  *
- * スロットキー：
+ * slotType:
  * - "widget1" : 構成比ドーナツ（既存）
- * - "widget2" : 原価率分布（既存）
- * - "scatter" : 売上×原価率（必要なら後で復帰）
+ * - "widget2" : 原価率分布（Widget②：本命）
  * - "dummyA".."dummyD" : ダミー
+ * - "scatter" : （将来用/任意）売上×原価率 scatter の器
  */
 export function renderMidKpi(mounts, state, actions) {
   // ===== 下段（不要表示を止める）=====
   if (mounts.midCards) {
     mounts.midCards.style.display = "none";
-    // clearは毎回やると無駄なので初回だけ
     if (!mounts.midCards.__clearedOnce) {
       clear(mounts.midCards);
       mounts.midCards.__clearedOnce = true;
@@ -61,41 +61,33 @@ function pickSlots4_(state) {
 function renderMidSlot_(slotMount, kind, state, actions, index) {
   if (!slotMount) return;
 
-  // 旧枠の display:none を残さない
   slotMount.style.display = "";
 
-  // kind が変わったら作り直す（決定前のプレビューに必須）
+  // kind が変わったら作り直す（決定前プレビューのため）
   if (slotMount.__kind !== kind) {
     clear(slotMount);
     slotMount.__kind = kind;
-    // 再生成用のメモも消す
+
+    // 再生成用メモを消す（ウィジェット側の __built をやり直す）
     delete slotMount.__w1_body;
     delete slotMount.__built;
+    delete slotMount.__w2_built;
   }
 
+  // ===== widget1 =====
   if (kind === "widget1") {
     renderWidget1Card_(slotMount, state, actions);
     return;
   }
 
+  // ===== widget2（原価率分布）=====
   if (kind === "widget2") {
-    // 原価率分布（既存：charts.js が costHistChart を描く）
-    renderChartCard_(slotMount, {
-      title: "原価率 分布",
-      tools: el("div", { class: "chartTools" }, [
-        el("select", { class: "select", id: "costHistMode" }, [
-          el("option", { value: "count", text: "台数" }),
-          el("option", { value: "sales", text: "売上" }),
-        ]),
-      ]),
-      canvasId: "costHistChart",
-      onFocus: () => actions.onOpenFocus?.("costHist"),
-    });
+    renderWidget2CostHist(slotMount, actions);
     return;
   }
 
+  // ===== 将来用 scatter（必要なら slot に入れられる）=====
   if (kind === "scatter") {
-    // 散布図（必要なら slot に入れられる）
     renderChartCard_(slotMount, {
       title: "売上 × 原価率（マトリクス）",
       tools: null,
@@ -105,7 +97,7 @@ function renderMidSlot_(slotMount, kind, state, actions, index) {
     return;
   }
 
-  // dummy
+  // ===== dummy =====
   renderDummyCard_(slotMount, kind, index, actions);
 }
 
@@ -153,7 +145,6 @@ function renderWidget1Card_(slotMount, state, actions) {
    チャートカード（canvas器）
    ========================= */
 function renderChartCard_(slotMount, { title, tools, canvasId, onFocus }) {
-  // 既に作ってあるなら何もしない（canvas作り直し防止）
   if (slotMount.__built) return;
   slotMount.__built = true;
 
@@ -201,7 +192,6 @@ function renderChartCard_(slotMount, { title, tools, canvasId, onFocus }) {
    ダミー
    ========================= */
 function renderDummyCard_(slotMount, kind, index, actions) {
-  // builtを使って良い（kind変化時に上で clear 済み）
   if (slotMount.__built) return;
   slotMount.__built = true;
 
