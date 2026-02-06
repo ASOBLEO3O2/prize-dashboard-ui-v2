@@ -10,6 +10,10 @@ import { el, clear } from "../utils/dom.js";
  * Phase1: 右側凡例のみを「判断ユニット」に（最優先）
  * Phase2: ドーナツ中央の空白を「合計売上」だけで埋める（状態追加なし）
  * Phase3: tooltip の“中身だけ”整理（挙動は一切変えない）
+ *
+ * 追加（見た目）
+ * - 左右1:1（CSS側）
+ * - tooltip は「ドーナツ描画領域内の下部固定」（external tooltip）
  */
 
 const AXES = [
@@ -65,6 +69,14 @@ function fmtMaybePct_(v, fallback = "—") {
   if (v == null || !Number.isFinite(v)) return fallback;
   return pct(v);
 }
+function escapeHtml_(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function axisMeta(axisKey) {
   return AXES.find((a) => a.key === axisKey) || AXES[3];
@@ -104,7 +116,7 @@ function pickNum_(r, keys) {
   return null;
 }
 
-// 消化額（今の正規化は consume が生えている前提。claw も許容）
+// 消化額（consume が正規化で生えている前提。claw も許容）
 function pickConsume_(r) {
   return pickNum_(r, [
     "consume",
@@ -251,8 +263,12 @@ function ensureDom_(mount, actions, mode) {
     el("div", { class: "w1CenterValue", text: "—" }),
   ]);
 
+  // ✅ tooltip box（ドーナツ領域内・下部固定）
+  const tip = el("div", { class: "w1Tip" });
+
   chartWrap.appendChild(canvas);
   chartWrap.appendChild(center);
+  chartWrap.appendChild(tip);
 
   const legendWrap = el("div", { class: "widget1ABC" }); // 既存CSS名を維持（中身は凡例として使う）
 
@@ -274,6 +290,9 @@ function ensureDom_(mount, actions, mode) {
   // Phase2 refs
   mount.__w1_center = center;
   mount.__w1_centerValue = center.querySelector(".w1CenterValue");
+
+  // tooltip ref
+  mount.__w1_tip = tip;
 
   // change handler（1回だけ）
   select.addEventListener("change", () => {
@@ -332,11 +351,6 @@ function tooltipLabelPhase3_(ctx) {
 /* =========================
    Chart（作成/更新）
    ========================= */
-/**
- * ✅ 重要：tooltip の参照先を「そのチャート自身」に固定する
- * - ch.$w1 = { items, totalSales, totalBooths, dataSales, dataBooths }
- * - callback は ctx.chart.$w1 を見る（closureでitemsを掴まない）
- */
 function upsertChart_(mount, items, totalSales, totalBooths) {
   const Chart = window.Chart;
   const canvas = mount.__w1_canvas;
@@ -371,6 +385,13 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
 
       // ✅ 最新参照（“ステーション0化”対策）
       ch.$w1 = { items, totalSales, totalBooths, dataSales, dataBooths };
+
+      // tooltip（external）更新：Chart.js が afterEvent で external を呼ぶが、
+      // update("none") でも十分。念のため消しておく。
+      const tipEl = mount.__w1_tip;
+      if (tipEl && !tipEl.matches(":hover")) {
+        // 何もしない（hover判定は不要。外部tooltipは tooltip.opacity で制御）
+      }
 
       ch.update("none");
       return;
@@ -417,20 +438,44 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
         plugins: {
           legend: { display: false },
           tooltip: {
-            enabled: true,
-            callbacks: {
-              // タイトル（カテゴリ名）は現状維持
-              title: (itemsArr) => {
-                const it0 = itemsArr?.[0];
-                const idx = it0?.dataIndex;
-                const meta = it0?.chart?.$w1;
-                const item = meta?.items?.[idx];
-                return item?.label ?? "";
-              },
-              // =========================================================
-              // Phase3: “中身だけ”整理（挙動は一切変えない）
-              // =========================================================
-              label: tooltipLabelPhase3_,
+            enabled: false, // ✅ 標準tooltip無効（はみ出し禁止を確実に）
+            external: (context) => {
+              const { chart, tooltip } = context;
+              const tipEl = mount.__w1_tip;
+              if (!tipEl) return;
+
+              // 非表示
+              if (!tooltip || tooltip.opacity === 0) {
+                tipEl.classList.remove("show");
+                tipEl.innerHTML = "";
+                return;
+              }
+
+              const dp = tooltip.dataPoints?.[0];
+              if (!dp) {
+                tipEl.classList.remove("show");
+                tipEl.innerHTML = "";
+                return;
+              }
+
+              // タイトル（カテゴリ名）
+              const meta = chart.$w1;
+              const idx = dp.dataIndex;
+              const item = meta?.items?.[idx];
+              const title = item?.label ?? dp.label ?? "";
+
+              // Phase3中身（外=売上、内=台数）
+              const pseudoCtx = { chart, dataIndex: dp.dataIndex, datasetIndex: dp.datasetIndex };
+              const lines = tooltipLabelPhase3_(pseudoCtx);
+              const arr = Array.isArray(lines)
+                ? lines.filter(Boolean)
+                : [String(lines || "")].filter(Boolean);
+
+              tipEl.innerHTML =
+                `<div class="w1TipTitle">${escapeHtml_(title)}</div>` +
+                arr.map((s) => `<div class="w1TipLine">${escapeHtml_(s)}</div>`).join("");
+
+              tipEl.classList.add("show");
             },
           },
         },
