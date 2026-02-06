@@ -185,3 +185,40 @@
 .widget1Canvas{
   max-height: none;
 }
+
+/* ===== widget1：midPanel の高さに必ず収まるようにする ===== */
+
+.widget1{
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* header は固定 */
+.widget1Header{
+  flex: 0 0 auto;
+}
+
+/* body が残り高さを使う（ここが本丸） */
+.widget1Body{
+  flex: 1 1 auto;
+  min-height: 0;          /* ★これがないと暴走する */
+  overflow: hidden;       /* ★はみ出し防止 */
+}
+
+/* チャート領域も必ず親に従う */
+.widget1ChartWrap{
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* canvas は完全追従 */
+.widget1Canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
