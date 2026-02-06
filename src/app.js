@@ -154,6 +154,33 @@ const actions = {
     }));
   },
 
+// 初期stateに追加
+midSlots: ["widget1", "widget2", "dummyA", "dummyB"],
+midSlotsDraft: ["widget1", "widget2", "dummyA", "dummyB"],
+
+// actions 追加
+onSetMidSlotDraft: (slotIndex, widgetKey) => {
+  store.set(s => {
+    const next = Array.isArray(s.midSlotsDraft) ? [...s.midSlotsDraft] : [...(s.midSlots || [])];
+    next[slotIndex] = widgetKey;
+    return { ...s, midSlotsDraft: next };
+  });
+},
+
+onApplyMidSlots: () => {
+  store.set(s => ({
+    ...s,
+    midSlots: Array.isArray(s.midSlotsDraft) ? [...s.midSlotsDraft] : [...(s.midSlots || [])],
+  }));
+  actions.requestRender?.(); // 既存のrenderトリガ
+},
+
+onCancelMidSlots: () => {
+  store.set(s => ({
+    ...s,
+    midSlotsDraft: Array.isArray(s.midSlots) ? [...s.midSlots] : ["widget1","widget2","dummyA","dummyB"],
+  }));
+},   
   /* ======================================================
      フェーズ1：ウィジェット②（原価率分布）の mode を state に保存
      - widget2CostHist.js の change から呼ばれる想定
