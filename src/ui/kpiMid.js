@@ -1,4 +1,6 @@
 // src/ui/kpiMid.js
+console.log("[KPI_MID] LOADED dummy-phase 2026-02-06 r1");
+
 import { el, clear } from "../utils/dom.js";
 
 /**
