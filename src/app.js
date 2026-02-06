@@ -1,10 +1,4 @@
 // src/app.js
-// ======================================================
-// フェーズ1（ウィジェット②：原価率分布）
-// ✅ 目的：mode（台数/売上）を “state（本丸）” に保存して、再描画で戻らないようにする
-// ✅ 入力：state.ui.costHistMode = "count" | "sales"
-// ======================================================
-
 import { createStore } from "./state/store.js";
 import { mountLayout } from "./ui/layout.js";
 import { renderTopKpi } from "./ui/kpiTop.js";
@@ -24,33 +18,8 @@ import { buildViewModel } from "./logic/aggregate.js";
 import { renderCharts } from "./ui/charts.js";
 import { renderFocusOverlay } from "./ui/focusOverlay.js";
 
-/* ======================================================
-   フェーズ1：UI好みの永続化（任意）
-   - “壊れない” ために try/catch で守る
-   - 使わないなら消してもOK（state保存だけでも要件は満たす）
-====================================================== */
-const LS_KEY_COST_HIST_MODE = "ps.costHistMode";
+const DEFAULT_MID_SLOTS = ["widget1", "widget2", "dummyA", "dummyB"];
 
-function loadCostHistMode_() {
-  try {
-    const v = localStorage.getItem(LS_KEY_COST_HIST_MODE);
-    return (v === "sales" || v === "count") ? v : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function saveCostHistMode_(mode) {
-  try {
-    localStorage.setItem(LS_KEY_COST_HIST_MODE, String(mode));
-  } catch (_) {}
-}
-
-/* ======================================================
-   初期state
-   - ✅ ui.costHistMode を追加（本丸）
-   - 既存のstate構造は維持（非破壊）
-====================================================== */
 const initialState = {
   // data
   updatedDate: MOCK.updatedDate,
@@ -89,16 +58,13 @@ const initialState = {
     parentKey: null,
   },
 
-  // ✅ フェーズ1：ウィジェット②（原価率分布）の入力（本丸）
-  // - widget2CostHist.js は state.ui.costHistMode を見に行く
-  // - charts.js 側が古い参照をしていても壊れないよう、後で actions で互換キーも立てる
-  ui: {
-    costHistMode: loadCostHistMode_() || "count", // "count" | "sales"
-  },
-
   // 詳細（テーブル）の並び替え
   detailSortKey: "sales",
   detailSortDir: "desc",
+
+  // ✅ 中段4枠：割当（確定値）＆ 作業中（draft）
+  midSlots: [...DEFAULT_MID_SLOTS],
+  midSlotsDraft: [...DEFAULT_MID_SLOTS],
 
   // errors
   loadError: null,
@@ -107,12 +73,9 @@ const initialState = {
 const store = createStore(initialState);
 const root = document.getElementById("app");
 
-// ✅ デバッグ用（任意）
-// コンソールで window.getState() が使えるようにする（壊れない安全なやつ）
+// ✅ デバッグ用（必要なら）
 window.getState = () => store.get();
-window.store = store; // Consoleから store.get()/set() を使うため（デバッグ専用）
 
-// ===== actions =====
 const actions = {
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
@@ -127,13 +90,12 @@ const actions = {
   },
 
   requestRender: () => {
-    // これ自体はOK（renderループ内で呼ばれない限り無限ループしない）
     store.set((s) => ({ ...s }));
   },
 
   onToggleDetail: (genre) => {
     store.set((s) => {
-      const next = (s.openDetailGenre === genre) ? null : genre;
+      const next = s.openDetailGenre === genre ? null : genre;
       return { ...s, openDetailGenre: next };
     });
   },
@@ -154,86 +116,62 @@ const actions = {
     }));
   },
 
-// 初期stateに追加
-midSlots: ["widget1", "widget2", "dummyA", "dummyB"],
-midSlotsDraft: ["widget1", "widget2", "dummyA", "dummyB"],
-
-// actions 追加
-onSetMidSlotDraft: (slotIndex, widgetKey) => {
-  store.set(s => {
-    const next = Array.isArray(s.midSlotsDraft) ? [...s.midSlotsDraft] : [...(s.midSlots || [])];
-    next[slotIndex] = widgetKey;
-    return { ...s, midSlotsDraft: next };
-  });
-},
-
-onApplyMidSlots: () => {
-  store.set(s => ({
-    ...s,
-    midSlots: Array.isArray(s.midSlotsDraft) ? [...s.midSlotsDraft] : [...(s.midSlots || [])],
-  }));
-  actions.requestRender?.(); // 既存のrenderトリガ
-},
-
-onCancelMidSlots: () => {
-  store.set(s => ({
-    ...s,
-    midSlotsDraft: Array.isArray(s.midSlots) ? [...s.midSlots] : ["widget1","widget2","dummyA","dummyB"],
-  }));
-},   
-  /* ======================================================
-     フェーズ1：ウィジェット②（原価率分布）の mode を state に保存
-     - widget2CostHist.js の change から呼ばれる想定
-     - 保存後は store.subscribe(renderAll) が走るので、ここで追加の描画呼び出しは不要
-     - 互換のために “costHistMode” をトップ階層にも立てる（既存charts側が参照していても壊れない）
-  ====================================================== */
-  onSetCostHistMode: (mode) => {
-    const m = (mode === "sales") ? "sales" : "count";
-
-    store.set((s) => ({
-      ...s,
-      // ✅ 本丸
-      ui: { ...(s.ui || {}), costHistMode: m },
-
-      // ✅ 互換（もし charts.js が state.costHistMode を見ていた場合でも動く）
-      costHistMode: m,
-    }));
-
-    // 任意：好みとして永続化
-    saveCostHistMode_(m);
-  },
-
   // Drawer
   onOpenDrawer: () => store.set((s) => ({ ...s, drawerOpen: true })),
   onCloseDrawer: () => store.set((s) => ({ ...s, drawerOpen: false })),
 
+  // ✅ 中段スロット：draft操作
+  onSetMidSlotDraft: (index, value) => {
+    store.set((s) => {
+      const next = Array.isArray(s.midSlotsDraft) ? [...s.midSlotsDraft] : [...DEFAULT_MID_SLOTS];
+      next[index] = String(value || "").trim();
+      return { ...s, midSlotsDraft: next };
+    });
+  },
+
+  // ✅ 中段スロット：取消（draftを確定値に戻す）
+  onCancelMidSlots: () => {
+    store.set((s) => ({
+      ...s,
+      midSlotsDraft: Array.isArray(s.midSlots) ? [...s.midSlots] : [...DEFAULT_MID_SLOTS],
+    }));
+  },
+
+  // ✅ 中段スロット：決定（ここが無いと描画は変わりません）
+  onApplyMidSlots: () => {
+    store.set((s) => ({
+      ...s,
+      midSlots: Array.isArray(s.midSlotsDraft) ? [...s.midSlotsDraft] : [...DEFAULT_MID_SLOTS],
+    }));
+  },
+
   // ✅ フォーカス
   onOpenFocus: (kind) => {
     const title =
-      (kind === "shareDonut") ? "売上 / 台数 構成比" :
-      (kind === "salesDonut") ? "売上構成比" :
-      (kind === "machineDonut") ? "台数構成比" :
-      (kind === "costHist") ? "原価率 分布" :
-      (kind === "scatter") ? "売上 × 原価率（マトリクス）" :
+      kind === "shareDonut" ? "売上 / 台数 構成比" :
+      kind === "salesDonut" ? "売上構成比" :
+      kind === "machineDonut" ? "台数構成比" :
+      kind === "costHist" ? "原価率 分布" :
+      kind === "scatter" ? "売上 × 原価率（マトリクス）" :
       "詳細";
 
     store.set((s) => ({
       ...s,
-      focus: { open: true, kind, title, parentKey: null }
+      focus: { open: true, kind, title, parentKey: null },
     }));
   },
 
   onCloseFocus: () => {
     store.set((s) => ({
       ...s,
-      focus: { open: false, kind: null, title: "", parentKey: null }
+      focus: { open: false, kind: null, title: "", parentKey: null },
     }));
   },
 
   onSetFocusParentKey: (keyOrNull) => {
     store.set((s) => ({
       ...s,
-      focus: { ...s.focus, parentKey: keyOrNull }
+      focus: { ...s.focus, parentKey: keyOrNull },
     }));
   },
 
@@ -243,29 +181,29 @@ onCancelMidSlots: () => {
   },
 };
 
-// ===== mount =====
+// mount
 const mounts = mountLayout(root, {
   onOpenDrawer: actions.onOpenDrawer,
   onCloseDrawer: actions.onCloseDrawer,
   onRefresh: actions.onRefresh,
 });
 
-// ===== render loop =====
+// render loop
 function renderAll(state) {
   mounts.updatedBadge.textContent = `更新日: ${fmtDate(state.updatedDate)}`;
 
   renderTopKpi(mounts.topKpi, state.topKpi);
 
-  // ✅ kpiMid は widget②も含めて state/actions を受け取る
+  // ✅ ここが midSlots を読む本体
   renderMidKpi(mounts, state, actions);
 
-  // ✅ charts は state.ui.costHistMode を見られる（互換で state.costHistMode も立ててる）
   renderCharts(mounts, state);
 
   renderFocusOverlay(mounts.focusOverlay, mounts.focusModal, state, actions);
 
   renderDetail(mounts.detailMount, state, actions);
 
+  // ✅ drawer は midSlotsDraft を編集し、決定で midSlots を更新
   renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
 }
 
@@ -303,7 +241,6 @@ async function hydrateFromRaw() {
       ...(m || {}),
       ...decoded,
 
-      // ✅ 最後に raw を再代入して “上書き防止”
       booth_id: r?.booth_id,
       machine_name: r?.machine_name,
       machine_key: r?.machine_key,
