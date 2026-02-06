@@ -1,6 +1,4 @@
 // src/ui/kpiMid.js
-console.log("[KPI_MID] LOADED dummy-phase 2026-02-06 r1");
-
 import { el, clear } from "../utils/dom.js";
 
 /**
@@ -17,7 +15,9 @@ import { el, clear } from "../utils/dom.js";
  * ※この後：レイアウトが固まったら widget1 を “同じ枠” に戻す
  */
 export function renderMidKpi(mounts, state, actions) {
-  // スロットが無い場合は何もしない
+
+  console.log("[KPI_MID] LOADED dummy-phase 2026-02-06 r1");  // スロットが無い場合は何もしない
+ 
   if (!mounts) return;
 
   // 旧「マシン構成比」枠が残っていれば隠す（保険）
