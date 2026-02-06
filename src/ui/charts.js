@@ -1,8 +1,18 @@
 // src/ui/charts.js
-import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
+// 役割：
+// - 中段の canvas（costHistChart / salesCostScatter）に Chart.js を描画する
+// - 初回描画で「親の高さが未確定(=0)」だと Chart.js が 0px 確定して崩れるので、
+//   ①canvasの実寸が十分になるまで init しない
+//   ②init 後も resize を1回かけて確定させる
+//   ③render は何度呼ばれても安全（無限ループしない）
+// - mounts を信用しすぎず DOM から拾う
 
 let costHistChart = null;
 let salesCostScatter = null;
+
+// init再試行を無限にしないためのガード
+let _initTryCount = 0;
+const INIT_TRY_MAX = 60; // 60フレーム(≒1秒)程度で打ち切り
 
 const COST_BINS = [
   { label: "〜3%",   min: 0.00, max: 0.03 },
@@ -28,37 +38,65 @@ function toNum(v) {
   return null;
 }
 
-function findCanvasAndMode(mounts) {
-  // mounts を信用しすぎず、毎回DOMから拾う（崩れ防止）
+function findCanvasAndMode() {
   const costCanvas = document.getElementById("costHistChart");
   const scatterCanvas = document.getElementById("salesCostScatter");
   const modeSelect = document.getElementById("costHistMode");
   return { costCanvas, scatterCanvas, modeSelect };
 }
 
-/**
- * ★初回描画対策：
- * canvas がDOMに存在しても「親の高さが未確定(=0)」だとChart.jsが0サイズで確定して崩れる。
- * → 実寸が十分になるまで new Chart をしない。
- */
-function canvasReady(canvas) {
+// 「canvasが存在」ではなく、「描画できる実寸が確定」しているかを見る
+function isCanvasReady(canvas) {
   if (!canvas) return false;
   const rect = canvas.getBoundingClientRect();
-  return rect.width >= 120 && rect.height >= 120;
+  // 初回崩れの典型：height 0 / 1 / 極小
+  return rect.width >= 160 && rect.height >= 160;
 }
 
-function ensureCharts() {
+function computeCostHistogram(rows, mode) {
+  const arr = COST_BINS.map(() => 0);
+
+  for (const r of rows) {
+    const rate = toNum(r?.cost_rate ?? r?.原価率);
+    const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
+    if (rate == null) continue;
+
+    const idx = COST_BINS.findIndex((b) => rate >= b.min && rate < b.max);
+    if (idx < 0) continue;
+
+    arr[idx] += mode === "sales" ? sales : 1;
+  }
+  return arr;
+}
+
+function computeScatter(rows) {
+  const pts = [];
+  for (const r of rows) {
+    const x = toNum(r?.sales ?? r?.総売上);
+    const y = toNum(r?.cost_rate ?? r?.原価率);
+    if (x == null || y == null) continue;
+
+    pts.push({
+      x,
+      y,
+      _name: r?.machine_ref ?? r?.対応マシン名 ?? r?.booth_id ?? "",
+    });
+  }
+  return pts;
+}
+
+function tryInitCharts() {
   const Chart = window.Chart;
-  if (!Chart) return;
+  if (!Chart) return false;
 
   const { costCanvas, scatterCanvas } = findCanvasAndMode();
 
-  // ★ここが重要：サイズが確定するまで初期化しない
-  if (!canvasReady(costCanvas) || !canvasReady(scatterCanvas)) return;
+  // サイズ未確定なら init しない
+  if (!isCanvasReady(costCanvas) || !isCanvasReady(scatterCanvas)) return false;
 
-  const c1 = costCanvas?.getContext?.("2d");
-  const c2 = scatterCanvas?.getContext?.("2d");
-  if (!c1 || !c2) return;
+  const c1 = costCanvas.getContext("2d");
+  const c2 = scatterCanvas.getContext("2d");
+  if (!c1 || !c2) return false;
 
   if (!costHistChart) {
     costHistChart = new Chart(c1, {
@@ -141,68 +179,67 @@ function ensureCharts() {
       },
     });
   }
+
+  // init直後に「確定リサイズ」を1回入れる（ここが効く）
+  // ※Chart.js は非表示/0サイズで init すると以後ズレが残ることがあるため
+  try { costHistChart?.resize(); } catch (_) {}
+  try { salesCostScatter?.resize(); } catch (_) {}
+
+  return true;
 }
 
-function computeCostHistogram(rows, mode) {
-  const arr = COST_BINS.map(() => 0);
+function bindModeOnce(renderFn) {
+  const { modeSelect } = findCanvasAndMode();
+  if (!modeSelect || modeSelect.__bound) return;
 
-  for (const r of rows) {
-    const rate = toNum(r?.cost_rate ?? r?.原価率);
-    const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
-    if (rate == null) continue;
-
-    const idx = COST_BINS.findIndex((b) => rate >= b.min && rate < b.max);
-    if (idx < 0) continue;
-
-    arr[idx] += mode === "sales" ? sales : 1;
-  }
-  return arr;
+  modeSelect.addEventListener("change", () => renderFn());
+  modeSelect.__bound = true;
 }
 
-function computeScatter(rows) {
-  const pts = [];
-  for (const r of rows) {
-    const x = toNum(r?.sales ?? r?.総売上);
-    const y = toNum(r?.cost_rate ?? r?.原価率);
-    if (x == null || y == null) continue;
-
-    pts.push({
-      x,
-      y,
-      _name: r?.machine_ref ?? r?.対応マシン名 ?? r?.booth_id ?? "",
-    });
-  }
-  return pts;
-}
-
-export function renderCharts(mounts, state) {
-  ensureCharts();
-
-  // ★初回描画対策：まだ初期化できてないなら次フレームで再試行
-  if (!costHistChart || !salesCostScatter) {
-    requestAnimationFrame(() => renderCharts(mounts, state));
-    return;
-  }
-
-  const rows = Array.isArray(state.filteredRows) ? state.filteredRows : [];
-
-  const { modeSelect } = findCanvasAndMode(mounts);
+function updateCharts(state) {
+  const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
+  const { modeSelect } = findCanvasAndMode();
   const mode = modeSelect?.value || "count";
 
-  // ① 原価率分布
   const hist = computeCostHistogram(rows, mode);
   costHistChart.data.datasets[0].data = hist;
   costHistChart.data.datasets[0].label = mode === "sales" ? "売上" : "台数";
   costHistChart.update();
 
-  // ② 売上×原価率（散布）
   const pts = computeScatter(rows);
   salesCostScatter.data.datasets[0].data = pts;
   salesCostScatter.update();
+}
 
-  // mode変更時にも即反映（イベントは1回だけ）
-  if (modeSelect && !modeSelect.__bound) {
-    modeSelect.addEventListener("change", () => renderCharts(mounts, state));
-    modeSelect.__bound = true;
+export function renderCharts(mounts, state) {
+  // mounts は使わない（DOMから拾う方式に統一）
+
+  // 既に init 済みなら更新だけ
+  if (costHistChart && salesCostScatter) {
+    bindModeOnce(() => updateCharts(state));
+    updateCharts(state);
+    return;
+  }
+
+  // 未init：サイズ確定を待って init → 更新
+  const ok = tryInitCharts();
+  if (ok) {
+    bindModeOnce(() => updateCharts(state));
+    updateCharts(state);
+    return;
+  }
+
+  // まだダメ：無限に回さない（最大回数まで）
+  if (_initTryCount < INIT_TRY_MAX) {
+    _initTryCount++;
+    requestAnimationFrame(() => renderCharts(mounts, state));
+  } else {
+    // ここに来る＝CSS/DOM 側で canvas の高さが確定していない可能性が高い
+    // 以後は静かに諦める（ログだけ）
+    // eslint-disable-next-line no-console
+    console.warn("[charts] init skipped: canvas size not ready", {
+      cost: document.getElementById("costHistChart")?.getBoundingClientRect?.(),
+      scatter: document.getElementById("salesCostScatter")?.getBoundingClientRect?.(),
+    });
   }
 }
