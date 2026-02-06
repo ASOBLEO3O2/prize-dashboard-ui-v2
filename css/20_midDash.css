@@ -222,3 +222,58 @@
   height: 100% !important;
   display: block;
 }
+
+/* ================================
+   Mid KPI 2×2：高さを完全に固定
+   ================================ */
+
+/* midTop が必ず高さを持つ */
+.midTop{
+  flex: 0 0 clamp(420px, 52vh, 560px);
+  min-height: 420px;
+  display: flex;
+}
+
+/* 2×2 グリッドは高さ100%を使い切る */
+#midDash{
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+
+  display: grid;
+  gap: 12px;
+
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+/* 各スロット（4枠） */
+#midDash > .dashPanel{
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+}
+
+/* カード本体 */
+#midDash .card{
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ヘッダー以外が必ず伸びる */
+#midDash .midPanelBody,
+#midDash .chartBody{
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* canvas は親を100%使う */
+#midDash canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
