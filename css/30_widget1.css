@@ -290,3 +290,35 @@
     max-height:220px;
   }
 }
+
+/* ===== Phase2: ドーナツ中央表示（合計売上） ===== */
+.widget1ChartWrap{
+  position:relative; /* 追加：中央表示を重ねるため */
+}
+
+.w1Center{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none; /* チャート操作を邪魔しない */
+  transform: translateY(2px);
+}
+
+.w1CenterLabel{
+  font-size:12px;
+  font-weight:900;
+  color:rgba(148,163,184,.92);
+  letter-spacing:.2px;
+}
+
+.w1CenterValue{
+  margin-top:4px;
+  font-size:22px;
+  font-weight:900;
+  letter-spacing:.2px;
+  color:var(--text,#e5e7eb);
+  text-shadow:0 6px 18px rgba(0,0,0,.35);
+}
