@@ -1,7 +1,13 @@
 // src/ui/charts.js
+// ======================================================
+// charts.js（描画層）
+// ✅ フェーズ1：mode は state（本丸）を正とする
+// - state.ui.costHistMode（fallback: state.costHistMode）
+// - DOM(select) は “表示” を合わせるだけ
+// - change は actions.onSetCostHistMode に委譲（store更新→再描画）
+// ======================================================
 
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
-
 
 let costHistChart = null;
 let salesCostScatter = null;
@@ -30,9 +36,13 @@ function toNum(v) {
   return null;
 }
 
-function findCanvasAndMode(mounts) {
-  // layout.js が返す mounts を信用しすぎない（崩れ防止）
-  // DOMにあるものを毎回探す（軽い）
+function getModeFromState(state) {
+  const m = state?.ui?.costHistMode ?? state?.costHistMode ?? "count";
+  return (m === "sales") ? "sales" : "count";
+}
+
+function findCanvasAndMode() {
+  // mounts を信用しすぎない（崩れ防止）
   const costCanvas = document.getElementById("costHistChart");
   const scatterCanvas = document.getElementById("salesCostScatter");
   const modeSelect = document.getElementById("costHistMode");
@@ -53,12 +63,11 @@ function ensureCharts() {
       type: "bar",
       data: {
         labels: COST_BINS.map(b => b.label),
-        datasets: [{ label: "台数", data: [0,0,0,0,0] }],
+        datasets: [{ label: "台数", data: [0, 0, 0, 0, 0] }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: "40%",
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false } },
@@ -163,14 +172,25 @@ function computeScatter(rows) {
   return pts;
 }
 
-export function renderCharts(mounts, state) {
+/**
+ * renderCharts
+ * - app.js の renderAll から毎回呼ばれる想定
+ * - actions は “mode変更を state に戻す” ために受け取る（フェーズ1）
+ */
+export function renderCharts(mounts, state, actions) {
   ensureCharts();
   if (!costHistChart || !salesCostScatter) return;
 
   const rows = Array.isArray(state.filteredRows) ? state.filteredRows : [];
 
-  const { modeSelect } = findCanvasAndMode(mounts);
-  const mode = modeSelect?.value || "count";
+  // ✅ mode は state を正とする
+  const mode = getModeFromState(state);
+
+  // ✅ select 表示を state に同期（DOMを正にしない）
+  const { modeSelect } = findCanvasAndMode();
+  if (modeSelect && modeSelect.value !== mode) {
+    modeSelect.value = mode;
+  }
 
   // ① 原価率分布
   const hist = computeCostHistogram(rows, mode);
@@ -183,10 +203,13 @@ export function renderCharts(mounts, state) {
   salesCostScatter.data.datasets[0].data = pts;
   salesCostScatter.update();
 
-  // mode変更時にも即反映（イベントは1回だけ）
+  // ✅ mode変更イベントは1回だけバインド（state更新は actions に委譲）
   if (modeSelect && !modeSelect.__bound) {
-    modeSelect.addEventListener("change", () => renderCharts(mounts, state));
+    modeSelect.addEventListener("change", (e) => {
+      const v = e?.target?.value;
+      // actions が無い場合は “表示だけ” 変わる（フェーズ0互換）
+      actions?.onSetCostHistMode?.(v);
+    });
     modeSelect.__bound = true;
   }
 }
-
