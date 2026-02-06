@@ -172,7 +172,11 @@
     flex:0 0 clamp(860px, 78vh, 1100px);
   }
 
-  #midDash{
+ #midDash .dashSlot{
+  min-width:0;
+  min-height:0;
+  height:100%;
+}  #midDash{
     grid-template-columns:1fr;
     grid-template-rows:repeat(4, minmax(0, 1fr));
   }
