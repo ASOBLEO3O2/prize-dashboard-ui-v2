@@ -1,240 +1,24 @@
-/* =========================================
-   Widget①: 売上 / ステーション 構成比（2重ドーナツ）
-   - 左: ドーナツ（canvas）
-   - 右: ABC（凡例）
-   ========================================= */
-
-.widget1{
-  height:100%;
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-}
-
-/* header（左：タイトル / 右：拡大 + ドロップダウン） */
-.widget1Header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding:10px 10px 0;
-  min-height:0;
-}
-
-.widget1HeaderLeft{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  min-width:0;
-}
-
-.widget1Title{
-  font-weight:900;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.widget1HeaderRight{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  min-width:0;
-}
-
-/* body（左: チャート / 右: ABC） */
-.widget1Body{
-  flex:1;
-  min-height:0;
-  display:grid;
-  grid-template-columns:minmax(0, 1fr) 260px;
-  gap:12px;
-  padding:10px;
-}
-
-/* Chart.jsが描画できる高さを必ず確保する */
-.widget1ChartWrap{
-  min-height:0;
-  height:100%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
-
-/* ✅ セル高を揃えるため：canvasは “セルの高さ100%” を優先
-   （max-height 固定があると、他カードと高さ感がズレる） */
-.widget1Canvas{
-  width:100% !important;
-  height:100% !important;
-  display:block;
-  max-height:none;          /* ← ここが重要：固定上限を撤去 */
-}
-
-/* ABC（凡例） */
-.widget1ABC{
-  min-height:0;
-  overflow:auto;
-  font-size:12px;
-  line-height:1.2;
-  padding-right:4px;
-}
-
-.widget1ABCRow{
-  display:grid;
-  grid-template-columns:22px 1fr auto;
-  gap:8px;
-  align-items:center;
-  padding:8px 0;
-  border-bottom:1px solid rgba(51,65,85,.6);
-}
-
-.widget1ABCRow .rank{
-  font-weight:900;
-  opacity:.9;
-}
-
-.widget1ABCRow.rank-A .rank{ opacity:1; }
-.widget1ABCRow.rank-B .rank{ opacity:.85; }
-.widget1ABCRow.rank-C .rank{ opacity:.75; }
-
-/* 凡例の色チップ（グラフ連動） */
-.w1chip{
-  display:inline-block;
-  width:12px;
-  height:12px;
-  border-radius:4px;
-  margin-right:8px;
-  vertical-align:middle;
-}
-
-/* 右下注記 */
-.widget1Note{
-  margin-top:10px;
-  font-size:12px;
-  color:var(--muted);
-}
-
-/* 狭い場合は縦並び */
-@media (max-width:900px){
-  .widget1Body{
-    grid-template-columns:1fr;
-  }
-  .widget1ABC{
-    max-height:160px;
-  }
-}
-
 /* =======================================================
-   Mid KPI 2×2：範囲確定（重複定義を廃止してここに統一）
+   Mid KPI（上段）: 2×2 の器を確定させる
+   - 初回ロードで canvas が潰れるのを防ぐ
+   - 4枠は必ず同じ高さ
    ======================================================= */
 
-/* 上段エリア（2×2の器）に確実な高さを与える */
 .midKpiWrap{
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-}
-
-.midTop{
-  /* ✅ デスクトップ：ここで上段の“高さ”を確定 */
-  flex:0 0 clamp(520px, 52vh, 640px);
-  min-height:0;
-  display:flex;
-}
-
-/* 2×2グリッドはこの高さを使い切る */
-#midDash{
-  width:100%;
-  height:100%;
-  min-height:0;
-
-  display:grid;
-  gap:12px;
-
-  grid-template-columns:repeat(2, minmax(0, 1fr));
-  grid-template-rows:repeat(2, minmax(0, 1fr));
-  align-items:stretch;
-}
-
-/* セルを必ず埋める */
-#midDash > *{
-  min-width:0;
-  min-height:0;
-  height:100%;
-}
-
-/* =======================================================
-   縦長：1列×4段（portrait / 縦横比でも確実に発火）
-   ======================================================= */
-
-@media (orientation: portrait), (max-aspect-ratio: 1/1){
-  .midTop{
-    flex:0 0 clamp(860px, 78vh, 1100px);
-  }
-
- #midDash .dashSlot{
-  min-width:0;
-  min-height:0;
-  height:100%;
-}  #midDash{
-    grid-template-columns:1fr;
-    grid-template-rows:repeat(4, minmax(0, 1fr));
-  }
-}
-
-.widget1Canvas{
-  max-height: none;
-}
-
-/* ===== widget1：midPanel の高さに必ず収まるようにする ===== */
-
-.widget1{
-  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-/* header は固定 */
-.widget1Header{
-  flex: 0 0 auto;
-}
-
-/* body が残り高さを使う（ここが本丸） */
-.widget1Body{
-  flex: 1 1 auto;
-  min-height: 0;          /* ★これがないと暴走する */
-  overflow: hidden;       /* ★はみ出し防止 */
-}
-
-/* チャート領域も必ず親に従う */
-.widget1ChartWrap{
-  height: 100%;
+.midTop{
+  /* PC: 上段の高さを確定（ここが基準） */
+  flex: 0 0 clamp(520px, 52vh, 640px);
+  min-height: 520px;
   min-height: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-/* canvas は完全追従 */
-.widget1Canvas{
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
-}
-
-/* ================================
-   Mid KPI 2×2：高さを完全に固定
-   ================================ */
-
-/* midTop が必ず高さを持つ */
-.midTop{
-  flex: 0 0 clamp(420px, 52vh, 560px);
-  min-height: 420px;
-  display: flex;
-}
-
-/* 2×2 グリッドは高さ100%を使い切る */
+/* 2×2 グリッド本体 */
 #midDash{
   width: 100%;
   height: 100%;
@@ -245,35 +29,62 @@
 
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
 }
 
-/* 各スロット（4枠） */
+/* 4スロット（dashPanel）がセルを埋める */
 #midDash > .dashPanel{
   min-width: 0;
   min-height: 0;
   height: 100%;
-  display: flex;
+
+  display: flex; /* card を伸ばすため */
 }
 
-/* カード本体 */
-#midDash .card{
+/* スロット直下のカードは全面を使う */
+#midDash > .dashPanel > .card{
   flex: 1;
   min-height: 0;
+
   display: flex;
   flex-direction: column;
 }
 
-/* ヘッダー以外が必ず伸びる */
-#midDash .midPanelBody,
-#midDash .chartBody{
-  flex: 1;
+/* カードの body が残りを全部使う（canvasの親） */
+#midDash .midPanelBody{
+  flex: 1 1 auto;
   min-height: 0;
   position: relative;
+  overflow: hidden;
 }
 
-/* canvas は親を100%使う */
+/* chartBody も同じ（Scatter/Hist） */
+#midDash .chartBody{
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* canvas は親に完全追従 */
 #midDash canvas{
   width: 100% !important;
   height: 100% !important;
   display: block;
+}
+
+/* =======================================================
+   縦長（portrait）: 1列×4段にする
+   ======================================================= */
+
+@media (orientation: portrait), (max-aspect-ratio: 1/1){
+  .midTop{
+    flex: 0 0 clamp(860px, 78vh, 1100px);
+    min-height: 860px;
+  }
+
+  #midDash{
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+  }
 }
