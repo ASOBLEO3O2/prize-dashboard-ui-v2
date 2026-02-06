@@ -73,9 +73,10 @@ const initialState = {
 const store = createStore(initialState);
 const root = document.getElementById("app");
 
-// ✅ デバッグ用（必要なら）
+// ✅ デバッグ用（任意）
 window.getState = () => store.get();
 
+// ===== actions =====
 const actions = {
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
@@ -90,12 +91,13 @@ const actions = {
   },
 
   requestRender: () => {
+    // これ自体はOK（renderループ内で呼ばれない限り無限ループしない）
     store.set((s) => ({ ...s }));
   },
 
   onToggleDetail: (genre) => {
     store.set((s) => {
-      const next = s.openDetailGenre === genre ? null : genre;
+      const next = (s.openDetailGenre === genre) ? null : genre;
       return { ...s, openDetailGenre: next };
     });
   },
@@ -137,41 +139,48 @@ const actions = {
     }));
   },
 
-  // ✅ 中段スロット：決定（ここが無いと描画は変わりません）
+  // ✅ 中段スロット：決定（＋ Chart.js の “旧サイズ描画” を止める）
   onApplyMidSlots: () => {
     store.set((s) => ({
       ...s,
       midSlots: Array.isArray(s.midSlotsDraft) ? [...s.midSlotsDraft] : [...DEFAULT_MID_SLOTS],
     }));
+
+    // ★スロット切替直後はDOMサイズが確定してないので、2フレーム遅らせて再描画させる
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        actions.requestRender?.(); // renderCharts() が走り、charts.js 側の resize も効く
+      });
+    });
   },
 
   // ✅ フォーカス
   onOpenFocus: (kind) => {
     const title =
-      kind === "shareDonut" ? "売上 / 台数 構成比" :
-      kind === "salesDonut" ? "売上構成比" :
-      kind === "machineDonut" ? "台数構成比" :
-      kind === "costHist" ? "原価率 分布" :
-      kind === "scatter" ? "売上 × 原価率（マトリクス）" :
+      (kind === "shareDonut") ? "売上 / 台数 構成比" :
+      (kind === "salesDonut") ? "売上構成比" :
+      (kind === "machineDonut") ? "台数構成比" :
+      (kind === "costHist") ? "原価率 分布" :
+      (kind === "scatter") ? "売上 × 原価率（マトリクス）" :
       "詳細";
 
     store.set((s) => ({
       ...s,
-      focus: { open: true, kind, title, parentKey: null },
+      focus: { open: true, kind, title, parentKey: null }
     }));
   },
 
   onCloseFocus: () => {
     store.set((s) => ({
       ...s,
-      focus: { open: false, kind: null, title: "", parentKey: null },
+      focus: { open: false, kind: null, title: "", parentKey: null }
     }));
   },
 
   onSetFocusParentKey: (keyOrNull) => {
     store.set((s) => ({
       ...s,
-      focus: { ...s.focus, parentKey: keyOrNull },
+      focus: { ...s.focus, parentKey: keyOrNull }
     }));
   },
 
@@ -181,20 +190,19 @@ const actions = {
   },
 };
 
-// mount
+// ===== mount =====
 const mounts = mountLayout(root, {
   onOpenDrawer: actions.onOpenDrawer,
   onCloseDrawer: actions.onCloseDrawer,
   onRefresh: actions.onRefresh,
 });
 
-// render loop
+// ===== render loop =====
 function renderAll(state) {
   mounts.updatedBadge.textContent = `更新日: ${fmtDate(state.updatedDate)}`;
 
   renderTopKpi(mounts.topKpi, state.topKpi);
 
-  // ✅ ここが midSlots を読む本体
   renderMidKpi(mounts, state, actions);
 
   renderCharts(mounts, state);
@@ -203,7 +211,6 @@ function renderAll(state) {
 
   renderDetail(mounts.detailMount, state, actions);
 
-  // ✅ drawer は midSlotsDraft を編集し、決定で midSlots を更新
   renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
 }
 
@@ -241,6 +248,7 @@ async function hydrateFromRaw() {
       ...(m || {}),
       ...decoded,
 
+      // ✅ 最後に raw を再代入して “上書き防止”
       booth_id: r?.booth_id,
       machine_name: r?.machine_name,
       machine_key: r?.machine_key,
