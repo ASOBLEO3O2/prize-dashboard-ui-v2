@@ -2,12 +2,14 @@
 import { el, clear } from "../utils/dom.js";
 
 /**
- * Widget①: 売上 / ステーション(=booth_id) 構成比（2重ドーナツ）
+ * Widget①: Share Donut（2重ドーナツ）
  * - 外周: 売上構成比
- * - 内周: ステーション構成比（distinct booth_id）
+ * - 内周: ステーション(=booth_id) 構成比（distinct booth_id）
  *
- * Phase1: 右側凡例を「判断ユニット」に
+ * 進行プラン（非破壊・段階確定）
+ * Phase1: 右側凡例のみを「判断ユニット」に（最優先）
  * Phase2: ドーナツ中央の空白を「合計売上」だけで埋める（状態追加なし）
+ * Phase3: tooltip の“中身だけ”整理（挙動は一切変えない）
  */
 
 const AXES = [
@@ -23,6 +25,9 @@ const AXES = [
   { key: "WLオリジナル", label: "⑩ WLオリジナル", titleLabel: "WLオリジナル" },
 ];
 
+/* =========================
+   utils（数値/文字列/表示）
+   ========================= */
 function toNum(v) {
   if (v == null) return 0;
   const n = Number(String(v).replace(/,/g, ""));
@@ -44,15 +49,13 @@ function toNumOrNull(v) {
 function yen(n) {
   return new Intl.NumberFormat("ja-JP").format(Math.round(n || 0)) + "円";
 }
-
-function safeStr(v, fallback = "未分類") {
-  const s = String(v ?? "").trim();
-  return s ? s : fallback;
-}
-
 function pct(v) {
   if (!Number.isFinite(v)) return "0.0%";
   return (v * 100).toFixed(1) + "%";
+}
+function safeStr(v, fallback = "未分類") {
+  const s = String(v ?? "").trim();
+  return s ? s : fallback;
 }
 function fmtMaybeYen_(n, fallback = "—") {
   if (n == null || !Number.isFinite(n)) return fallback;
@@ -64,16 +67,17 @@ function fmtMaybePct_(v, fallback = "—") {
 }
 
 function axisMeta(axisKey) {
-  return AXES.find(a => a.key === axisKey) || AXES[3];
+  return AXES.find((a) => a.key === axisKey) || AXES[3];
 }
-
 function getAxisFromState_(state) {
   const raw = safeStr(state?.widget1Axis, "景品ジャンル");
   if (raw === "ジャンル") return "景品ジャンル";
   return raw;
 }
 
-/** 色：カテゴリkeyから安定生成（Chart.js が確実に解釈できる hsl） */
+/* =========================
+   色（カテゴリkeyから安定生成）
+   ========================= */
 function hashHue_(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
@@ -88,7 +92,9 @@ function colorSoft_(key) {
   return `hsl(${hue}, 75%, 70%)`;
 }
 
-/** ===== Phase1: 行から数値を拾う（列名ゆらぎ吸収 / 無ければnull） ===== */
+/* =========================================================
+   Phase1（凡例の判断ユニット化）に必要な pick / 集計
+   ========================================================= */
 function pickNum_(r, keys) {
   for (const k of keys) {
     const v = r?.[k];
@@ -98,21 +104,29 @@ function pickNum_(r, keys) {
   return null;
 }
 
-// 消化額（あなたの今の正規化は consume が生えている）
+// 消化額（今の正規化は consume が生えている前提。claw も許容）
 function pickConsume_(r) {
   return pickNum_(r, [
-    "consume", "claw",
-    "消化額", "消化額合計", "総消化額", "消化",
-    "consume_yen", "consume_amount", "consumption", "spent",
-    "cost", "cost_yen",
+    "consume",
+    "claw",
+    "消化額",
+    "消化額合計",
+    "総消化額",
+    "消化",
+    "consume_yen",
+    "consume_amount",
+    "consumption",
+    "spent",
+    "cost",
+    "cost_yen",
   ]);
 }
 
-// 原価率（charts.js と一致させる：cost_rate / 原価率、detail互換で costRate も）
+// 原価率（charts.js 互換: cost_rate / 原価率、detail互換: costRate も）
 function pickCostRate_(r) {
   const v = pickNum_(r, ["cost_rate", "costRate", "原価率", "cost_rate_pct", "cost_rate_percent"]);
   if (v == null) return null;
-  return v > 1.5 ? (v / 100) : v; // 0-100%が来ても0-1に揃える
+  return v > 1.5 ? v / 100 : v; // 0-100%が来ても0-1へ
 }
 
 function buildAgg_(rows, axisKey) {
@@ -158,11 +172,12 @@ function buildAgg_(rows, axisKey) {
     }
   }
 
-  const items = Array.from(map.values()).map(x => {
+  const items = Array.from(map.values()).map((x) => {
     const booths = x.booths.size;
     const consume = x.consumeSeen ? x.consumeSum : null;
-    const avgSales = booths > 0 ? (x.sales / booths) : null;
+    const avgSales = booths > 0 ? x.sales / booths : null;
 
+    // 原価率：優先：行平均 / 次点：消化額×1.1 / 売上
     let costRate = null;
     if (x.costRateCount > 0) {
       costRate = x.costRateSum / x.costRateCount;
@@ -191,6 +206,9 @@ function buildAgg_(rows, axisKey) {
   return { items, totalSales, totalBooths };
 }
 
+/* =========================
+   DOM（器の確保）
+   ========================= */
 function ensureDom_(mount, actions, mode) {
   if (mount.__w1_root) return mount.__w1_root;
 
@@ -209,7 +227,7 @@ function ensureDom_(mount, actions, mode) {
 
   const selectWrap = el("div", { class: "widget1SelectWrap" });
   const select = el("select", { class: "widget1Select" });
-  AXES.forEach(a => select.appendChild(el("option", { value: a.key, text: a.label })));
+  AXES.forEach((a) => select.appendChild(el("option", { value: a.key, text: a.label })));
   selectWrap.appendChild(select);
 
   const right = el("div", { class: "widget1HeaderRight" }, []);
@@ -225,7 +243,9 @@ function ensureDom_(mount, actions, mode) {
   const chartWrap = el("div", { class: "widget1ChartWrap" });
   const canvas = el("canvas", { class: "widget1Canvas" });
 
-  // ✅ Phase2: 中央表示（DOMを重ねるだけ / 状態追加なし）
+  // =========================================================
+  // Phase2（中央の空白を埋める）：DOMを重ねるだけ（状態追加なし）
+  // =========================================================
   const center = el("div", { class: "w1Center" }, [
     el("div", { class: "w1CenterLabel", text: "合計売上" }),
     el("div", { class: "w1CenterValue", text: "—" }),
@@ -271,26 +291,47 @@ function updateTitle_(mount, axisKey) {
   if (!title) return;
   title.textContent = `${meta.titleLabel}別 売上 / ステーション構成比`;
 }
-
 function updateSelect_(mount, axisKey) {
   const sel = mount.__w1_select;
   if (!sel) return;
   if (sel.value !== axisKey) sel.value = axisKey;
 }
 
-/** ✅ Phase2: 中央表示（合計売上のみ） */
+/* =========================================================
+   Phase2（中央表示）：合計売上のみ（状態追加なし）
+   ========================================================= */
 function updateCenter_(mount, totalSales) {
   const v = mount.__w1_centerValue;
   if (!v) return;
 
   const n = Number(totalSales);
-  if (Number.isFinite(n) && n > 0) {
-    v.textContent = yen(n);
-  } else {
-    v.textContent = "—";
-  }
+  v.textContent = Number.isFinite(n) && n > 0 ? yen(n) : "—";
 }
 
+/* =========================================================
+   Phase3（ツールチップ中身だけ整理）：挙動は一切変えない
+   ========================================================= */
+function tooltipLabelPhase3_(ctx) {
+  const meta = ctx?.chart?.$w1;
+  if (!meta) return "";
+
+  const i = ctx.dataIndex;
+  const it = meta.items?.[i];
+  if (!it) return "";
+
+  const boothsShare = meta.dataBooths?.[i] ?? 0;
+  const salesShare = meta.dataSales?.[i] ?? 0;
+
+  // datasetIndex 0=内（台数/マシン構成比）, 1=外（売上/売上構成比）
+  if (ctx.datasetIndex === 0) {
+    return [`台数: ${it.booths}`, `マシン構成比: ${pct(boothsShare)}`];
+  }
+  return [`売上: ${yen(it.sales)}`, `売上構成比: ${pct(salesShare)}`];
+}
+
+/* =========================
+   Chart（作成/更新）
+   ========================= */
 /**
  * ✅ 重要：tooltip の参照先を「そのチャート自身」に固定する
  * - ch.$w1 = { items, totalSales, totalBooths, dataSales, dataBooths }
@@ -301,17 +342,18 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   const canvas = mount.__w1_canvas;
   if (!Chart || !canvas) return;
 
-  const labels = items.map(x => x.label);
+  const labels = items.map((x) => x.label);
+  const dataBooths = items.map((x) => (totalBooths ? x.booths / totalBooths : 0));
+  const dataSales = items.map((x) => (totalSales ? x.sales / totalSales : 0));
 
-  const dataBooths = items.map(x => (totalBooths ? x.booths / totalBooths : 0));
-  const dataSales  = items.map(x => (totalSales ? x.sales / totalSales : 0));
-
-  const colorsInner = items.map(x => x.colorSoft || "#93c5fd");
-  const colorsOuter = items.map(x => x.color || "#2563eb");
+  const colorsInner = items.map((x) => x.colorSoft || "#93c5fd");
+  const colorsOuter = items.map((x) => x.color || "#2563eb");
 
   // 既存が別canvasなら破棄
   if (mount.__w1_chart && mount.__w1_chart.canvas !== canvas) {
-    try { mount.__w1_chart.destroy(); } catch (_) {}
+    try {
+      mount.__w1_chart.destroy();
+    } catch (_) {}
     mount.__w1_chart = null;
   }
 
@@ -333,7 +375,9 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
       ch.update("none");
       return;
     } catch (e) {
-      try { ch.destroy(); } catch (_) {}
+      try {
+        ch.destroy();
+      } catch (_) {}
       mount.__w1_chart = null;
     }
   }
@@ -375,6 +419,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
           tooltip: {
             enabled: true,
             callbacks: {
+              // タイトル（カテゴリ名）は現状維持
               title: (itemsArr) => {
                 const it0 = itemsArr?.[0];
                 const idx = it0?.dataIndex;
@@ -382,29 +427,10 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
                 const item = meta?.items?.[idx];
                 return item?.label ?? "";
               },
-              label: (ctx) => {
-                const meta = ctx?.chart?.$w1;
-                if (!meta) return "";
-                const i = ctx.dataIndex;
-                const it = meta.items?.[i];
-                if (!it) return "";
-
-                const boothsShare = meta.dataBooths?.[i] ?? 0;
-                const salesShare  = meta.dataSales?.[i] ?? 0;
-
-                // datasetIndex 0=内（ステーション）, 1=外（売上）
-                if (ctx.datasetIndex === 0) {
-                  return [
-                    `ステーション: ${it.booths}（${pct(boothsShare)}）`,
-                    `売上: ${yen(it.sales)}（${pct(salesShare)}）`,
-                  ];
-                } else {
-                  return [
-                    `売上: ${yen(it.sales)}（${pct(salesShare)}）`,
-                    `ステーション: ${it.booths}（${pct(boothsShare)}）`,
-                  ];
-                }
-              },
+              // =========================================================
+              // Phase3: “中身だけ”整理（挙動は一切変えない）
+              // =========================================================
+              label: tooltipLabelPhase3_,
             },
           },
         },
@@ -418,9 +444,9 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   }
 }
 
-/**
- * Phase1: 右側凡例を「判断ブロック」形式で描画
- */
+/* =========================================================
+   Phase1（凡例：判断ユニット）描画
+   ========================================================= */
 function renderLegend_(mount, items, totalSales, totalBooths) {
   const box = mount.__w1_legend;
   if (!box) return;
@@ -428,8 +454,8 @@ function renderLegend_(mount, items, totalSales, totalBooths) {
   clear(box);
 
   items.forEach((it) => {
-    const salesShare = totalSales ? (it.sales / totalSales) : null;
-    const boothShare = totalBooths ? (it.booths / totalBooths) : null;
+    const salesShare = totalSales ? it.sales / totalSales : null;
+    const boothShare = totalBooths ? it.booths / totalBooths : null;
 
     box.appendChild(
       el("div", { class: "w1LegendItem" }, [
@@ -469,6 +495,9 @@ function renderLegend_(mount, items, totalSales, totalBooths) {
   );
 }
 
+/* =========================
+   entry
+   ========================= */
 export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   if (!mount) return;
   const mode = opts.mode || "normal";
@@ -483,9 +512,10 @@ export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
 
   const { items, totalSales, totalBooths } = buildAgg_(rows, axisKey);
 
-  // ✅ Phase2：中央に合計売上（状態追加なし）
+  // Phase2: 中央（合計売上のみ）
   updateCenter_(mount, totalSales);
 
+  // chart / legend
   upsertChart_(mount, items, totalSales, totalBooths);
   renderLegend_(mount, items, totalSales, totalBooths);
 }
