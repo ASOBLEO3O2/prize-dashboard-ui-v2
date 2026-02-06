@@ -181,3 +181,7 @@
     grid-template-rows:repeat(4, minmax(0, 1fr));
   }
 }
+
+.widget1Canvas{
+  max-height: none;
+}
