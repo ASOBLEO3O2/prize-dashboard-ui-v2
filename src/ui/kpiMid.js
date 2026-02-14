@@ -68,11 +68,10 @@ export function renderMidKpi(mounts, state, actions) {
     if (type === "widget1") {
       renderMidSlot(mount, {
         slotKey: "widget1",
-        title: "",          // widget1は内部ヘッダーを持つ
-        noHeader: true,     // ✅ 外側ヘッダー無し
+        title: "",
+        noHeader: true, // widget1は内部ヘッダーを持つ
         renderBody: (body) => {
           safeRender_(body, () => {
-            // widget1は内部で「拡大」ボタンも持ってる
             renderWidget1ShareDonut(body, state, actions, { mode: "normal" });
           }, "widget1");
         },
