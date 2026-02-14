@@ -1,3 +1,4 @@
+// src/ui/kpiMid.js
 import { el, clear } from "../utils/dom.js";
 import { fmtYen, fmtPct } from "../utils/format.js";
 import { GENRES } from "../constants.js";
@@ -7,67 +8,136 @@ import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
 
 /**
  * 役割：
- * - 中段カードを描画（4枠）
- * - 4枠の「構造」は renderMidSlot が作る（1回だけ）
- * - 各ウィジェットは midPanelBody の中身だけを描く
+ * - 中段カード（4枠）を描画
+ * - ドロワーの割当（state.midSlots / midSlotsDraft）に従って描き分け
+ * - スロットの「器」は同一typeの間は再生成しない（renderMidSlot）
  * - 下段（midCardsMount）は既存仕様のまま
+ *
+ * 想定 slotType:
+ *  - "widget1"
+ *  - "widget2"（原価率分布：canvas器）
+ *  - "scatter"（売上×原価率：canvas器）
+ *  - "dummyA" "dummyB" "dummyC" "dummyD"
  */
 export function renderMidKpi(mounts, state, actions) {
-  // ===== スロット①：ウィジェット①（この中でヘッダーを持つので noHeader）=====
-  renderMidSlot(mounts.midSlotSalesDonut, {
-    noHeader: true,
-    renderBody: (body) => {
-      // ✅ body は毎回同じDOM（slotが再生成しないので安定）
-      renderWidget1ShareDonut(body, state, actions, { mode: "normal" });
-    },
-  });
+  const slotMounts = [
+    mounts.midSlotSalesDonut,
+    mounts.midSlotMachineDonut,
+    mounts.midSlotCostHist,
+    mounts.midSlotScatter,
+  ];
 
-  // ===== スロット②：ダミー（将来差し替え）=====
-  renderMidSlot(mounts.midSlotMachineDonut, {
-    title: "（ダミー）",
-    renderBody: (body) => {
-      clear(body);
-      body.appendChild(
-        el("div", { style: "margin:auto; opacity:.6;", text: "DUMMY SLOT" })
-      );
-    },
-  });
+  const fallback = ["widget1", "widget2", "dummyA", "dummyB"];
+  const slotsFixed = norm4_(state.midSlots, fallback);
 
-  // ===== スロット③：原価率分布（canvas器）=====
-  renderMidSlot(mounts.midSlotCostHist, {
-    title: "原価率 分布",
-    tools: el("select", { class: "select", id: "costHistMode" }, [
-      el("option", { value: "count", text: "台数" }),
-      el("option", { value: "sales", text: "売上" }),
-    ]),
-    onFocus: () => actions.onOpenFocus?.("costHist"),
-    renderBody: (body) => {
-      // ✅ canvas は “存在し続ける” のが重要（Chart.jsの初回崩れ対策）
-      if (!body.__costCanvas) {
-        clear(body);
-        const c = el("canvas", { id: "costHistChart" });
-        body.appendChild(c);
-        body.__costCanvas = c;
-      }
-    },
-  });
+  // ✅ ドロワーを開いてる間は draft を即プレビュー
+  const slotsDraft = norm4_(state.midSlotsDraft, slotsFixed);
+  const slots = state.drawerOpen ? slotsDraft : slotsFixed;
 
-  // ===== スロット④：散布図（canvas器）=====
-  renderMidSlot(mounts.midSlotScatter, {
-    title: "売上 × 原価率",
-    onFocus: () => actions.onOpenFocus?.("scatter"),
-    renderBody: (body) => {
-      if (!body.__scatterCanvas) {
-        clear(body);
-        const c = el("canvas", { id: "salesCostScatter" });
-        body.appendChild(c);
-        body.__scatterCanvas = c;
-      }
-    },
-  });
+  for (let i = 0; i < 4; i++) {
+    const mount = slotMounts[i];
+    const type = slots[i] || "dummyA";
+    if (!mount) continue;
+    renderMidSlotByType_(mount, type, state, actions, i);
+  }
 
   // ===== 下段（既存のまま）=====
   renderLowerCards_(mounts.midCards, state, actions);
+}
+
+function norm4_(arr, fallback) {
+  const a = Array.isArray(arr) ? arr.slice(0, 4) : fallback.slice(0, 4);
+  while (a.length < 4) a.push(fallback[a.length] || "dummyA");
+  return a.map((x) => String(x || "").trim() || "dummyA");
+}
+
+function renderMidSlotByType_(mount, type, state, actions, idx) {
+  switch (type) {
+    case "widget1": {
+      // widget1 は自前でヘッダーを持つので外側ヘッダー不要
+      renderMidSlot(mount, {
+        slotKey: type,
+        noHeader: true,
+        renderBody: (body) => {
+          renderWidget1ShareDonut(body, state, actions, { mode: "normal" });
+        },
+      });
+      return;
+    }
+
+    case "widget2": {
+      // 原価率分布（ヒスト）＝ canvas器だけ保証（Chart.js実体は charts.js）
+      const tools = el("select", { class: "select", id: "costHistMode" }, [
+        el("option", { value: "count", text: "台数" }),
+        el("option", { value: "sales", text: "売上" }),
+      ]);
+
+      renderMidSlot(mount, {
+        slotKey: type,
+        title: "原価率 分布",
+        tools,
+        onFocus: () => actions.onOpenFocus?.("costHist"),
+        renderBody: (body) => {
+          // chart用のCSSを当てる
+          body.classList.add("chartBody");
+
+          if (!body.__costCanvas) {
+            clear(body);
+            const c = el("canvas", { id: "costHistChart" });
+            body.appendChild(c);
+            body.__costCanvas = c;
+          }
+        },
+      });
+      return;
+    }
+
+    case "scatter": {
+      renderMidSlot(mount, {
+        slotKey: type,
+        title: "売上 × 原価率",
+        onFocus: () => actions.onOpenFocus?.("scatter"),
+        renderBody: (body) => {
+          body.classList.add("chartBody");
+
+          if (!body.__scatterCanvas) {
+            clear(body);
+            const c = el("canvas", { id: "salesCostScatter" });
+            body.appendChild(c);
+            body.__scatterCanvas = c;
+          }
+        },
+      });
+      return;
+    }
+
+    case "dummyA":
+    case "dummyB":
+    case "dummyC":
+    case "dummyD":
+    default: {
+      renderMidSlot(mount, {
+        slotKey: type,
+        title: dummyTitle_(type, idx),
+        onFocus: () => actions?.onOpenFocus?.({ slotIndex: idx, slotType: type }),
+        renderBody: (body) => {
+          clear(body);
+          body.appendChild(el("div", { class: "placeholder", text: `${type} placeholder` }));
+        },
+      });
+      return;
+    }
+  }
+}
+
+function dummyTitle_(type, idx) {
+  const map = {
+    dummyA: "ダミー①",
+    dummyB: "ダミー②",
+    dummyC: "ダミー③",
+    dummyD: "ダミー④",
+  };
+  return map[type] || `ダミー(${idx + 1})`;
 }
 
 /* =========================
@@ -90,20 +160,21 @@ function renderLowerCards_(cardsMount, state, actions) {
         "div",
         { class: "card genreCard", style: "padding:12px; cursor:default;" },
         [
-          el("div", {
-            style:
-              "display:flex; align-items:center; justify-content:space-between; gap:10px;",
-          }, [
-            el("div", { style: "font-weight:900;", text: `内訳：${view.parentLabel}` }),
-            el("button", {
-              class: "btn",
-              text: "上層にもどる",
-              onClick: (e) => {
-                e.preventDefault();
-                actions.onPickMidParent?.(null);
-              },
-            }),
-          ]),
+          el(
+            "div",
+            { style: "display:flex; align-items:center; justify-content:space-between; gap:10px;" },
+            [
+              el("div", { style: "font-weight:900;", text: `内訳：${view.parentLabel}` }),
+              el("button", {
+                class: "btn",
+                text: "上層にもどる",
+                onClick: (e) => {
+                  e.preventDefault();
+                  actions.onPickMidParent?.(null);
+                },
+              }),
+            ]
+          ),
         ]
       )
     );
@@ -149,10 +220,6 @@ function renderLowerCards_(cardsMount, state, actions) {
 
   cardsMount.appendChild(grid);
 }
-
-/* =========================
-   view builder（下段用：既存）
-   ========================= */
 
 function buildMidView_(state, axis, parentKey) {
   if (axis !== "ジャンル") {
@@ -235,10 +302,6 @@ function normalizeShares_(items, meta) {
 
   return { ...meta, items: out };
 }
-
-/* =========================
-   helpers
-   ========================= */
 
 function metric(label, value) {
   return el("div", { class: "metric" }, [
