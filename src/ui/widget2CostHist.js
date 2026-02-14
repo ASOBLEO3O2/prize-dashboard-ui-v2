@@ -1,45 +1,63 @@
 // src/ui/widget2CostHist.js
 import { el, clear } from "../utils/dom.js";
-import { renderCharts } from "./charts.js";
 
 /**
- * Widget2: 原価率ヒスト
- * 既存仕様：
- * - mount 直下に card/canvas を構築
- * - charts.js が canvas id を拾って Chart.js を生成
+ * Widget②：原価率 分布（ヒストグラム）
+ * - Chart.js 実体は charts.js 側
+ * - ここでは「器」だけを保証する
  *
- * 問題：
- * - slot切替等で mount が clear されると DOM は消えるが __w2_built が残る
- * - その結果、再描画時に何も作られず「描画されない」
- *
- * 対策：
- * - DOM が無いなら再構築する（__w2_built だけに依存しない）
- * - その上で renderCharts() を呼び直す
+ * 修正：
+ * - slot切替などで mount が clear されても __w2_built が残り得る
+ * - その場合でも canvas が無ければ再構築する
  */
-export function renderWidget2CostHist(mount, actions) {
-  if (!mount) return;
+export function renderWidget2CostHist(slotMount, actions) {
+  if (!slotMount) return;
 
-  // DOMが残っているか？（canvas id で判定）
-  const hasCanvas = !!mount.querySelector("#w2_cost_hist_canvas");
+  const hasCanvas = !!slotMount.querySelector("#costHistChart");
 
-  // すでに built でも、DOM が無いなら作り直す
-  if (!mount.__w2_built || !hasCanvas) {
-    clear(mount);
+  // 初回 or DOMが消えた場合は作り直す
+  if (!slotMount.__w2_built || !hasCanvas) {
+    clear(slotMount);
 
-    const card = el("div", { class: "card midPanel", id: "w2_cost_hist" }, [
-      el("div", { class: "midPanelHeader" }, [
-        el("div", { class: "midPanelTitle", text: "② 原価率分布" }),
+    const card = el("div", { class: "card midPanel widget2" });
+
+    const header = el("div", { class: "midPanelHeader" }, [
+      el("div", { class: "midPanelTitleWrap" }, [
+        el("div", { class: "midPanelTitle", text: "原価率 分布" }),
+        el("div", { class: "midPanelSub", text: "" }),
       ]),
-      el("div", { class: "midPanelBody" }, [
-        el("canvas", { id: "w2_cost_hist_canvas" }),
+      el("button", {
+        class: "btn ghost midPanelBtn",
+        text: "拡大",
+        onClick: (e) => {
+          e.preventDefault();
+          actions.onOpenFocus?.("costHist");
+        },
+      }),
+    ]);
+
+    const tools = el("div", { class: "chartTools" }, [
+      el("select", { class: "select", id: "costHistMode" }, [
+        el("option", { value: "count", text: "台数" }),
+        el("option", { value: "sales", text: "売上" }),
       ]),
     ]);
 
-    mount.appendChild(card);
-    mount.__w2_built = true;
-  }
+    header.appendChild(tools);
 
-  // charts.js 側で Chart インスタンスを (再)生成
-  // ※ canvas差し替え時は charts.js が destroy→create する
-  renderCharts(actions?.state || null, actions);
+    const body = el(
+      "div",
+      {
+        class: "midPanelBody chartBody",
+        onClick: () => actions.onOpenFocus?.("costHist"),
+      },
+      [el("canvas", { id: "costHistChart" })]
+    );
+
+    card.appendChild(header);
+    card.appendChild(body);
+    slotMount.appendChild(card);
+
+    slotMount.__w2_built = true;
+  }
 }
