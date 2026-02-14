@@ -30,37 +30,30 @@ export function renderMidKpi(mounts, state, actions) {
 
     const type = slots[i] || "dummyA";
 
-    // =========================================================
-    // widget2 は「自前で card を作る」設計なので、slot直下に描く
-    // =========================================================
-    if (type === "widget2") {
-      // 他タイプから切替時の残骸を消す（確実に）
-      if (mount.__midSlotKey && mount.__midSlotKey !== "widget2") {
-        clear(mount);
-        delete mount.__midSlot;
-      }
-      mount.__midSlotKey = "widget2";
+    // ===============================
+// widget2（重要：clearしない / builtフラグ管理）
+// ===============================
+if (type === "widget2") {
+  // renderMidSlot の器が残っていたら剥がす
+  if (mount.__midSlot) {
+    clear(mount);
+    delete mount.__midSlot;
+    delete mount.__midSlotKey;
+  }
 
-      try {
-        renderWidget2CostHist(mount, actions);
-      } catch (err) {
-        clear(mount);
-        mount.appendChild(
-          el("div", { class: "card midPanel" }, [
-            el("div", { class: "midPanelHeader" }, [
-              el("div", { class: "midPanelTitle", text: "② 原価率分布（widget2）" }),
-            ]),
-            el("div", { class: "midPanelBody" }, [
-              el("pre", {
-                style: "white-space:pre-wrap; font-size:12px; margin:0;",
-                text: `widget2 ERROR:\n${String(err?.stack || err)}`,
-              }),
-            ]),
-          ])
-        );
-      }
-      continue;
-    }
+  // DOMが無いのに built=true の事故を防ぐ
+  if (mount.__w2_built && !mount.querySelector(".widget2")) {
+    delete mount.__w2_built;
+  }
+
+  // ✅ widget2側にDOM管理を任せる（clearしない）
+  renderWidget2CostHist(mount, actions);
+  continue;
+}
+
+// widget2 以外を描くときは、次回戻った時に再構築できるようにする
+if (mount.__w2_built) delete mount.__w2_built;
+
 
     // =========================================================
     // widget1 / dummy / scatter は renderMidSlot（midPanelBody に描く）
