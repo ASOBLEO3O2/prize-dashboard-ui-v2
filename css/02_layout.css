@@ -49,6 +49,53 @@
   flex:1;
 }
 
+/* 画面は1枚（全体スクロールではなく、ウィジェット側スクロールに寄せる） */
+html, body{
+  height: 100%;
+}
+
+/* app 直下のレイアウトが flex なら、残りを midKpiWrap に渡せる */
+.container{
+  min-height: 100vh;
+  display:flex;
+  flex-direction:column;
+}
+
+/* 上部（topbar + topKpi）が上に積まれ、中段が残りを使う */
+.section{
+  flex: 1;
+  min-height: 0;
+  display:flex;
+  flex-direction:column;
+}
+
+/* ✅ 通常時：中段は“2×2が見える高さ”＋中身は隠す（今は枠だけでもOK） */
+.midKpiWrap{
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ✅ スクロールモード：midKpiWrap が前面・全画面でスクロール */
+body.widgetsOnly .topbar,
+body.widgetsOnly .kpiTop{
+  opacity: 0;
+  pointer-events: none;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+body.widgetsOnly .midKpiWrap{
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  border-radius: 0;
+  overflow: auto;  /* ウィジェットだけスクロール */
+}
+
+
 .midKpiWrap{
   flex:1;
   min-height:0;
