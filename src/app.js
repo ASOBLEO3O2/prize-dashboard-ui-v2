@@ -58,6 +58,7 @@ const initialState = {
 };
 
 const store = createStore(initialState);
+window.store = store;
 const root = document.getElementById("app");
 
 window.getState = () => store.get();
