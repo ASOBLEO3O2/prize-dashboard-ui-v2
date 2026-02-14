@@ -64,6 +64,7 @@ window.getState = () => store.get();
 
 // ===== actions =====
 const actions = {
+
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
@@ -102,9 +103,11 @@ const actions = {
     }));
   },
 
-  onOpenDrawer: () => store.set((s) => ({ ...s, drawerOpen: true })),
+  onOpenDrawer: () =>
+    store.set((s) => ({ ...s, drawerOpen: true })),
 
-  onCloseDrawer: () => store.set((s) => ({ ...s, drawerOpen: false })),
+  onCloseDrawer: () =>
+    store.set((s) => ({ ...s, drawerOpen: false })),
 
   onSetMidSlotDraft: (index, value) => {
     store.set((s) => {
@@ -177,19 +180,29 @@ const mounts = mountLayout(root, {
 
 // ===== render loop =====
 function renderAll(state) {
-  mounts.updatedBadge.textContent = `更新日: ${fmtDate(state.updatedDate)}`;
+  mounts.updatedBadge.textContent =
+    `更新日: ${fmtDate(state.updatedDate)}`;
 
   renderTopKpi(mounts.topKpi, state.topKpi);
   renderMidKpi(mounts, state, actions);
-
-  // ✅ チャートはDOMが確定してから1回だけ呼ぶ（重複呼びを削除）
+  // チャートはDOMが確定してから描く
   requestAnimationFrame(() => {
-    renderCharts(mounts, state);
+  renderCharts(mounts, state);
   });
-
-  renderFocusOverlay(mounts.focusOverlay, mounts.focusModal, state, actions);
+  renderCharts(mounts, state);
+  renderFocusOverlay(
+    mounts.focusOverlay,
+    mounts.focusModal,
+    state,
+    actions
+  );
   renderDetail(mounts.detailMount, state, actions);
-  renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
+  renderDrawer(
+    mounts.drawer,
+    mounts.drawerOverlay,
+    state,
+    actions
+  );
 }
 
 renderAll(store.get());
@@ -205,28 +218,59 @@ hydrateFromRaw().catch((e) => {
 
 // ===== data hydrate =====
 async function hydrateFromRaw() {
-  const { rows, summary } = await loadRawData();
+  const raw = await loadRawData();
+  const rows = Array.isArray(raw?.rows) ? raw.rows : [];
+  const summary = raw?.summary ?? null;
+  const masterDict = raw?.masterDict ?? {};
 
-  // symbol decode（必要なら）
-  const decoded = rows.map((r) => ({
-    ...r,
-    ...decodeSymbol(r.symbol_raw ?? r.symbol ?? "", summary?.codebook),
-  }));
+  let codebook = {};
+  try {
+    const res = await fetch("./data/master/codebook.json", {
+      cache: "no-store",
+    });
+    if (res.ok) codebook = await res.json();
+  } catch (e) {
+    codebook = {};
+  }
+
+  const normalizedRows = rows.map((r) => {
+    const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
+    const m = key ? masterDict?.[key] : null;
+    const decoded = key ? decodeSymbol(key, codebook) : {};
+
+    return {
+      ...r,
+      ...(m || {}),
+      ...decoded,
+
+      booth_id: r?.booth_id,
+      machine_name: r?.machine_name,
+      machine_key: r?.machine_key,
+      label_id: r?.label_id,
+
+      symbol_raw: r?.symbol_raw,
+      raw: r?.raw,
+      sales: r?.sales,
+      claw: r?.claw,
+      cost_rate: r?.cost_rate,
+    };
+  });
 
   const st = store.get();
-  const filtered = applyFilters(decoded, st.filters);
+  const filtered = applyFilters(normalizedRows, st.filters);
 
   const vm = buildViewModel(filtered, summary);
   const axis = buildByAxis(filtered);
 
   store.set((s) => ({
     ...s,
-    updatedDate: summary?.updatedDate ?? s.updatedDate,
-    filteredRows: filtered,
-    byAxis: axis,
+    updatedDate: vm.updatedDate || s.updatedDate,
     topKpi: vm.topKpi,
     byGenre: vm.byGenre,
     details: vm.details,
+    byAxis: axis,
+    filters: vm.filters ?? s.filters,
+    filteredRows: filtered,
     loadError: null,
   }));
 }
