@@ -1,5 +1,5 @@
 /* css/21_midPanel.css */
-/* 中段カード（枠）をブレないように固定 */
+/* 中段カードの内側余白を減らして“空白感”を解消 */
 
 .midPanel{
   min-width:0;
@@ -10,7 +10,6 @@
   overflow:hidden;
 }
 
-/* ヘッダー高さは固定（枠サイズ決めの基準） */
 .midPanelHeader{
   flex:0 0 auto;
   padding:10px 12px;
@@ -22,13 +21,6 @@
   gap:10px;
 }
 
-.midPanelTitleWrap{
-  min-width:0;
-  display:flex;
-  flex-direction:column;
-  gap:2px;
-}
-
 .midPanelTitle{
   font-weight:900;
   font-size:14px;
@@ -38,34 +30,25 @@
   text-overflow:ellipsis;
 }
 
-.midPanelSub{
-  font-size:12px;
-  opacity:.75;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-/* bodyは残りを全部取る（ここが枠サイズの主役） */
+/* ✅ bodyのpaddingを小さくして、点線枠が広く取れるように */
 .midPanelBody{
   flex:1;
   min-height:0;
-  padding:12px;
+  padding:8px;           /* ← 12px → 8px */
   position:relative;
   overflow:hidden;
 }
 
-/* 枠サイズ決め用のプレースホルダ（中身なし） */
+/* 枠サイズ決めプレースホルダ */
 .frameOnlyBody{
   display:flex;
-  align-items:center;
-  justify-content:center;
+  align-items:stretch;
+  justify-content:stretch;
   height:100%;
 }
 
 .frameOnlyHint{
-  width:100%;
-  height:100%;
+  flex:1;                /* ← 重要：確実に全高 */
   border:1px dashed rgba(255,255,255,.18);
   border-radius:12px;
   display:flex;
@@ -74,6 +57,7 @@
   justify-content:center;
   gap:6px;
   opacity:.85;
+  padding:10px;
 }
 
 .frameOnlyType{
