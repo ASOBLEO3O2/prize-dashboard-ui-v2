@@ -59,23 +59,4 @@ export function renderMidKpi(mounts, state, actions) {
     });
   }
 
-  // 下段カードは不要（維持）
-  if (mounts.midCards) clear(mounts.midCards);
-}
 
-function norm4_(arr, fallback) {
-  const a = Array.isArray(arr) ? arr.slice(0, 4) : fallback.slice(0, 4);
-  while (a.length < 4) a.push(fallback[a.length] || "dummyA");
-  return a.map((x) => String(x || "").trim() || "dummyA");
-}
-
-function titleOf_(type, idx) {
-  const map = {
-    scatter: "Scatter（未復活）",
-    dummyA: "空き枠A",
-    dummyB: "空き枠B",
-    dummyC: "空き枠C",
-    dummyD: "空き枠D",
-  };
-  return map[type] || `枠${idx + 1}`;
-}
