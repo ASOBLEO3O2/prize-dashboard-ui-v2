@@ -295,14 +295,16 @@ function ensureDom_(mount, actions, mode) {
   mount.__w1_tip = tip;
 
   // change handler（1回だけ）
+// ✅ select が null のとき落ちない + 二重bind防止
+if (select && !select.__bound) {
   select.addEventListener("change", () => {
     const axisKey = select.value;
     actions.onSetWidget1Axis?.(axisKey);
     actions.requestRender?.();
   });
-
-  return root;
+  select.__bound = true;
 }
+
 
 function updateTitle_(mount, axisKey) {
   const meta = axisMeta(axisKey);
