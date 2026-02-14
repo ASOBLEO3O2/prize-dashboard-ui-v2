@@ -20,7 +20,10 @@
 }
 
 .widget1Title{
-  font-weight: 900;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  color: rgba(230,237,243,.95);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -37,18 +40,17 @@
   overflow: hidden;
 }
 
-/* チャート領域（オーバーレイのため relative） */
+/* チャート領域 */
 .widget1ChartWrap{
   position: relative;
   min-height: 0;
   height: 100%;
-  width: 100%;
   display: flex;
-  align-items: stretch;
-  justify-content: stretch;
+  align-items: center;
+  justify-content: center;
 }
 
-/* canvas は枠内100% */
+/* canvas は上限を持たない */
 .widget1Canvas{
   width: 100% !important;
   height: 100% !important;
@@ -61,74 +63,9 @@
   min-height: 0;
   overflow: auto;
   font-size: 12px;
-  line-height: 1.2;
+  line-height: 1.25;
+  color: rgba(203,213,225,.92);
   padding-right: 4px;
-}
-
-/* ===== 中央表示（合計売上） ===== */
-.w1Center{
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none; /* hoverを邪魔しない */
-  text-align: center;
-  padding: 6px 10px;
-  border-radius: 12px;
-  background: rgba(10,15,20,.35);
-  border: 1px solid rgba(255,255,255,.08);
-  backdrop-filter: blur(6px);
-}
-
-.w1CenterLabel{
-  font-size: 11px;
-  opacity: .75;
-  margin-bottom: 2px;
-}
-
-.w1CenterValue{
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: .2px;
-  white-space: nowrap;
-}
-
-/* ===== ツールチップ（ドーナツ領域内・下部固定） ===== */
-.w1Tip{
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-  pointer-events: none; /* hoverを邪魔しない */
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity .12s ease, transform .12s ease;
-
-  padding: 10px 10px;
-  border-radius: 12px;
-  background: rgba(7, 11, 18, .78);
-  border: 1px solid rgba(255,255,255,.10);
-  box-shadow: 0 8px 24px rgba(0,0,0,.35);
-}
-
-.w1Tip.show{
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.w1TipTitle{
-  font-weight: 900;
-  font-size: 12px;
-  margin-bottom: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.w1TipLine{
-  font-size: 12px;
-  opacity: .95;
-  line-height: 1.35;
 }
 
 /* 狭い画面では縦並び */
@@ -138,126 +75,169 @@
   }
 }
 
-/* ===== Widget1: 見た目改善（ロジック無変更） ===== */
+/* ================================
+   Widget1 Typography Upgrade
+   - DOM文字（タイトル / 凡例 / tooltip / 中央）
+   ================================ */
 
-/* 左:ドーナツ / 右:凡例 を 6:4 に（ドーナツを大きく） */
-.widget1Body{
-  grid-template-columns: minmax(0, 1fr) 220px; /* 260 -> 220 */
-  gap: 14px;
-}
-
-/* ドーナツを少し大きく見せる */
-.widget1ChartWrap{
-  padding: 10px;
-}
-
-/* 中央表示：箱っぽさを消して“ラベル”に */
-.w1Center{
-  background: rgba(0,0,0,.0);      /* 透明に近く */
-  border: none;                    /* 枠線を消す */
-  box-shadow: none;                /* 影を消す */
-  backdrop-filter: none;           /* ぼかしも消す */
-  padding: 0;
-}
-
-.w1CenterLabel{
+/* Legend (right) */
+.w1LegendTitle{
   font-size: 11px;
-  opacity: .65;
-  letter-spacing: .2px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: rgba(226,232,240,.95);
+  margin: 0 0 8px;
 }
 
-.w1CenterValue{
-  font-size: 18px;                 /* 少し大きく */
-  font-weight: 900;
-  text-shadow: 0 2px 10px rgba(0,0,0,.35);
+.w1LegendEmpty{
+  font-size: 12px;
+  color: rgba(148,163,184,.9);
+  padding: 8px 6px;
 }
 
-/* tooltip：もっと “吹き出し感” を弱めて上品に */
-.w1Tip{
-  left: 14px;
-  right: 14px;
-  bottom: 14px;
-
-  border-radius: 14px;
-  background: rgba(10, 15, 20, .72);
-  border: 1px solid rgba(255,255,255,.08);
-  box-shadow: 0 10px 30px rgba(0,0,0,.35);
-}
-
-/* 凡例：カードっぽくして読みやすく */
-.widget1ABC{
-  padding-right: 8px;
+.w1LegendList{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .w1LegendItem{
-  padding: 10px 10px;
-  border-radius: 14px;
-  background: rgba(255,255,255,.035);
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 8px 8px;
   border: 1px solid rgba(255,255,255,.06);
-  margin-bottom: 10px;
+  border-radius: 10px;
+  background: rgba(2,6,23,.18);
 }
 
-.w1LegendHead{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+.w1LegendItem:hover{
+  background: rgba(2,6,23,.28);
+  border-color: rgba(255,255,255,.10);
 }
 
 .w1LegendSwatch{
   width: 10px;
   height: 10px;
-  border-radius: 999px;            /* ● */
-  box-shadow: 0 0 0 2px rgba(0,0,0,.25);
+  border-radius: 3px;
+  margin-top: 3px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.35) inset;
 }
 
 .w1LegendLabel{
   font-size: 12px;
-  font-weight: 900;
-  opacity: .95;
-}
-
-/* 数字は少し強調 */
-.w1LegendSales{
-  font-size: 13px;
-  font-weight: 900;
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: rgba(226,232,240,.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-bottom: 4px;
 }
 
-/* “売上構成比 / マシン構成比” を詰めすぎない */
-.w1LegendShares{
-  font-size: 11px;
-  opacity: .85;
-  line-height: 1.35;
-  margin-bottom: 6px;
-}
-
-.w1LegendShareSep{
-  opacity: .4;
-  margin: 0 6px;
-}
-
-/* メタ情報は2列で薄く */
 .w1LegendMeta{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px 10px;
-  font-size: 11px;
-  opacity: .85;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .w1LegendMetaRow{
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
-}
-
-.w1LegendMetaRow .k{
-  opacity: .7;
-}
-
-.widget1Note{
+  gap: 10px;
   font-size: 11px;
-  opacity: .65;
-  margin-top: 8px;
+  color: rgba(148,163,184,.95);
+}
+
+.w1LegendSales{
+  font-weight: 900;
+  color: rgba(203,213,225,.95);
+}
+
+.w1LegendShares{
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+.w1LegendShare{
+  font-size: 11px;
+  font-weight: 900;
+  color: rgba(226,232,240,.95);
+}
+
+.w1LegendShareSep{
+  opacity: .5;
+}
+
+/* Center text */
+.w1Center{
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  pointer-events: none;
+  text-align: center;
+}
+
+.w1CenterLabel{
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: rgba(148,163,184,.95);
+}
+
+.w1CenterValue{
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  color: rgba(226,232,240,.98);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tooltip (inside donut) */
+.w1Tip{
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15,23,42,.92);
+  border: 1px solid rgba(148,163,184,.18);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease;
+}
+
+.w1Tip.show{
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.w1TipTitle{
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  color: rgba(226,232,240,.98);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.w1TipLine{
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(203,213,225,.95);
+  line-height: 1.25;
 }
