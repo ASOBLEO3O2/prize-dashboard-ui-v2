@@ -40,3 +40,17 @@
 
 .sectionTitle{ font-size:16px; font-weight:850; }
 .sectionHint{ font-size:12px; color:var(--muted); }
+
+/* 中段が画面残りをすべて使う */
+.section{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  flex:1;
+}
+
+.midKpiWrap{
+  flex:1;
+  min-height:0;
+}
+
