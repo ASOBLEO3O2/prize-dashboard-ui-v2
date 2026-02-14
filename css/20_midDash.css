@@ -1,5 +1,11 @@
 /* css/20_midDash.css */
-/* 中段：2×2 正方形カード（ページスクロール前提） */
+/* 中段：2×2 正方形（セルサイズをclampで固定して“デカすぎ問題”を解消） */
+
+:root{
+  --midGap: 12px;
+  /* ✅ 正方形セルのサイズ（画面に合わせて伸縮するが上限/下限あり） */
+  --midCell: clamp(220px, 28vw, 360px);
+}
 
 .midKpiWrap{
   border:1px solid var(--border);
@@ -12,34 +18,43 @@
   flex-direction:column;
 }
 
-/* 中段上部（2×2の器） */
 .midTop{
   padding:14px;
   border-bottom:1px solid var(--border);
-
   display:flex;
 }
 
-/* 2×2 の器 */
+/* ✅ 2×2は固定セル（大きくなりすぎない） */
 #midDash{
   width:100%;
   display:grid;
-  gap:12px;
+  gap:var(--midGap);
 
-  grid-template-columns:repeat(2, minmax(0, 1fr));
-  align-items:stretch;
+  grid-template-columns:repeat(2, var(--midCell));
+  grid-template-rows:repeat(2, var(--midCell));
+
+  /* 余ったスペースは中央寄せ（左右に無駄な空白を作らない） */
+  justify-content:center;
+  align-content:start;
 }
 
-/* ✅ 各セル（=カード）を正方形に固定 */
+/* ✅ セルを確実に埋める（上書き負け対策で !important） */
 #midDash > *{
+  width:100% !important;
+  height:100% !important;
   min-width:0;
-  aspect-ratio:1 / 1; /* 正方形 */
-  height:auto;
+  min-height:0;
 }
 
-/* スマホ：縦1列（4枚並ぶ） */
+/* スマホ：縦1列で正方形（幅基準） */
 @media (max-width:768px){
   #midDash{
     grid-template-columns:1fr;
+    grid-template-rows:none;
+    justify-content:stretch;
+  }
+  #midDash > *{
+    aspect-ratio:1 / 1;
+    height:auto !important;
   }
 }
