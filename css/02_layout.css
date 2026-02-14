@@ -1,81 +1,106 @@
-/* =========================================
-   02_layout.css
-   レイアウト土台（スクロール制御込み・高さ保証版）
-========================================= */
+/* Layout（全体骨格 + スクロール制御） */
 
-/* ✅ 高さの基準を必ず作る */
-html, body {
-  height: 100%;
-  margin: 0;
+/* ===== 高さの基準を必ず作る ===== */
+html, body{
+  height:100%;
+  margin:0;
 }
 
-/* ✅ #app も高さ100%（これが無いと flex が潰れて scroll が死ぬ） */
-#app {
-  height: 100%;
+/* #app が 100% じゃないと flex が潰れてスクロールが死ぬ */
+#app{
+  height:100%;
 }
 
-/* ✅ body はスクロールさせない（スクロールは midKpiWrap） */
-body {
-  overflow: hidden;
+/* ページ全体はスクロールさせない（スクロールは midKpiWrap に集約） */
+body{
+  overflow:hidden;
 }
 
-/* app直下のルートコンテナ（layout.js が .container を作る前提） */
-.container {
-  height: 100%;              /* min-height ではなく height を使う */
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+/* ===== ルートコンテナ ===== */
+.container{
+  max-width:1280px;
+  margin:0 auto;
+  padding:18px 18px 18px;
+
+  height:100%;
+  min-height:0;
+
+  display:flex;
+  flex-direction:column;
+  gap:14px;
 }
 
-/* 上部 + 中段を積むエリア */
-.section {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+/* ===== 共通 ===== */
+.grid{
+  display:grid;
+  gap:12px;
 }
 
-/* =============================
-   中段KPIラッパー：ここだけスクロール
-============================= */
-.midKpiWrap {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;          /* ← スクロール主体 */
-  overflow-x: hidden;
-  position: relative;
-  -webkit-overflow-scrolling: touch;
+.card{
+  border:1px solid var(--border);
+  background:rgba(18,26,34,.7);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
 }
 
-/* =============================
-   widgetsOnly モード（ウィジェットだけ前面）
-============================= */
+/* ===== セクション ===== */
+.section{
+  display:flex;
+  flex-direction:column;
+  flex:1;
+  min-height:0; /* ← これが無いと内側スクロールが効かない */
+}
+
+.sectionHeader{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  margin:0 2px 10px;
+  flex:0 0 auto;
+}
+
+.sectionTitle{ font-size:16px; font-weight:850; }
+.sectionHint{ font-size:12px; color:var(--muted); }
+
+/* ===== 中段：ここだけスクロールさせる ===== */
+.midKpiWrap{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;   /* ← スクロール担当 */
+  overflow-x:hidden;
+  position:relative;
+  -webkit-overflow-scrolling:touch;
+}
+
+/* 下段(detailMount)がレイアウトを押し下げて “body スクロール” を誘発しないように */
+#detailMount{
+  display:none;
+}
+
+/* ===== widgetsOnly：ウィジェット領域だけ前面 ===== */
 body.widgetsOnly .topbar,
-body.widgetsOnly .kpiTop {
-  opacity: 0;
-  pointer-events: none;
-  height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  overflow: hidden;
+body.widgetsOnly .kpiTop{
+  opacity:0;
+  pointer-events:none;
+  height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:hidden;
 }
 
-/* ウィジェット領域を前面化 */
-body.widgetsOnly .midKpiWrap {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  border-radius: 0;
-  background: var(--bg);
-  overflow-y: auto;
-  overflow-x: hidden;
+body.widgetsOnly .midKpiWrap{
+  position:fixed;
+  inset:0;
+  z-index:999;
+  border-radius:0;
+  background:var(--bg);
+  overflow-y:auto;
+  overflow-x:hidden;
 }
 
-/* =============================
-   モバイル対応
-============================= */
-@media (max-width: 768px) {
-  body { overflow: hidden; }
-  #app { height: 100%; }
-  .container { height: 100%; }
+/* ===== モバイル ===== */
+@media (max-width:768px){
+  .container{
+    padding:12px 12px 12px;
+  }
 }
