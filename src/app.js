@@ -58,14 +58,14 @@ const initialState = {
 };
 
 const store = createStore(initialState);
-window.store = store;
 const root = document.getElementById("app");
 
+// ✅ デバッグ用（任意だが便利）
+window.store = store;
 window.getState = () => store.get();
 
 // ===== actions =====
 const actions = {
-
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
@@ -104,11 +104,9 @@ const actions = {
     }));
   },
 
-  onOpenDrawer: () =>
-    store.set((s) => ({ ...s, drawerOpen: true })),
+  onOpenDrawer: () => store.set((s) => ({ ...s, drawerOpen: true })),
 
-  onCloseDrawer: () =>
-    store.set((s) => ({ ...s, drawerOpen: false })),
+  onCloseDrawer: () => store.set((s) => ({ ...s, drawerOpen: false })),
 
   onSetMidSlotDraft: (index, value) => {
     store.set((s) => {
@@ -125,11 +123,17 @@ const actions = {
     }));
   },
 
+  // ✅ ここを修正：決定＝確定＋閉じる
   onApplyMidSlots: () => {
-    store.set((s) => ({
-      ...s,
-      midSlots: [...s.midSlotsDraft],
-    }));
+    store.set((s) => {
+      const fixed = [...s.midSlotsDraft];
+      return {
+        ...s,
+        midSlots: fixed,
+        midSlotsDraft: fixed, // 任意：ズレ防止（おすすめ）
+        drawerOpen: false,    // ★これが重要
+      };
+    });
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -140,12 +144,17 @@ const actions = {
 
   onOpenFocus: (kind) => {
     const title =
-      kind === "shareDonut" ? "売上 / 台数 構成比" :
-      kind === "salesDonut" ? "売上構成比" :
-      kind === "machineDonut" ? "台数構成比" :
-      kind === "costHist" ? "原価率 分布" :
-      kind === "scatter" ? "売上 × 原価率（マトリクス）" :
-      "詳細";
+      kind === "shareDonut"
+        ? "売上 / 台数 構成比"
+        : kind === "salesDonut"
+        ? "売上構成比"
+        : kind === "machineDonut"
+        ? "台数構成比"
+        : kind === "costHist"
+        ? "原価率 分布"
+        : kind === "scatter"
+        ? "売上 × 原価率（マトリクス）"
+        : "詳細";
 
     store.set((s) => ({
       ...s,
@@ -181,29 +190,20 @@ const mounts = mountLayout(root, {
 
 // ===== render loop =====
 function renderAll(state) {
-  mounts.updatedBadge.textContent =
-    `更新日: ${fmtDate(state.updatedDate)}`;
+  mounts.updatedBadge.textContent = `更新日: ${fmtDate(state.updatedDate)}`;
 
   renderTopKpi(mounts.topKpi, state.topKpi);
   renderMidKpi(mounts, state, actions);
+
   // チャートはDOMが確定してから描く
   requestAnimationFrame(() => {
-  renderCharts(mounts, state);
+    renderCharts(mounts, state);
   });
   renderCharts(mounts, state);
-  renderFocusOverlay(
-    mounts.focusOverlay,
-    mounts.focusModal,
-    state,
-    actions
-  );
+
+  renderFocusOverlay(mounts.focusOverlay, mounts.focusModal, state, actions);
   renderDetail(mounts.detailMount, state, actions);
-  renderDrawer(
-    mounts.drawer,
-    mounts.drawerOverlay,
-    state,
-    actions
-  );
+  renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
 }
 
 renderAll(store.get());
