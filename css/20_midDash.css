@@ -42,3 +42,37 @@
   min-height:0;
   height:100%;
 }
+
+/* 中段：正方形セルのための寸法（JSが --midCell を更新） */
+:root{
+  --midGap: 12px;
+  --midCell: 320px; /* 初期値：JSで上書きされる */
+}
+
+#midDash{
+  gap: var(--midGap);
+}
+
+/* ✅ 2×2 の“見える範囲”を正方形で固定（PC用） */
+.midTop{
+  /* 2行分の正方形 + gap で高さ固定 */
+  height: calc(var(--midCell) * 2 + var(--midGap));
+  flex: 0 0 auto;      /* 伸びない */
+  min-height: 0;
+  display: flex;
+}
+
+/* セルを正方形サイズに揃える */
+#midDash{
+  grid-template-columns: repeat(2, var(--midCell));
+  grid-template-rows: repeat(2, var(--midCell));
+  justify-content: space-between; /* 余りは左右に分散 */
+}
+
+/* スロットはセルを埋める */
+#midDash > *{
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
