@@ -1,10 +1,10 @@
 /* css/20_midDash.css */
-/* 中段：2×2 正方形（セルサイズをclampで固定して“デカすぎ問題”を解消） */
+/* 中段：2×2（少し横長 = 5:4）で最適化。dashSlot構造に合わせて固定 */
 
 :root{
-  --midGap: 12px;
-  /* ✅ 正方形セルのサイズ（画面に合わせて伸縮するが上限/下限あり） */
-  --midCell: clamp(220px, 28vw, 360px);
+  --midGap: 16px;
+  --midMinW: 480px;     /* 2列維持の最低幅（必要なら後で調整） */
+  --midRatio: 5 / 4;    /* B案：少し横長 */
 }
 
 .midKpiWrap{
@@ -24,44 +24,37 @@
   display:flex;
 }
 
-/* ✅ 2×2は固定セル（大きくなりすぎない） */
+/* 2×2の器 */
 #midDash{
   width:100%;
   display:grid;
   gap:var(--midGap);
-
-  grid-template-columns:repeat(2, var(--midCell));
-  grid-template-rows:repeat(2, var(--midCell));
-
-  /* 余ったスペースは中央寄せ（左右に無駄な空白を作らない） */
-  justify-content:center;
-  align-content:start;
+  grid-template-columns:repeat(2, minmax(var(--midMinW), 1fr));
+  align-items:stretch;
 }
 
-/* ✅ セルを確実に埋める（上書き負け対策で !important） */
-#midDash > *{
+/* ✅ セルは dashSlot。ここを 5:4 に固定する */
+#midDash > .dashSlot{
+  min-width:0;
+  aspect-ratio: var(--midRatio);
+  height:auto;
+  display:flex;              /* 中のカードを100%で埋める */
+}
+
+/* ✅ セル内のカードは必ず全面に広げる（上書き負け対策） */
+#midDash > .dashSlot > .midPanel{
   width:100% !important;
   height:100% !important;
   min-width:0;
   min-height:0;
 }
 
-/* スマホ：縦1列で正方形（幅基準） */
+/* スマホ：縦1列（4枚） */
 @media (max-width:768px){
   #midDash{
     grid-template-columns:1fr;
-    grid-template-rows:none;
-    justify-content:stretch;
   }
-  #midDash > *{
-    aspect-ratio:1 / 1;
-    height:auto !important;
+  #midDash > .dashSlot{
+    aspect-ratio: 4 / 3;
   }
 }
-/* 上書き負け対策：midPanel を確実に 5:4 にする */
-#midDash > .midPanel{
-  aspect-ratio: 5 / 4 !important;
-  height: auto !important;
-}
-
-
