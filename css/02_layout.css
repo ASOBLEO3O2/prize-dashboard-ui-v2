@@ -1,19 +1,28 @@
 /* =========================================
    02_layout.css
-   レイアウト土台（スクロール制御込み）
+   レイアウト土台（スクロール制御込み・高さ保証版）
 ========================================= */
 
-/* 画面全体は固定。スクロールは中段のみ */
-html,
-body {
+/* ✅ 高さの基準を必ず作る */
+html, body {
   height: 100%;
   margin: 0;
-  overflow: hidden; /* ← 重要：bodyはスクロールさせない */
 }
 
-/* app直下 */
+/* ✅ #app も高さ100%（これが無いと flex が潰れて scroll が死ぬ） */
+#app {
+  height: 100%;
+}
+
+/* ✅ body はスクロールさせない（スクロールは midKpiWrap） */
+body {
+  overflow: hidden;
+}
+
+/* app直下のルートコンテナ（layout.js が .container を作る前提） */
 .container {
-  min-height: 100%;
+  height: 100%;              /* min-height ではなく height を使う */
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -27,22 +36,20 @@ body {
 }
 
 /* =============================
-   中段KPIラッパー
-   ============================= */
-
+   中段KPIラッパー：ここだけスクロール
+============================= */
 .midKpiWrap {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;     /* ← スクロール主体 */
+  overflow-y: auto;          /* ← スクロール主体 */
   overflow-x: hidden;
   position: relative;
-  transition: all 0.25s ease;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* =============================
-   widgetsOnly モード
-   ============================= */
-
+   widgetsOnly モード（ウィジェットだけ前面）
+============================= */
 body.widgetsOnly .topbar,
 body.widgetsOnly .kpiTop {
   opacity: 0;
@@ -53,7 +60,7 @@ body.widgetsOnly .kpiTop {
   overflow: hidden;
 }
 
-/* ウィジェットを前面化 */
+/* ウィジェット領域を前面化 */
 body.widgetsOnly .midKpiWrap {
   position: fixed;
   inset: 0;
@@ -61,21 +68,14 @@ body.widgetsOnly .midKpiWrap {
   border-radius: 0;
   background: var(--bg);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* =============================
    モバイル対応
-   ============================= */
-
+============================= */
 @media (max-width: 768px) {
-
-  html,
-  body {
-    overflow: hidden;
-  }
-
-  .midKpiWrap {
-    overflow-y: auto;
-  }
-
+  body { overflow: hidden; }
+  #app { height: 100%; }
+  .container { height: 100%; }
 }
