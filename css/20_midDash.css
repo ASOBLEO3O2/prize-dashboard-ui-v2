@@ -1,10 +1,11 @@
 /* css/20_midDash.css */
-/* 中段：2×2（少し横長 = 5:4）で最適化。dashSlot構造に合わせて固定 */
+/* 中段：2×2（B案＝少し横長 5:4）。dashSlot構造に合わせる。 */
 
 :root{
   --midGap: 16px;
-  --midMinW: 480px;     /* 2列維持の最低幅（必要なら後で調整） */
-  --midRatio: 5 / 4;    /* B案：少し横長 */
+  --midMinW: 480px;      /* 2列維持の最低幅（必要なら後で調整） */
+  --midRatioPC: 5 / 4;   /* ✅ PC：少し横長 */
+  --midRatioSP: 4 / 3;   /* ✅ スマホ：少し縦寄り */
 }
 
 .midKpiWrap{
@@ -24,7 +25,7 @@
   display:flex;
 }
 
-/* 2×2の器 */
+/* 2×2 の器 */
 #midDash{
   width:100%;
   display:grid;
@@ -33,15 +34,15 @@
   align-items:stretch;
 }
 
-/* ✅ セルは dashSlot。ここを 5:4 に固定する */
+/* ✅ PC：セル（dashSlot）を 5:4 に固定 */
 #midDash > .dashSlot{
   min-width:0;
-  aspect-ratio: var(--midRatio);
+  aspect-ratio: var(--midRatioPC);
   height:auto;
-  display:flex;              /* 中のカードを100%で埋める */
+  display:flex; /* 中のカードを100%で埋める */
 }
 
-/* ✅ セル内のカードは必ず全面に広げる（上書き負け対策） */
+/* ✅ セル内カードを全面に（上書き負け防止） */
 #midDash > .dashSlot > .midPanel{
   width:100% !important;
   height:100% !important;
@@ -55,6 +56,6 @@
     grid-template-columns:1fr;
   }
   #midDash > .dashSlot{
-    aspect-ratio: 4 / 3;
+    aspect-ratio: var(--midRatioSP);
   }
 }
