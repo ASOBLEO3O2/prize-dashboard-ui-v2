@@ -3,13 +3,19 @@ import { el, clear } from "../utils/dom.js";
 import { renderMidSlot } from "./renderMidSlot.js";
 
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
+import {
+  renderWidget2CostHist,
+  buildWidget2CostHistTools,
+} from "./widget2CostHist.js";
 
 /**
- * 中段：2×2（枠は固定）
- * - 4セルは必ず renderMidSlot を通して「枠」を維持する
- * - widget1 は既存の renderWidget1ShareDonut(body, state, actions) を呼ぶ
- * - widget2 は一旦「器だけ」：body内に select+canvas を置く（charts.js側が描く想定）
- * - それ以外はプレースホルダ（枠維持のため）
+ * 中段：2×2（スロット切替対応）
+ * - drawerOpen中：midSlotsDraft を即プレビュー
+ * - drawerOpen閉：midSlots（確定）を表示
+ *
+ * 重要（今日の方針）：
+ * - slotの「器」は renderMidSlot が一元管理
+ * - widget2 も renderMidSlot 経由に統一（①が消える/器崩れの元を断つ）
  */
 export function renderMidKpi(mounts, state, actions) {
   const slotMounts = [
@@ -30,77 +36,70 @@ export function renderMidKpi(mounts, state, actions) {
 
     const type = slots[i] || "dummyA";
 
-    // ✅ 重要：枠は常に renderMidSlot で維持
+    // ===== widget1 =====
+    if (type === "widget1") {
+      renderMidSlot(mount, {
+        slotKey: "widget1",
+        title: "",
+        noHeader: true, // widget1自身がヘッダーを持つ
+        onFocus: () => actions?.onOpenFocus?.("shareDonut"),
+        renderBody: (body) => {
+          renderWidget1ShareDonut(body, state, actions);
+        },
+      });
+      continue;
+    }
+
+    // ===== widget2（★器はrenderMidSlotで統一） =====
+    if (type === "widget2") {
+      renderMidSlot(mount, {
+        slotKey: "widget2",
+        title: "原価率 分布",
+        tools: buildWidget2CostHistTools(actions),
+        onFocus: () => actions?.onOpenFocus?.("costHist"),
+        renderBody: (body) => {
+          renderWidget2CostHist(body, actions);
+        },
+      });
+      continue;
+    }
+
+    // ===== scatter / dummy =====
     renderMidSlot(mount, {
       slotKey: String(type || "").trim() || "_",
       title: titleOf_(type, i),
-      onFocus: () => actions?.onOpenFocus?.({ slotIndex: i, slotType: type }),
+      onFocus: () => {
+        if (type === "scatter") actions?.onOpenFocus?.("scatter");
+      },
       renderBody: (body) => {
-        // まず中身だけクリア（枠はrenderMidSlotが保持）
         clear(body);
-
-        // widget1：既存描画
-        if (type === "widget1") {
-          renderWidget1ShareDonut(body, state, actions);
-          return;
-        }
-
-        // widget2：いまは「枠内に収まる器だけ」置く（描画ロジックには触らない）
-        if (type === "widget2") {
-          ensureWidget2Body_(body);
-          // ここで charts.js 側が costHistChart を見て描く設計なら、そのまま描画される
-          // （まだ描かれなくても「当て先」は完了＝枠は出る）
-          return;
-        }
-
-        // その他：プレースホルダ（枠が消えないため）
         body.appendChild(
-          el("div", { class: "frameOnlyHint" }, [
-            el("div", { class: "frameOnlyType", text: `type: ${type}` }),
-            el("div", { class: "frameOnlyText", text: "（未復活：枠のみ）" }),
-          ])
+          el("div", {
+            class: "frameOnlyHint",
+            text: `type: ${type}`,
+          })
         );
       },
     });
   }
 
-  // 下段は空でOK
+  // 下段カードは midKpi では触らない（ここで空にするだけ）
   if (mounts.midCards) clear(mounts.midCards);
-}
-
-function ensureWidget2Body_(body) {
-  // 既存charts.js互換を意識して id を固定
-  // - select: #costHistMode
-  // - canvas: #costHistChart
-  // ※ body内完結
-  const wrap = el("div", { class: "chartBody", style: "width:100%;height:100%;min-height:0;display:flex;flex-direction:column;gap:10px;" });
-
-  const tools = el("div", { class: "chartTools", style: "flex:0 0 auto;display:flex;gap:10px;align-items:center;" }, [
-    el("select", { class: "select", id: "costHistMode" }, [
-      el("option", { value: "count", text: "台数" }),
-      el("option", { value: "sales", text: "売上" }),
-    ]),
-  ]);
-
-  const canvasWrap = el("div", { style: "position:relative;flex:1;min-height:0;" }, [
-    el("canvas", { id: "costHistChart", style: "width:100%;height:100%;" }),
-  ]);
-
-  wrap.appendChild(tools);
-  wrap.appendChild(canvasWrap);
-  body.appendChild(wrap);
-}
-
-function titleOf_(type, idx) {
-  if (type === "widget1") return "売上構成比";
-  if (type === "widget2") return "原価率 分布";
-  if (type === "scatter") return "散布図";
-  if (type === "dummyA") return `枠${idx + 1}`;
-  return String(type || `枠${idx + 1}`);
 }
 
 function norm4_(arr, fallback) {
   const a = Array.isArray(arr) ? arr.slice(0, 4) : fallback.slice(0, 4);
   while (a.length < 4) a.push(fallback[a.length] || "dummyA");
   return a.map((x) => String(x || "").trim() || "dummyA");
+}
+
+function titleOf_(type, idx) {
+  const map = {
+    scatter: "Scatter（未復活）",
+    dummyA: "空き枠A",
+    dummyB: "空き枠B",
+    dummyC: "空き枠C",
+    dummyD: "空き枠D",
+  };
+  return map[type] || `枠${idx + 1}`;
 }
