@@ -1,55 +1,44 @@
-/* =======================================================
-   Mid KPI : 2×2 Dash Layout
-   ======================================================= */
+/* css/20_midDash.css */
+/* 中段：2×2 fit（枠サイズ決め用に安定化） */
 
-/* 上段KPI全体の器 */
 .midKpiWrap{
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+  border:1px solid var(--border);
+  background:rgba(18,26,34,.55);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
 }
 
-/* 上段（4枠を置く領域）
-   ※ ここが高さの唯一の基準点 */
+/* 上段(2×2)が「残り」を取る */
 .midTop{
-  flex: 0 0 clamp(520px, 55vh, 640px);
-  min-height: 520px;
-  display: flex;
+  padding:14px;
+  border-bottom:1px solid var(--border);
+
+  flex:1;
+  min-height:0;
+  display:flex;
 }
 
-/* 2×2 グリッド */
+/* 2×2 の器 */
 #midDash{
-  width: 100%;
-  height: 100%;
-  min-height: 0;
+  width:100%;
+  min-height:0;
+  display:grid;
+  gap:12px;
 
-  display: grid;
-  gap: 12px;
-
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  align-items: stretch;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  grid-template-rows:repeat(2, minmax(0, 1fr));
+  align-items:stretch;
 }
 
-/* 各スロット（4枠） */
-#midDash > .dashPanel{
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  display: flex;
-}
-
-/* ================================
-   縦長（portrait）：1列×4段
-   ================================ */
-@media (orientation: portrait), (max-aspect-ratio: 1/1){
-  .midTop{
-    flex: 0 0 clamp(860px, 80vh, 1100px);
-    min-height: 860px;
-  }
-
-  #midDash{
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(4, minmax(0, 1fr));
-  }
+/* スロットがセルを埋める */
+#midDash > *{
+  min-width:0;
+  min-height:0;
+  height:100%;
 }
