@@ -1,10 +1,7 @@
 // src/ui/charts.js
 
 let costHistChart = null;
-let costHistCanvasRef = null;
-
 let salesCostScatter = null;
-let scatterCanvasRef = null;
 
 const COST_BINS = [
   { label: "〜3%",   min: 0.00, max: 0.03 },
@@ -45,6 +42,7 @@ function findCanvasAndMode() {
 function canvasReady(canvas) {
   if (!canvas) return false;
   const r = canvas.getBoundingClientRect();
+  // 高さ優先。幅は最低限だけ見る（狭くても初期化は許可）
   return r.height >= 120 && r.width >= 40;
 }
 
@@ -52,13 +50,6 @@ function ensureCostHist(costCanvas) {
   const Chart = window.Chart;
   if (!Chart) return false;
   if (!canvasReady(costCanvas)) return false;
-
-  // ✅ canvasが差し替わっていたら destroy → 作り直す
-  if (costHistChart && costHistCanvasRef && costHistCanvasRef !== costCanvas) {
-    try { costHistChart.destroy(); } catch (_) {}
-    costHistChart = null;
-    costHistCanvasRef = null;
-  }
 
   const ctx = costCanvas.getContext?.("2d");
   if (!ctx) return false;
@@ -81,8 +72,7 @@ function ensureCostHist(costCanvas) {
       },
     });
 
-    costHistCanvasRef = costCanvas;
-
+    // 直後に幅が変わるケースがあるので1フレーム後に再計算
     requestAnimationFrame(() => costHistChart?.resize());
   }
 
@@ -93,13 +83,6 @@ function ensureScatter(scatterCanvas) {
   const Chart = window.Chart;
   if (!Chart) return false;
   if (!canvasReady(scatterCanvas)) return false;
-
-  // ✅ canvasが差し替わっていたら destroy → 作り直す
-  if (salesCostScatter && scatterCanvasRef && scatterCanvasRef !== scatterCanvas) {
-    try { salesCostScatter.destroy(); } catch (_) {}
-    salesCostScatter = null;
-    scatterCanvasRef = null;
-  }
 
   const ctx = scatterCanvas.getContext?.("2d");
   if (!ctx) return false;
@@ -166,8 +149,6 @@ function ensureScatter(scatterCanvas) {
       },
     });
 
-    scatterCanvasRef = scatterCanvas;
-
     requestAnimationFrame(() => salesCostScatter?.resize());
   }
 
@@ -209,6 +190,7 @@ function computeScatter(rows) {
 export function renderCharts(mounts, state) {
   const { costCanvas, scatterCanvas, modeSelect } = findCanvasAndMode();
 
+  // ★片方だけでも初期化する（ここが前と違う）
   const ok1 = ensureCostHist(costCanvas);
   const ok2 = ensureScatter(scatterCanvas);
 
@@ -221,6 +203,7 @@ export function renderCharts(mounts, state) {
   const rows = Array.isArray(state.filteredRows) ? state.filteredRows : [];
   const mode = modeSelect?.value || "count";
 
+  // 原価率分布（ある時だけ更新）
   if (costHistChart) {
     const hist = computeCostHistogram(rows, mode);
     costHistChart.data.datasets[0].data = hist;
@@ -228,12 +211,14 @@ export function renderCharts(mounts, state) {
     costHistChart.update();
   }
 
+  // 散布（ある時だけ更新）
   if (salesCostScatter) {
     const pts = computeScatter(rows);
     salesCostScatter.data.datasets[0].data = pts;
     salesCostScatter.update();
   }
 
+  // mode変更時にも即反映（イベントは1回だけ）
   if (modeSelect && !modeSelect.__bound) {
     modeSelect.addEventListener("change", () => renderCharts(mounts, state));
     modeSelect.__bound = true;
