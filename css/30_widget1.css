@@ -1,243 +1,103 @@
-/* =======================================================
-   Widget① : 売上 / ステーション 構成比
-   ======================================================= */
+// src/ui/kpiMid.js
+import { el, clear } from "../utils/dom.js";
+import { renderMidSlot } from "./renderMidSlot.js";
 
-.widget1{
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
+import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
 
-/* Header */
-.widget1Header{
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 10px 0;
-}
+/**
+ * 中段：2×2（5:4固定の枠は維持）
+ * - 4セルは必ず renderMidSlot を通す（枠を消さない）
+ * - widget1：既存の描画（body内完結）
+ * - widget2：当て先だけ（body内に select + canvas を置く）
+ * - それ以外：プレースホルダ表示（枠維持）
+ */
+export function renderMidKpi(mounts, state, actions) {
+  const slotMounts = [
+    mounts.midSlotSalesDonut,
+    mounts.midSlotMachineDonut,
+    mounts.midSlotCostHist,
+    mounts.midSlotScatter,
+  ];
 
-.widget1Title{
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: .06em;
-  color: rgba(230,237,243,.95);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+  const fallback = ["widget1", "widget2", "scatter", "dummyA"];
+  const fixed = norm4_(state.midSlots, fallback);
+  const draft = norm4_(state.midSlotsDraft, fixed);
+  const slots = state.drawerOpen ? draft : fixed;
 
-/* Body（残り高さを全部使う） */
-.widget1Body{
-  flex: 1 1 auto;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 12px;
-  padding: 10px;
-  overflow: hidden;
-}
+  for (let i = 0; i < 4; i++) {
+    const mount = slotMounts[i];
+    if (!mount) continue;
 
-/* チャート領域 */
-.widget1ChartWrap{
-  position: relative;
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+    const type = slots[i] || "dummyA";
 
-/* canvas は上限を持たない */
-.widget1Canvas{
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
-  max-height: none;
-}
+    renderMidSlot(mount, {
+      slotKey: String(type || "").trim() || "_",
+      title: titleOf_(type, i),
+      onFocus: () => actions?.onOpenFocus?.({ slotIndex: i, slotType: type }),
+      renderBody: (body) => {
+        clear(body);
 
-/* 凡例 */
-.widget1ABC{
-  min-height: 0;
-  overflow: auto;
-  font-size: 12px;
-  line-height: 1.25;
-  color: rgba(203,213,225,.92);
-  padding-right: 4px;
-}
+        if (type === "widget1") {
+          renderWidget1ShareDonut(body, state, actions);
+          return;
+        }
 
-/* 狭い画面では縦並び */
-@media (max-width: 900px){
-  .widget1Body{
-    grid-template-columns: 1fr;
+        if (type === "widget2") {
+          ensureWidget2Body_(body);
+          return;
+        }
+
+        body.appendChild(
+          el("div", { class: "frameOnlyHint" }, [
+            el("div", { class: "frameOnlyType", text: `type: ${type}` }),
+            el("div", { class: "frameOnlyText", text: "（未復活：枠のみ）" }),
+          ])
+        );
+      },
+    });
   }
+
+  if (mounts.midCards) clear(mounts.midCards);
 }
 
-/* ================================
-   Widget1 Typography Upgrade
-   - DOM文字（タイトル / 凡例 / tooltip / 中央）
-   ================================ */
+function ensureWidget2Body_(body) {
+  // charts.js 側の既存描画互換（id固定）
+  const wrap = el("div", {
+    class: "chartBody",
+    style:
+      "width:100%;height:100%;min-height:0;display:flex;flex-direction:column;gap:10px;",
+  });
 
-/* Legend (right) */
-.w1LegendTitle{
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .08em;
-  color: rgba(226,232,240,.95);
-  margin: 0 0 8px;
+  const tools = el(
+    "div",
+    { class: "chartTools", style: "flex:0 0 auto;display:flex;gap:10px;align-items:center;" },
+    [
+      el("select", { class: "select", id: "costHistMode" }, [
+        el("option", { value: "count", text: "台数" }),
+        el("option", { value: "sales", text: "売上" }),
+      ]),
+    ]
+  );
+
+  const canvasWrap = el("div", { style: "position:relative;flex:1;min-height:0;" }, [
+    el("canvas", { id: "costHistChart", style: "width:100%;height:100%;" }),
+  ]);
+
+  wrap.appendChild(tools);
+  wrap.appendChild(canvasWrap);
+  body.appendChild(wrap);
 }
 
-.w1LegendEmpty{
-  font-size: 12px;
-  color: rgba(148,163,184,.9);
-  padding: 8px 6px;
+function titleOf_(type, idx) {
+  if (type === "widget1") return "売上構成比";
+  if (type === "widget2") return "原価率 分布";
+  if (type === "scatter") return "散布図";
+  if (type === "dummyA") return `枠${idx + 1}`;
+  return String(type || `枠${idx + 1}`);
 }
 
-.w1LegendList{
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.w1LegendItem{
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  padding: 8px 8px;
-  border: 1px solid rgba(255,255,255,.06);
-  border-radius: 10px;
-  background: rgba(2,6,23,.18);
-}
-
-.w1LegendItem:hover{
-  background: rgba(2,6,23,.28);
-  border-color: rgba(255,255,255,.10);
-}
-
-.w1LegendSwatch{
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  margin-top: 3px;
-  box-shadow: 0 0 0 1px rgba(0,0,0,.35) inset;
-}
-
-.w1LegendLabel{
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .02em;
-  color: rgba(226,232,240,.95);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 4px;
-}
-
-.w1LegendMeta{
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.w1LegendMetaRow{
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 11px;
-  color: rgba(148,163,184,.95);
-}
-
-.w1LegendSales{
-  font-weight: 900;
-  color: rgba(203,213,225,.95);
-}
-
-.w1LegendShares{
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  justify-content: flex-end;
-  font-variant-numeric: tabular-nums;
-}
-
-.w1LegendShare{
-  font-size: 11px;
-  font-weight: 900;
-  color: rgba(226,232,240,.95);
-}
-
-.w1LegendShareSep{
-  opacity: .5;
-}
-
-/* Center text */
-.w1Center{
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  pointer-events: none;
-  text-align: center;
-}
-
-.w1CenterLabel{
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .08em;
-  color: rgba(148,163,184,.95);
-}
-
-.w1CenterValue{
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: .02em;
-  color: rgba(226,232,240,.98);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Tooltip (inside donut) */
-.w1Tip{
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(15,23,42,.92);
-  border: 1px solid rgba(148,163,184,.18);
-  box-shadow: 0 8px 24px rgba(0,0,0,.35);
-  opacity: 0;
-  transform: translateY(6px);
-  pointer-events: none;
-  transition: opacity .12s ease, transform .12s ease;
-}
-
-.w1Tip.show{
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.w1TipTitle{
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: .02em;
-  color: rgba(226,232,240,.98);
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.w1TipLine{
-  font-size: 11px;
-  font-weight: 700;
-  color: rgba(203,213,225,.95);
-  line-height: 1.25;
+function norm4_(arr, fallback) {
+  const a = Array.isArray(arr) ? arr.slice(0, 4) : fallback.slice(0, 4);
+  while (a.length < 4) a.push(fallback[a.length] || "dummyA");
+  return a.map((x) => String(x || "").trim() || "dummyA");
 }
