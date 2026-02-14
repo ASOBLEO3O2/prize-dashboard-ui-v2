@@ -3,55 +3,46 @@ import { el, clear } from "../utils/dom.js";
 
 /**
  * Widget②：原価率 分布（ヒストグラム）
- * - Chart.js 実体は charts.js 側
- * - ここでは「器」だけを保証する
+ * - Chart.js 実体は charts.js 側（#costHistChart / #costHistMode を参照）
+ * - 重要：slotの「器（card/header/body）」は renderMidSlot が管理する
+ *   → ここでは body 内のDOMだけを安定化（同一type中は作り直さない）
  */
-export function renderWidget2CostHist(slotMount, actions) {
-  if (!slotMount) return;
 
-  // 初回のみDOM構築
-  if (!slotMount.__w2_built) {
-    clear(slotMount);
+export function buildWidget2CostHistTools(actions) {
+  const sel = el("select", { class: "select", id: "costHistMode" }, [
+    el("option", { value: "count", text: "台数" }),
+    el("option", { value: "sales", text: "売上" }),
+  ]);
 
-    const card = el("div", { class: "card midPanel widget2" });
+  // mode変更時は charts.js が参照するので、軽く再描画を促す
+  if (!sel.__bound) {
+    sel.addEventListener("change", () => {
+      actions?.requestRender?.();
+    });
+    sel.__bound = true;
+  }
 
-    const header = el("div", { class: "midPanelHeader" }, [
-      el("div", { class: "midPanelTitleWrap" }, [
-        el("div", { class: "midPanelTitle", text: "原価率 分布" }),
-        el("div", { class: "midPanelSub", text: "" }),
-      ]),
-      el("button", {
-        class: "btn ghost midPanelBtn",
-        text: "拡大",
-        onClick: (e) => {
-          e.preventDefault();
-          actions.onOpenFocus?.("costHist");
-        },
-      }),
-    ]);
+  return el("div", { class: "chartTools" }, [sel]);
+}
 
-    const tools = el("div", { class: "chartTools" }, [
-      el("select", { class: "select", id: "costHistMode" }, [
-        el("option", { value: "count", text: "台数" }),
-        el("option", { value: "sales", text: "売上" }),
-      ]),
-    ]);
+export function renderWidget2CostHist(body, actions) {
+  if (!body) return;
 
-    header.appendChild(tools);
+  // 同一type中は canvas を生かす（chart崩れ防止）
+  if (!body.__w2_built) {
+    clear(body);
+    body.classList.add("chartBody");
 
-    const body = el(
-      "div",
-      {
-        class: "midPanelBody chartBody",
-        onClick: () => actions.onOpenFocus?.("costHist"),
-      },
-      [el("canvas", { id: "costHistChart" })]
-    );
+    const canvas = el("canvas", { id: "costHistChart" });
+    body.appendChild(canvas);
 
-    card.appendChild(header);
-    card.appendChild(body);
-    slotMount.appendChild(card);
+    // bodyクリックで拡大（renderMidSlot側でも拾うが、明示もしておく）
+    body.addEventListener("click", (e) => {
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (tag === "select" || tag === "option" || tag === "button") return;
+      actions?.onOpenFocus?.("costHist");
+    });
 
-    slotMount.__w2_built = true;
+    body.__w2_built = true;
   }
 }
