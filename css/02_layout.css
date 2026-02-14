@@ -1,125 +1,83 @@
-/* Layout（全体骨格 + スクロール制御） */
+/* =========================================
+   02_layout.css
+   通常ページスクロール構成（widgetsOnly廃止版）
+========================================= */
 
-/* ===== 高さの基準を必ず作る ===== */
-html, body{
-  height:100%;
-  margin:0;
+/* ===== 基本高さ ===== */
+html,
+body {
+  height: auto;
+  min-height: 100%;
+  margin: 0;
+  overflow: auto; /* ← ページ全体でスクロール */
 }
 
-/* #app が 100% じゃないと flex が潰れてスクロールが死ぬ */
-#app{
-  height:100%;
-}
-
-/* ページ全体はスクロールさせない（スクロールは midKpiWrap に集約） */
-body{
-  overflow:hidden;
+#app {
+  min-height: 100%;
 }
 
 /* ===== ルートコンテナ ===== */
-.container{
-  max-width:1280px;
-  margin:0 auto;
-  padding:18px 18px 18px;
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 18px 18px 40px;
 
-  height:100%;
-  min-height:0;
-
-  display:flex;
-  flex-direction:column;
-  gap:14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-/* ===== 共通 ===== */
-.grid{
-  display:grid;
-  gap:12px;
+/* ===== 共通ユーティリティ ===== */
+.grid {
+  display: grid;
+  gap: 12px;
 }
 
-.card{
-  border:1px solid var(--border);
-  background:rgba(18,26,34,.7);
-  border-radius:var(--r);
-  box-shadow:var(--shadow);
+.card {
+  border: 1px solid var(--border);
+  background: rgba(18, 26, 34, 0.7);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
 }
 
-/* ===== セクション ===== */
-.section{
-  display:flex;
-  flex-direction:column;
-  flex:1;
-  min-height:0; /* ← これが無いと内側スクロールが効かない */
+/* ===== セクション構造 ===== */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.sectionHeader{
-  display:flex;
-  align-items:baseline;
-  justify-content:space-between;
-  margin:0 2px 10px;
-  flex:0 0 auto;
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 2px 10px;
 }
 
-.sectionTitle{ font-size:16px; font-weight:850; }
-.sectionHint{ font-size:12px; color:var(--muted); }
-
-/* ===== 中段：ここだけスクロールさせる ===== */
-.midKpiWrap{
-  flex:1;
-  min-height:0;
-  overflow-y:auto;   /* ← スクロール担当 */
-  overflow-x:hidden;
-  position:relative;
-  -webkit-overflow-scrolling:touch;
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 850;
 }
 
-/* 下段(detailMount)がレイアウトを押し下げて “body スクロール” を誘発しないように */
-#detailMount{
-  display:none;
+.sectionHint {
+  font-size: 12px;
+  color: var(--muted);
 }
 
-/* ===== widgetsOnly：ウィジェット領域だけ前面 ===== */
-body.widgetsOnly .topbar,
-body.widgetsOnly .kpiTop{
-  opacity:0;
-  pointer-events:none;
-  height:0 !important;
-  margin:0 !important;
-  padding:0 !important;
-  overflow:hidden;
+/* ===== 中段（通常スクロール） ===== */
+.midKpiWrap {
+  position: relative;
+  overflow: visible; /* ← スクロールはしない */
 }
 
-body.widgetsOnly .midKpiWrap{
-  position:fixed;
-  inset:0;
-  z-index:999;
-  border-radius:0;
-  background:var(--bg);
-  overflow-y:auto;
-  overflow-x:hidden;
+/* 下段が不要なら表示しない（安全） */
+#detailMount {
+  display: none;
 }
 
-/* ===== モバイル ===== */
-@media (max-width:768px){
-  .container{
-    padding:12px 12px 12px;
+/* ===== モバイル対応 ===== */
+@media (max-width: 768px) {
+  .container {
+    padding: 14px;
   }
-}
-
-body::before{
-  content:"02_layout LOADED";
-  position:fixed;
-  left:10px; bottom:10px;
-  z-index:10000;
-  font-size:12px;
-  padding:6px 8px;
-  border:1px solid #fff;
-  background:#000;
-  color:#fff;
-  opacity:.8;
-}
-
-/* ===== 強制：中段だけスクロール（上書き負け対策） ===== */
-#midKpiWrap{
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
 }
