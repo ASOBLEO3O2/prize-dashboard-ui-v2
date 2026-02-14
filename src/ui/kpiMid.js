@@ -1,5 +1,5 @@
 // src/ui/kpiMid.js
-import { el, clear } from "../utils/dom.js";
+import { clear } from "../utils/dom.js";
 import { renderMidSlot } from "./renderMidSlot.js";
 
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
@@ -7,9 +7,9 @@ import { renderWidget2CostHist } from "./widget2CostHist.js";
 
 /**
  * 中段：2×2（枠固定）
- * - slot= .dashSlot
- * - 内部= .midPanel / .midPanelBody
- * - widget1 / widget2 を「決定後でも消えない」ように安全に当てる
+ * - midSlots / midSlotsDraft / drawerOpen の切替は維持
+ * - widget1 / widget2 を当てる
+ * - 中身は .midPanelBody の中だけ（widget2は自前card設計なので例外でmount直下）
  */
 export function renderMidKpi(mounts, state, actions) {
   const slotMounts = [
@@ -19,7 +19,7 @@ export function renderMidKpi(mounts, state, actions) {
     mounts.midSlotScatter,
   ];
 
-  const fallback = ["widget1", "widget2", "dummyA", "dummyB"];
+  const fallback = ["widget1", "widget2", "scatter", "dummyA"];
   const fixed = norm4_(state.midSlots, fallback);
   const draft = norm4_(state.midSlotsDraft, fixed);
   const slots = state.drawerOpen ? draft : fixed;
@@ -30,83 +30,37 @@ export function renderMidKpi(mounts, state, actions) {
 
     const type = slots[i] || "dummyA";
 
-    // =========================================================
-    // widget2 は「自前で card を作る」設計なので、slot直下に描く
-    // =========================================================
+    // ===== widget2（自前でcard構築。mount直下）=====
     if (type === "widget2") {
-      // 他タイプから切替時の残骸を消す（確実に）
-      if (mount.__midSlotKey && mount.__midSlotKey !== "widget2") {
-        clear(mount);
-        delete mount.__midSlot;
-      }
-      mount.__midSlotKey = "widget2";
-
-      try {
-        renderWidget2CostHist(mount, actions);
-      } catch (err) {
-        clear(mount);
-        mount.appendChild(
-          el("div", { class: "card midPanel" }, [
-            el("div", { class: "midPanelHeader" }, [
-              el("div", { class: "midPanelTitle", text: "② 原価率分布（widget2）" }),
-            ]),
-            el("div", { class: "midPanelBody" }, [
-              el("pre", {
-                style: "white-space:pre-wrap; font-size:12px; margin:0;",
-                text: `widget2 ERROR:\n${String(err?.stack || err)}`,
-              }),
-            ]),
-          ])
-        );
-      }
+      renderWidget2CostHist(mount, actions);
       continue;
     }
 
-    // =========================================================
-    // widget1 / dummy / scatter は renderMidSlot（midPanelBody に描く）
-    // =========================================================
-    if (type === "widget1") {
-      renderMidSlot(mount, {
-        slotKey: "widget1",
-        title: "",
-        noHeader: true, // widget1は内部ヘッダーを持つ
-        renderBody: (body) => {
-          safeRender_(body, () => {
-            renderWidget1ShareDonut(body, state, actions, { mode: "normal" });
-          }, "widget1");
-        },
-      });
-      continue;
-    }
-
-    // それ以外：とりあえず “枠” は出しておく（消えない）
+    // ===== widget1 / scatter / dummy（renderMidSlotで枠を作り body に描く）=====
     renderMidSlot(mount, {
-      slotKey: type,
-      title: titleOf_(type, i),
+      slotKey: String(type || "").trim() || "_",
+      title: type === "widget1" ? "" : titleOf_(type, i),
+      noHeader: type === "widget1", // widget1は内部ヘッダーあり
+      onFocus: () => {
+        if (type === "widget1") actions.onOpenFocus?.("shareDonut");
+        else if (type === "scatter") actions.onOpenFocus?.("scatter");
+      },
       renderBody: (body) => {
+        // widget1
+        if (type === "widget1") {
+          renderWidget1ShareDonut(body, state, actions, { mode: "normal" });
+          return;
+        }
+
+        // 他は一旦プレースホルダ（今は復活対象外）
         clear(body);
-        body.appendChild(
-          el("div", { style: "opacity:.8; font-size:12px;", text: `type: ${type}` })
-        );
+        body.textContent = `type: ${type}`;
       },
     });
   }
 
+  // 下段カードは不要（維持）
   if (mounts.midCards) clear(mounts.midCards);
-}
-
-function safeRender_(body, fn, label) {
-  try {
-    fn();
-  } catch (err) {
-    clear(body);
-    body.appendChild(
-      el("pre", {
-        style: "white-space:pre-wrap; font-size:12px; margin:0;",
-        text: `${label} ERROR:\n${String(err?.stack || err)}`,
-      })
-    );
-  }
 }
 
 function norm4_(arr, fallback) {
@@ -116,8 +70,12 @@ function norm4_(arr, fallback) {
 }
 
 function titleOf_(type, idx) {
-  if (type === "scatter") return "③ 売上×原価率（散布）";
-  if (type === "dummyA") return `ダミーA（slot${idx + 1}）`;
-  if (type === "dummyB") return `ダミーB（slot${idx + 1}）`;
-  return `slot${idx + 1}`;
+  const map = {
+    scatter: "Scatter（未復活）",
+    dummyA: "空き枠A",
+    dummyB: "空き枠B",
+    dummyC: "空き枠C",
+    dummyD: "空き枠D",
+  };
+  return map[type] || `枠${idx + 1}`;
 }
