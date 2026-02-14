@@ -1,15 +1,15 @@
 // src/ui/kpiMid.js
-import { clear } from "../utils/dom.js";
+import { el, clear } from "../utils/dom.js";
 import { renderMidSlot } from "./renderMidSlot.js";
 
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
-import { renderWidget2CostHist } from "./widget2CostHist.js";
 
 /**
- * 中段：2×2（枠固定）
- * - midSlots / midSlotsDraft / drawerOpen の切替は維持
- * - widget1 / widget2 を当てる
- * - 中身は .midPanelBody の中だけ（widget2は自前card設計なので例外でmount直下）
+ * 中段：2×2（5:4固定の枠は維持）
+ * - 4セルは必ず renderMidSlot を通す（枠を消さない）
+ * - widget1：既存の描画（body内完結）
+ * - widget2：当て先だけ（body内に select + canvas を置く）
+ * - それ以外：プレースホルダ表示（枠維持）
  */
 export function renderMidKpi(mounts, state, actions) {
   const slotMounts = [
@@ -30,33 +30,80 @@ export function renderMidKpi(mounts, state, actions) {
 
     const type = slots[i] || "dummyA";
 
-    // ===== widget2（自前でcard構築。mount直下）=====
-    if (type === "widget2") {
-      renderWidget2CostHist(mount, actions);
-      continue;
-    }
-
-    // ===== widget1 / scatter / dummy（renderMidSlotで枠を作り body に描く）=====
     renderMidSlot(mount, {
       slotKey: String(type || "").trim() || "_",
-      title: type === "widget1" ? "" : titleOf_(type, i),
-      noHeader: type === "widget1", // widget1は内部ヘッダーあり
-      onFocus: () => {
-        if (type === "widget1") actions.onOpenFocus?.("shareDonut");
-        else if (type === "scatter") actions.onOpenFocus?.("scatter");
-      },
+      title: titleOf_(type, i),
+      onFocus: () => actions?.onOpenFocus?.({ slotIndex: i, slotType: type }),
       renderBody: (body) => {
-        // widget1
+        clear(body);
+
         if (type === "widget1") {
-          renderWidget1ShareDonut(body, state, actions, { mode: "normal" });
+          renderWidget1ShareDonut(body, state, actions);
           return;
         }
 
-        // 他は一旦プレースホルダ（今は復活対象外）
-        clear(body);
-        body.textContent = `type: ${type}`;
+        if (type === "widget2") {
+          ensureWidget2Body_(body);
+          return;
+        }
+
+        body.appendChild(
+          el("div", { class: "frameOnlyHint" }, [
+            el("div", { class: "frameOnlyType", text: `type: ${type}` }),
+            el("div", { class: "frameOnlyText", text: "（未復活：枠のみ）" }),
+          ])
+        );
       },
     });
   }
 
+  // 下段は未使用（維持）
+  if (mounts.midCards) clear(mounts.midCards);
+}
 
+function ensureWidget2Body_(body) {
+  // charts.js 側の既存描画互換（id固定）
+  const wrap = el("div", {
+    class: "chartBody",
+    style:
+      "width:100%;height:100%;min-height:0;display:flex;flex-direction:column;gap:10px;",
+  });
+
+  const tools = el(
+    "div",
+    {
+      class: "chartTools",
+      style: "flex:0 0 auto;display:flex;gap:10px;align-items:center;",
+    },
+    [
+      el("select", { class: "select", id: "costHistMode" }, [
+        el("option", { value: "count", text: "台数" }),
+        el("option", { value: "sales", text: "売上" }),
+      ]),
+    ]
+  );
+
+  const canvasWrap = el(
+    "div",
+    { style: "position:relative;flex:1;min-height:0;" },
+    [el("canvas", { id: "costHistChart", style: "width:100%;height:100%;" })]
+  );
+
+  wrap.appendChild(tools);
+  wrap.appendChild(canvasWrap);
+  body.appendChild(wrap);
+}
+
+function titleOf_(type, idx) {
+  if (type === "widget1") return "売上構成比";
+  if (type === "widget2") return "原価率 分布";
+  if (type === "scatter") return "散布図";
+  if (type === "dummyA") return `枠${idx + 1}`;
+  return String(type || `枠${idx + 1}`);
+}
+
+function norm4_(arr, fallback) {
+  const a = Array.isArray(arr) ? arr.slice(0, 4) : fallback.slice(0, 4);
+  while (a.length < 4) a.push(fallback[a.length] || "dummyA");
+  return a.map((x) => String(x || "").trim() || "dummyA");
+}
