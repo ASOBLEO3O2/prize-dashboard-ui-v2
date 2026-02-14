@@ -549,7 +549,12 @@ export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
 
   ensureDom_(mount, actions, mode);
 
-  const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
+  const rows =
+  Array.isArray(state?.filteredRows) ? state.filteredRows :
+  Array.isArray(state?.filtered) ? state.filtered :
+  Array.isArray(state?.rows) ? state.rows :
+  [];
+
 
   const axisKey = getAxisFromState_(state);
   updateSelect_(mount, axisKey);
