@@ -23,27 +23,31 @@ export function renderMidKpi(mounts, state, actions) {
     if (!mount) continue;
 
     const type = slots[i] || "dummyA";
+    const slotKey = String(type || "").trim() || "_";
 
-    // widget2（自前で描画。mount直下）
-    if (type === "widget2") {
-      renderWidget2CostHist(mount, actions);
-      continue;
-    }
-
-    // widget1 / その他（枠はrenderMidSlotで維持）
     renderMidSlot(mount, {
-      slotKey: String(type || "").trim() || "_",
+      slotKey,
+      // widget1はヘッダ無し（元仕様）
       title: type === "widget1" ? "" : titleOf_(type, i),
       noHeader: type === "widget1",
       onFocus: () => {
         if (type === "widget1") actions.onOpenFocus?.("shareDonut");
         else if (type === "scatter") actions.onOpenFocus?.("scatter");
+        else if (type === "widget2") actions.onOpenFocus?.("costHist");
       },
       renderBody: (body) => {
+        // ★ここが復旧の要：全部 body の中で描く（mount直下は触らない）
         if (type === "widget1") {
           renderWidget1ShareDonut(body, state, actions);
           return;
         }
+
+        if (type === "widget2") {
+          clear(body);
+          renderWidget2CostHist(body, actions); // ← mount ではなく body に描画
+          return;
+        }
+
         clear(body);
         body.textContent = `type: ${type}`;
       },
@@ -61,6 +65,7 @@ function norm4_(arr, fallback) {
 
 function titleOf_(type, idx) {
   const map = {
+    widget2: "原価率分布",
     scatter: "Scatter（未復活）",
     dummyA: "空き枠A",
     dummyB: "空き枠B",
