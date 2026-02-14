@@ -58,3 +58,10 @@
     height:auto !important;
   }
 }
+/* 上書き負け対策：midPanel を確実に 5:4 にする */
+#midDash > .midPanel{
+  aspect-ratio: 5 / 4 !important;
+  height: auto !important;
+}
+
+
