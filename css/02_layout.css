@@ -104,3 +104,16 @@ body.widgetsOnly .midKpiWrap{
     padding:12px 12px 12px;
   }
 }
+
+body::before{
+  content:"02_layout LOADED";
+  position:fixed;
+  left:10px; bottom:10px;
+  z-index:10000;
+  font-size:12px;
+  padding:6px 8px;
+  border:1px solid #fff;
+  background:#000;
+  color:#fff;
+  opacity:.8;
+}
