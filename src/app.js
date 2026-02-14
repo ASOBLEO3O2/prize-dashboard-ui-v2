@@ -36,7 +36,7 @@ const initialState = {
   // 中段KPI：軸別集計
   byAxis: {},
 
-  // 下段（無罪：既存）
+  // 下段（無罪：既存）※ 今は不要でも state は持っててOK
   midAxis: "ジャンル",
   midParentKey: null,
   midSortKey: "sales",
@@ -149,7 +149,7 @@ const actions = {
     // ★スロット切替直後はDOMサイズが確定してないので、2フレーム遅らせて再描画させる
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        actions.requestRender?.(); // renderCharts() が走り、charts.js 側の resize も効く
+        actions.requestRender?.();
       });
     });
   },
@@ -197,6 +197,91 @@ const mounts = mountLayout(root, {
   onRefresh: actions.onRefresh,
 });
 
+/**
+ * ✅ 中段フレーム制御（正方形セル + スクロールでwidgetsOnly）
+ * - #midDash の幅から --midCell を計算してCSS変数に入れる
+ * - .midKpiWrap をスクロールすると body.widgetsOnly を付与（=ウィジェットだけ前面）
+ * - DOMが差し替わっても再バインドできるように controller 化
+ */
+function createMidFrameController() {
+  const CTRL = {
+    gap: 12,
+    bound: false,
+    lastMidWrap: null,
+    lastMidDash: null,
+
+    applySize() {
+      const midDash = document.getElementById("midDash");
+      if (!midDash) return;
+
+      const rect = midDash.getBoundingClientRect();
+      const w = rect.width || 0;
+      if (w <= 0) return;
+
+      const GAP = CTRL.gap;
+      const cell = Math.floor((w - GAP) / 2);
+
+      document.documentElement.style.setProperty("--midGap", `${GAP}px`);
+      document.documentElement.style.setProperty("--midCell", `${cell}px`);
+    },
+
+    ensureBound() {
+      const midWrap = document.querySelector(".midKpiWrap");
+      const midDash = document.getElementById("midDash");
+
+      // サイズは毎回当ててOK（軽い）
+      CTRL.applySize();
+
+      // wrapが変わっていないなら何もしない
+      if (CTRL.lastMidWrap === midWrap && CTRL.lastMidDash === midDash && CTRL.bound) return;
+
+      // wrapが無いなら解除
+      if (!midWrap) {
+        CTRL.lastMidWrap = null;
+        CTRL.lastMidDash = null;
+        CTRL.bound = false;
+        document.body.classList.remove("widgetsOnly");
+        return;
+      }
+
+      CTRL.lastMidWrap = midWrap;
+      CTRL.lastMidDash = midDash;
+
+      // scroll handler を一度だけ付与（DOM入れ替えなら付け直し）
+      const onScroll = () => {
+        if (midWrap.scrollTop > 0) document.body.classList.add("widgetsOnly");
+        else document.body.classList.remove("widgetsOnly");
+      };
+
+      // 既存のハンドラを消すため、datasetフラグで二重登録を避ける
+      if (midWrap.dataset.widgetsOnlyBound === "1") {
+        // 何もしない
+      } else {
+        midWrap.addEventListener("scroll", onScroll, { passive: true });
+        midWrap.dataset.widgetsOnlyBound = "1";
+      }
+
+      // resize は window で1回だけ
+      if (!CTRL.bound) {
+        window.addEventListener("resize", () => CTRL.applySize());
+        window.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            // widgetsOnly解除（任意）
+            midWrap.scrollTo({ top: 0, behavior: "instant" });
+            document.body.classList.remove("widgetsOnly");
+          }
+        });
+      }
+
+      CTRL.bound = true;
+    }
+  };
+
+  return CTRL;
+}
+
+const midFrame = createMidFrameController();
+
 // ===== render loop =====
 function renderAll(state) {
   mounts.updatedBadge.textContent = `更新日: ${fmtDate(state.updatedDate)}`;
@@ -212,6 +297,9 @@ function renderAll(state) {
   renderDetail(mounts.detailMount, state, actions);
 
   renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
+
+  // ✅ 最後に：中段フレームのサイズ/スクロール制御を確実に当てる
+  midFrame.ensureBound();
 }
 
 renderAll(store.get());
