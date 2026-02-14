@@ -3,13 +3,13 @@ import { el, clear } from "../utils/dom.js";
 import { renderMidSlot } from "./renderMidSlot.js";
 
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
+import { renderWidget2CostHist } from "./widget2CostHist.js";
 
 /**
- * 中段：2×2（枠は固定）
- * - 4セルは必ず renderMidSlot を通して「枠」を維持する
- * - widget1 は既存の renderWidget1ShareDonut(body, state, actions) を呼ぶ
- * - widget2 は一旦「器だけ」：body内に select+canvas を置く（charts.js側が描く想定）
- * - それ以外はプレースホルダ（枠維持のため）
+ * 中段：2×2（枠固定）
+ * - slot= .dashSlot
+ * - 内部= .midPanel / .midPanelBody
+ * - widget1 / widget2 を「決定後でも消えない」ように安全に当てる
  */
 export function renderMidKpi(mounts, state, actions) {
   const slotMounts = [
@@ -19,7 +19,7 @@ export function renderMidKpi(mounts, state, actions) {
     mounts.midSlotScatter,
   ];
 
-  const fallback = ["widget1", "widget2", "scatter", "dummyA"];
+  const fallback = ["widget1", "widget2", "dummyA", "dummyB"];
   const fixed = norm4_(state.midSlots, fallback);
   const draft = norm4_(state.midSlotsDraft, fixed);
   const slots = state.drawerOpen ? draft : fixed;
@@ -30,77 +30,95 @@ export function renderMidKpi(mounts, state, actions) {
 
     const type = slots[i] || "dummyA";
 
-    // ✅ 重要：枠は常に renderMidSlot で維持
-    renderMidSlot(mount, {
-      slotKey: String(type || "").trim() || "_",
-      title: titleOf_(type, i),
-      onFocus: () => actions?.onOpenFocus?.({ slotIndex: i, slotType: type }),
-      renderBody: (body) => {
-        // まず中身だけクリア（枠はrenderMidSlotが保持）
-        clear(body);
+    // =========================================================
+    // widget2 は「自前で card を作る」設計なので、slot直下に描く
+    // =========================================================
+    if (type === "widget2") {
+      // 他タイプから切替時の残骸を消す（確実に）
+      if (mount.__midSlotKey && mount.__midSlotKey !== "widget2") {
+        clear(mount);
+        delete mount.__midSlot;
+      }
+      mount.__midSlotKey = "widget2";
 
-        // widget1：既存描画
-        if (type === "widget1") {
-          renderWidget1ShareDonut(body, state, actions);
-          return;
-        }
-
-        // widget2：いまは「枠内に収まる器だけ」置く（描画ロジックには触らない）
-        if (type === "widget2") {
-          ensureWidget2Body_(body);
-          // ここで charts.js 側が costHistChart を見て描く設計なら、そのまま描画される
-          // （まだ描かれなくても「当て先」は完了＝枠は出る）
-          return;
-        }
-
-        // その他：プレースホルダ（枠が消えないため）
-        body.appendChild(
-          el("div", { class: "frameOnlyHint" }, [
-            el("div", { class: "frameOnlyType", text: `type: ${type}` }),
-            el("div", { class: "frameOnlyText", text: "（未復活：枠のみ）" }),
+      try {
+        renderWidget2CostHist(mount, actions);
+      } catch (err) {
+        clear(mount);
+        mount.appendChild(
+          el("div", { class: "card midPanel" }, [
+            el("div", { class: "midPanelHeader" }, [
+              el("div", { class: "midPanelTitle", text: "② 原価率分布（widget2）" }),
+            ]),
+            el("div", { class: "midPanelBody" }, [
+              el("pre", {
+                style: "white-space:pre-wrap; font-size:12px; margin:0;",
+                text: `widget2 ERROR:\n${String(err?.stack || err)}`,
+              }),
+            ]),
           ])
+        );
+      }
+      continue;
+    }
+
+    // =========================================================
+    // widget1 / dummy / scatter は renderMidSlot（midPanelBody に描く）
+    // =========================================================
+    if (type === "widget1") {
+      renderMidSlot(mount, {
+        slotKey: "widget1",
+        title: "",          // widget1は内部ヘッダーを持つ
+        noHeader: true,     // ✅ 外側ヘッダー無し
+        renderBody: (body) => {
+          safeRender_(body, () => {
+            // widget1は内部で「拡大」ボタンも持ってる
+            renderWidget1ShareDonut(body, state, actions, { mode: "normal" });
+          }, "widget1");
+        },
+      });
+      continue;
+    }
+
+    // それ以外：とりあえず “枠” は出しておく（消えない）
+    renderMidSlot(mount, {
+      slotKey: type,
+      title: titleOf_(type, i),
+      renderBody: (body) => {
+        clear(body);
+        body.appendChild(
+          el("div", { style: "opacity:.8; font-size:12px;", text: `type: ${type}` })
         );
       },
     });
   }
 
-  // 下段は空でOK
   if (mounts.midCards) clear(mounts.midCards);
 }
 
-function ensureWidget2Body_(body) {
-  // 既存charts.js互換を意識して id を固定
-  // - select: #costHistMode
-  // - canvas: #costHistChart
-  // ※ body内完結
-  const wrap = el("div", { class: "chartBody", style: "width:100%;height:100%;min-height:0;display:flex;flex-direction:column;gap:10px;" });
-
-  const tools = el("div", { class: "chartTools", style: "flex:0 0 auto;display:flex;gap:10px;align-items:center;" }, [
-    el("select", { class: "select", id: "costHistMode" }, [
-      el("option", { value: "count", text: "台数" }),
-      el("option", { value: "sales", text: "売上" }),
-    ]),
-  ]);
-
-  const canvasWrap = el("div", { style: "position:relative;flex:1;min-height:0;" }, [
-    el("canvas", { id: "costHistChart", style: "width:100%;height:100%;" }),
-  ]);
-
-  wrap.appendChild(tools);
-  wrap.appendChild(canvasWrap);
-  body.appendChild(wrap);
-}
-
-function titleOf_(type, idx) {
-  if (type === "widget1") return "売上構成比";
-  if (type === "widget2") return "原価率 分布";
-  if (type === "scatter") return "散布図";
-  if (type === "dummyA") return `枠${idx + 1}`;
-  return String(type || `枠${idx + 1}`);
+function safeRender_(body, fn, label) {
+  try {
+    fn();
+  } catch (err) {
+    clear(body);
+    body.appendChild(
+      el("pre", {
+        style: "white-space:pre-wrap; font-size:12px; margin:0;",
+        text: `${label} ERROR:\n${String(err?.stack || err)}`,
+      })
+    );
+  }
 }
 
 function norm4_(arr, fallback) {
   const a = Array.isArray(arr) ? arr.slice(0, 4) : fallback.slice(0, 4);
   while (a.length < 4) a.push(fallback[a.length] || "dummyA");
   return a.map((x) => String(x || "").trim() || "dummyA");
+}
+
+function titleOf_(type, idx) {
+  if (type === "scatter") return "③ 売上×原価率（散布）";
+  if (type === "dummyA") return `ダミーA（slot${idx + 1}）`;
+  if (type === "dummyB") return `ダミーB（slot${idx + 1}）`;
+  return `slot${idx + 1}`;
 }
