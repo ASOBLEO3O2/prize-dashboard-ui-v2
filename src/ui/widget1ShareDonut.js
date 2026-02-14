@@ -434,7 +434,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
         cutout: "40%",
         animation: false,
         resizeDelay: 80,
-        interaction: { mode: "nearest", intersect: true },
+        interaction: { mode: "nearest", intersect: false },
         plugins: {
           legend: { display: false },
           tooltip: {
