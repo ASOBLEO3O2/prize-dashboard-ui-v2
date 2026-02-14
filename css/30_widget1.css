@@ -37,16 +37,18 @@
   overflow: hidden;
 }
 
-/* チャート領域 */
+/* チャート領域（オーバーレイのため relative） */
 .widget1ChartWrap{
+  position: relative;
   min-height: 0;
   height: 100%;
+  width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
 }
 
-/* canvas は上限を持たない */
+/* canvas は枠内100% */
 .widget1Canvas{
   width: 100% !important;
   height: 100% !important;
@@ -61,6 +63,72 @@
   font-size: 12px;
   line-height: 1.2;
   padding-right: 4px;
+}
+
+/* ===== 中央表示（合計売上） ===== */
+.w1Center{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none; /* hoverを邪魔しない */
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(10,15,20,.35);
+  border: 1px solid rgba(255,255,255,.08);
+  backdrop-filter: blur(6px);
+}
+
+.w1CenterLabel{
+  font-size: 11px;
+  opacity: .75;
+  margin-bottom: 2px;
+}
+
+.w1CenterValue{
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .2px;
+  white-space: nowrap;
+}
+
+/* ===== ツールチップ（ドーナツ領域内・下部固定） ===== */
+.w1Tip{
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  pointer-events: none; /* hoverを邪魔しない */
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .12s ease, transform .12s ease;
+
+  padding: 10px 10px;
+  border-radius: 12px;
+  background: rgba(7, 11, 18, .78);
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+
+.w1Tip.show{
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.w1TipTitle{
+  font-weight: 900;
+  font-size: 12px;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.w1TipLine{
+  font-size: 12px;
+  opacity: .95;
+  line-height: 1.35;
 }
 
 /* 狭い画面では縦並び */
