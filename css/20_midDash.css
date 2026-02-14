@@ -1,5 +1,5 @@
 /* css/20_midDash.css */
-/* 中段：2×2 fit（枠サイズ決め用に安定化） */
+/* 中段：2×2 正方形カード（ページスクロール前提） */
 
 .midKpiWrap{
   border:1px solid var(--border);
@@ -8,91 +8,38 @@
   box-shadow:var(--shadow);
   overflow:hidden;
 
-  flex:1;
-  min-height:0;
   display:flex;
   flex-direction:column;
 }
 
-/* 上段(2×2)が「残り」を取る */
+/* 中段上部（2×2の器） */
 .midTop{
   padding:14px;
   border-bottom:1px solid var(--border);
 
-  flex:1;
-  min-height:0;
   display:flex;
 }
 
 /* 2×2 の器 */
 #midDash{
   width:100%;
-  min-height:0;
   display:grid;
   gap:12px;
 
   grid-template-columns:repeat(2, minmax(0, 1fr));
-  grid-template-rows:repeat(2, minmax(0, 1fr));
   align-items:stretch;
 }
 
-/* スロットがセルを埋める */
+/* ✅ 各セル（=カード）を正方形に固定 */
 #midDash > *{
   min-width:0;
-  min-height:0;
-  height:100%;
+  aspect-ratio:1 / 1; /* 正方形 */
+  height:auto;
 }
 
-/* 中段：正方形セルのための寸法（JSが --midCell を更新） */
-:root{
-  --midGap: 12px;
-  --midCell: 320px; /* 初期値：JSで上書きされる */
-}
-
-#midDash{
-  gap: var(--midGap);
-}
-
-/* ✅ 2×2 の“見える範囲”を正方形で固定（PC用） */
-.midTop{
-  /* 2行分の正方形 + gap で高さ固定 */
-  height: calc(var(--midCell) * 2 + var(--midGap));
-  flex: 0 0 auto;      /* 伸びない */
-  min-height: 0;
-  display: flex;
-}
-
-/* セルを正方形サイズに揃える */
-#midDash{
-  grid-template-columns: repeat(2, var(--midCell));
-  grid-template-rows: repeat(2, var(--midCell));
-  justify-content: space-between; /* 余りは左右に分散 */
-}
-
-/* スロットはセルを埋める */
-#midDash > *{
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-@media (max-width: 768px){
-  /* 1列で縦4個。セルは画面幅基準で正方形 */
-  .midTop{
-    height: auto;        /* 2×2固定を解除 */
-    flex: 1;
-  }
-
+/* スマホ：縦1列（4枚並ぶ） */
+@media (max-width:768px){
   #midDash{
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-    justify-content: stretch;
-  }
-
-  /* スマホは“幅＝高さ”に寄せる（正方形） */
-  #midDash > *{
-    aspect-ratio: 1 / 1;
-    height: auto;
+    grid-template-columns:1fr;
   }
 }
