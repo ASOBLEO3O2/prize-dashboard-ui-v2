@@ -5,18 +5,12 @@ import { el, clear } from "../utils/dom.js";
  * Widget②：原価率 分布（ヒストグラム）
  * - Chart.js 実体は charts.js 側
  * - ここでは「器」だけを保証する
- *
- * 修正：
- * - slot切替などで mount が clear されても __w2_built が残り得る
- * - その場合でも canvas が無ければ再構築する
  */
 export function renderWidget2CostHist(slotMount, actions) {
   if (!slotMount) return;
 
-  const hasCanvas = !!slotMount.querySelector("#costHistChart");
-
-  // 初回 or DOMが消えた場合は作り直す
-  if (!slotMount.__w2_built || !hasCanvas) {
+  // 初回のみDOM構築
+  if (!slotMount.__w2_built) {
     clear(slotMount);
 
     const card = el("div", { class: "card midPanel widget2" });
