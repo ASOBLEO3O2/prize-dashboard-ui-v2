@@ -76,3 +76,23 @@
   min-width: 0;
   min-height: 0;
 }
+
+@media (max-width: 768px){
+  /* 1列で縦4個。セルは画面幅基準で正方形 */
+  .midTop{
+    height: auto;        /* 2×2固定を解除 */
+    flex: 1;
+  }
+
+  #midDash{
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    justify-content: stretch;
+  }
+
+  /* スマホは“幅＝高さ”に寄せる（正方形） */
+  #midDash > *{
+    aspect-ratio: 1 / 1;
+    height: auto;
+  }
+}
