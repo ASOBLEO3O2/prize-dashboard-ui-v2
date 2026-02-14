@@ -236,3 +236,17 @@
     grid-template-columns:1fr;
   }
 }
+/* ===== FINAL OVERRIDE：2×2を B案（5:4）に固定 ===== */
+#midDash > .dashSlot{
+  aspect-ratio: 5 / 4 !important;
+  height: auto !important;
+  min-width: 0 !important;
+  display: flex !important;
+}
+
+#midDash > .dashSlot > .midPanel{
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
