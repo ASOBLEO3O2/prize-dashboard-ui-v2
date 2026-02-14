@@ -117,3 +117,9 @@ body::before{
   color:#fff;
   opacity:.8;
 }
+
+/* ===== 強制：中段だけスクロール（上書き負け対策） ===== */
+#midKpiWrap{
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
