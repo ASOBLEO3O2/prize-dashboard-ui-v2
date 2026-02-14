@@ -185,6 +185,10 @@ function renderAll(state) {
 
   renderTopKpi(mounts.topKpi, state.topKpi);
   renderMidKpi(mounts, state, actions);
+  // チャートはDOMが確定してから描く
+  requestAnimationFrame(() => {
+  renderCharts(mounts, state);
+  });
   renderCharts(mounts, state);
   renderFocusOverlay(
     mounts.focusOverlay,
