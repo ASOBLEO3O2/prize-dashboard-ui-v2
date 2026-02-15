@@ -1,26 +1,8 @@
 // src/ui/charts.js
+import { W2_COST_BINS } from "./widget2CostHist.js";
 
 let costHistChart = null;
 let salesCostScatter = null;
-
-const COST_BINS = [
-  { label: "0–10%" },
-  { label: "11–25%" },
-  { label: "26–32%" },
-  { label: "33–40%" },
-  { label: "40%〜" },
-];
-
-function pickCostBinIndex_(rate01) {
-  const r = Number(rate01);
-  if (!Number.isFinite(r) || r < 0) return -1;
-
-  if (r <= 0.10) return 0;
-  if (r <= 0.25) return 1;
-  if (r <= 0.32) return 2;
-  if (r < 0.40) return 3;
-  return 4;
-}
 
 function toNum(v) {
   if (v == null) return null;
@@ -38,6 +20,16 @@ function toNum(v) {
   return null;
 }
 
+function inBin_(rate01, b) {
+  if (!b) return false;
+  const r = Number(rate01);
+  if (!Number.isFinite(r) || r < 0) return false;
+
+  const geMin = b.incMin ? r >= b.min : r > b.min;
+  const ltMax = (b.max === Infinity) ? true : (b.incMax ? r <= b.max : r < b.max);
+  return geMin && ltMax;
+}
+
 function findCanvasAndMode() {
   const costCanvas = document.getElementById("costHistChart");
   const scatterCanvas = document.getElementById("salesCostScatter");
@@ -45,36 +37,17 @@ function findCanvasAndMode() {
   return { costCanvas, scatterCanvas, modeSelect };
 }
 
+// 初回描画対策
 function canvasReady(canvas) {
   if (!canvas) return false;
   const r = canvas.getBoundingClientRect();
-  return r.height >= 120 && r.width >= 40;
-}
-
-// ✅ 重要：今掴んでいる canvas と違うなら作り直し
-function ensureChartBoundToCanvas_(chart, canvas) {
-  if (!chart) return null;
-  if (!canvas) return chart;
-
-  try {
-    if (chart.canvas !== canvas) {
-      chart.destroy?.();
-      return null;
-    }
-  } catch (e) {
-    // 破棄に失敗しても次で作り直せるよう null
-    return null;
-  }
-  return chart;
+  return r.height >= 80 && r.width >= 40; // ←少し緩める（初期0回避）
 }
 
 function ensureCostHist(costCanvas) {
   const Chart = window.Chart;
   if (!Chart) return false;
   if (!canvasReady(costCanvas)) return false;
-
-  // ★差し替わってたら破棄して作り直し
-  costHistChart = ensureChartBoundToCanvas_(costHistChart, costCanvas);
 
   const ctx = costCanvas.getContext?.("2d");
   if (!ctx) return false;
@@ -83,8 +56,8 @@ function ensureCostHist(costCanvas) {
     costHistChart = new Chart(ctx, {
       type: "bar",
       data: {
-        labels: COST_BINS.map((b) => b.label),
-        datasets: [{ label: "台数", data: [0, 0, 0, 0, 0] }],
+        labels: W2_COST_BINS.map((b) => b.label),
+        datasets: [{ label: "台数", data: W2_COST_BINS.map(() => 0) }],
       },
       options: {
         responsive: true,
@@ -107,9 +80,6 @@ function ensureScatter(scatterCanvas) {
   const Chart = window.Chart;
   if (!Chart) return false;
   if (!canvasReady(scatterCanvas)) return false;
-
-  // ★差し替わってたら破棄して作り直し
-  salesCostScatter = ensureChartBoundToCanvas_(salesCostScatter, scatterCanvas);
 
   const ctx = scatterCanvas.getContext?.("2d");
   if (!ctx) return false;
@@ -169,7 +139,7 @@ function ensureScatter(scatterCanvas) {
           y: {
             title: { display: true, text: "原価率" },
             beginAtZero: true,
-            suggestedMax: 0.2,
+            suggestedMax: 0.8,
             ticks: { callback: (v) => `${Math.round(v * 100)}%` },
           },
         },
@@ -183,14 +153,14 @@ function ensureScatter(scatterCanvas) {
 }
 
 function computeCostHistogram(rows, mode) {
-  const arr = COST_BINS.map(() => 0);
+  const arr = W2_COST_BINS.map(() => 0);
 
   for (const r of rows) {
     const rate = toNum(r?.cost_rate ?? r?.原価率);
     const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
     if (rate == null) continue;
 
-    const idx = pickCostBinIndex_(rate);
+    const idx = W2_COST_BINS.findIndex((b) => inBin_(rate, b));
     if (idx < 0) continue;
 
     arr[idx] += mode === "sales" ? sales : 1;
@@ -220,7 +190,6 @@ export function renderCharts(mounts, state) {
   const ok1 = ensureCostHist(costCanvas);
   const ok2 = ensureScatter(scatterCanvas);
 
-  // どっちもまだ無理なら次フレームで再試行
   if ((!costHistChart && !salesCostScatter) || (!ok1 && !ok2)) {
     requestAnimationFrame(() => renderCharts(mounts, state));
     return;
@@ -231,6 +200,7 @@ export function renderCharts(mounts, state) {
 
   if (costHistChart) {
     const hist = computeCostHistogram(rows, mode);
+    costHistChart.data.labels = W2_COST_BINS.map((b) => b.label);
     costHistChart.data.datasets[0].data = hist;
     costHistChart.data.datasets[0].label = mode === "sales" ? "売上" : "台数";
     costHistChart.update();
@@ -242,6 +212,7 @@ export function renderCharts(mounts, state) {
     salesCostScatter.update();
   }
 
+  // mode変更時にも即反映（イベントは1回だけ）
   if (modeSelect && !modeSelect.__bound) {
     modeSelect.addEventListener("change", () => renderCharts(mounts, state));
     modeSelect.__bound = true;
