@@ -9,7 +9,10 @@
   flex-direction: column;
 }
 
-/* Header */
+/* =========================
+   Header
+   ========================= */
+
 .widget1Header{
   flex: 0 0 auto;
   display: flex;
@@ -26,27 +29,35 @@
   text-overflow: ellipsis;
 }
 
-/* Body（残り高さを全部使う） */
+/* =========================
+   Body
+   ========================= */
+
 .widget1Body{
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+
+  /* ドーナツ : 凡例 = 1 : 1 */
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+
   gap: 12px;
   padding: 10px;
   overflow: hidden;
 }
 
-/* チャート領域 */
+/* =========================
+   Chart Area
+   ========================= */
+
 .widget1ChartWrap{
+  position: relative;   /* 中央表示を重ねるため */
   min-height: 0;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
 }
 
-/* canvas は上限を持たない */
+/* canvas は常に領域いっぱい */
 .widget1Canvas{
   width: 100% !important;
   height: 100% !important;
@@ -54,7 +65,34 @@
   max-height: none;
 }
 
-/* 凡例 */
+/* ドーナツ中央表示 */
+.w1Center{
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  gap: 2px;
+}
+
+.w1CenterLabel{
+  font-size: 12px;
+  opacity: .75;
+  line-height: 1.1;
+}
+
+.w1CenterValue{
+  font-weight: 900;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+/* =========================
+   Legend
+   ========================= */
+
 .widget1ABC{
   min-height: 0;
   overflow: auto;
@@ -63,7 +101,34 @@
   padding-right: 4px;
 }
 
-/* 狭い画面では縦並び */
+.w1LegendItem{
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.w1LegendLabel{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.w1LegendSales{
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.w1LegendShare{
+  text-align: right;
+  opacity: .7;
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================
+   Responsive
+   ========================= */
+
 @media (max-width: 900px){
   .widget1Body{
     grid-template-columns: 1fr;
