@@ -167,3 +167,43 @@
 
 .w1TipTitle{ font-weight:900; margin-bottom:4px; }
 .w1TipLine{ opacity:.85; }
+
+/* =========================
+   Tall / short-height tune
+   ========================= */
+
+/* 高さが足りないときは：ドーナツの最低サイズを守り、凡例を圧縮 */
+@media (max-height: 680px){
+  .widget1Body{
+    gap: 10px;
+    padding: 8px;
+  }
+
+  .widget1ChartWrap{
+    min-height: 260px; /* ドーナツが潰れない最低ライン */
+  }
+
+  .widget1ABC{
+    max-height: 100%;
+    overflow: auto;
+  }
+
+  /* 凡例の“詳細（平均/消化/原価率）”は隠して、一覧を締める */
+  .w1LegendMeta{
+    display:none;
+  }
+
+  .w1LegendItem{
+    padding: 6px 0;
+  }
+}
+
+/* さらに低い時は：2段構成にして視線を縦に揃える */
+@media (max-height: 560px){
+  .widget1Body{
+    grid-template-columns: 1fr;
+  }
+  .widget1ChartWrap{
+    min-height: 240px;
+  }
+}
