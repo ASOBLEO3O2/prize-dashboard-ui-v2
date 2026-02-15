@@ -711,3 +711,10 @@ export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   upsertChart_(mount, items, totalSales, totalBooths, { canDrill, onDrill });
   renderLegend_(mount, items, totalSales, totalBooths, { canDrill, onDrill });
 }
+
+// ✅ focusOverlay から呼ぶための統一I/F（中身は既存関数に委譲）
+export function renderWidget1ShareDonutFocus(mount, state, actions) {
+  // widget1 は自前でヘッダー/ナビも持ってるならそれでOK
+  // ここは「拡大モードで描け」という指示だけ出す
+  renderWidget1ShareDonut(mount, state, actions, { mode: "expanded" });
+}
