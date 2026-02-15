@@ -284,3 +284,26 @@
 .w1Tip.show{ opacity:1; transform:none; }
 .w1TipTitle{ font-weight:900; margin-bottom:4px; }
 .w1TipLine{ opacity:.85; }
+
+/* =========================
+   拡大時：ドーナツを縦いっぱいに使う
+   ========================= */
+
+.widget1-expanded .widget1Body{
+  height:100%;
+  display:grid;
+  grid-template-columns: 1fr 480px; /* 右固定幅で安定 */
+  align-items:stretch;
+}
+
+.widget1-expanded .widget1ChartWrap{
+  height:100%;
+  min-height:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.widget1-expanded .widget1Canvas{
+  height:100% !important;
+}
