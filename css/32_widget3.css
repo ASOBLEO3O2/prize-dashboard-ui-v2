@@ -1,0 +1,178 @@
+/* css/32_widget3.css
+ * Widget③（scatter）専用：w3-
+ * Widget②で決めた「カード感」をそのまま踏襲する
+ */
+
+.w3ToolsRow{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.w3HintPill{
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(15,23,42,.70);
+  border:1px solid rgba(148,163,184,.22);
+  color:var(--muted);
+  font-size:12px;
+  font-weight:900;
+  line-height:1.2;
+}
+
+.w3Grid{
+  gap:14px;
+}
+
+/* 左：チャート */
+.w3Left{
+  min-width:0;
+  min-height:0;
+  display:flex;
+}
+
+.w3ChartWrap{
+  flex:1;
+  min-width:0;
+  min-height:0;
+
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:16px;
+  background: linear-gradient(180deg, rgba(2,6,23,.55), rgba(15,21,29,.40));
+  box-shadow: 0 14px 34px rgba(0,0,0,.28);
+
+  padding:12px;
+  overflow:hidden;
+}
+
+.w3ChartWrap canvas{
+  width:100% !important;
+  height:100% !important;
+  display:block;
+}
+
+/* 右：リスト */
+.w3Right{
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.w3ListTitle{
+  font-size:12px;
+  font-weight:950;
+  color:var(--muted);
+  padding:8px 10px;
+  border:1px solid rgba(148,163,184,.18);
+  border-radius:12px;
+  background:rgba(2,6,23,.35);
+}
+
+.w3List{
+  flex:1;
+  min-height:0;
+  overflow:auto;
+
+  border:1px solid rgba(148,163,184,.22);
+  border-radius:16px;
+  background:rgba(15,21,29,.52);
+  box-shadow: 0 14px 34px rgba(0,0,0,.25);
+
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.w3Card{
+  border:1px solid rgba(148,163,184,.18);
+  border-radius:14px;
+  background: linear-gradient(180deg, rgba(18,26,34,.62), rgba(2,6,23,.52));
+  box-shadow: 0 10px 26px rgba(0,0,0,.22);
+  padding:10px 12px;
+
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.w3CardTitle{
+  font-weight:950;
+  line-height:1.25;
+  letter-spacing:.01em;
+
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+.w3CardSub{
+  font-size:12px;
+  font-weight:900;
+  opacity:.95;
+}
+
+.w3CardSub2{
+  font-size:12px;
+  color:var(--muted);
+  opacity:.95;
+}
+.w3CardSub2.is-hidden{ display:none; }
+
+.w3CardMetrics{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:2px;
+}
+
+.w3Chip{
+  display:inline-flex;
+  align-items:center;
+  padding:6px 8px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:900;
+  border:1px solid rgba(148,163,184,.18);
+  background:rgba(15,23,42,.58);
+}
+
+.w3Hint{
+  padding:10px 10px;
+  border-radius:14px;
+  border:1px dashed rgba(148,163,184,.26);
+  color:var(--muted);
+  font-size:12px;
+  font-weight:900;
+  text-align:center;
+  background:rgba(2,6,23,.30);
+}
+
+.w3Empty{
+  padding:16px 10px;
+  text-align:center;
+  color:var(--muted);
+  font-weight:900;
+  border:1px dashed rgba(148,163,184,.26);
+  border-radius:14px;
+  background:rgba(2,6,23,.28);
+}
+
+/* スクロールバー */
+.w3List::-webkit-scrollbar{ width:10px; }
+.w3List::-webkit-scrollbar-thumb{
+  background:rgba(148,163,184,.28);
+  border-radius:999px;
+}
+.w3List::-webkit-scrollbar-track{
+  background:rgba(2,6,23,.20);
+}
+
+/* 狭いときは右を下へ */
+@media (max-width:980px){
+  .w3Grid{ grid-template-columns:1fr !important; }
+}
