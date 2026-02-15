@@ -2,9 +2,9 @@
 import { el, clear } from "../utils/dom.js";
 import { fmtYen, fmtPct } from "../utils/format.js";
 
-/* ===== 帯域定義 ===== */
+/* ===== 帯域（確定） ===== */
 const BANDS = [
-  { key: "b1", label: "0–15%", min: 0, max: 15 },
+  { key: "b1", label: "0–15%",  min: 0,  max: 15 },
   { key: "b2", label: "16–25%", min: 16, max: 25 },
   { key: "b3", label: "26–32%", min: 26, max: 32 },
   { key: "b4", label: "33–40%", min: 33, max: 40 },
@@ -14,73 +14,64 @@ const BANDS = [
 export function renderWidget2CostHist(mount, state) {
   clear(mount);
 
-  let mode = "sales"; // sales | count
+  let mode = "sales"; // "sales" | "count"
 
-  const header = el("div", { class: "cardHeader" }, [
-    el("div", { class: "cardTitle", text: "原価率分布" }),
+  // ---- Header ----
+  const head = el("div", { class: "w2-head" }, [
+    el("div", { class: "w2-title", text: "原価率分布" }),
+    el("div", { class: "w2-toggle" }, [
+      el("button", {
+        class: "btn small",
+        text: "台数",
+        onClick: () => { mode = "count"; draw(); },
+      }),
+      el("button", {
+        class: "btn small",
+        text: "売上",
+        onClick: () => { mode = "sales"; draw(); },
+      }),
+    ]),
   ]);
 
-  const toggleWrap = el("div", { class: "toggleWrap" }, [
+  const histWrap = el("div", { class: "w2-hist" }, [
+    el("div", { class: "w2-histWrap" }),
+  ]);
+
+  const expandRow = el("div", { class: "w2-expandRow" }, [
     el("button", {
-      class: "btn small",
-      text: "台数",
-      onClick: () => {
-        mode = "count";
-        draw();
-      },
-    }),
-    el("button", {
-      class: "btn small",
-      text: "売上",
-      onClick: () => {
-        mode = "sales";
-        draw();
-      },
+      class: "btn ghost w2-expandBtn",
+      text: "拡大",
+      onClick: () => openExpand_(),
     }),
   ]);
 
-  const chartArea = el("div", { class: "histWrap" });
-
-  const expandBtn = el("button", {
-    class: "btn expand",
-    text: "拡大",
-    onClick: () => openExpand(),
-  });
-
-  mount.append(header, toggleWrap, chartArea, expandBtn);
+  mount.append(head, histWrap, expandRow);
 
   draw();
 
-  /* ===== 分布計算 ===== */
-  function buildDistribution() {
+  /* ===== 分布作成 ===== */
+  function buildDistribution_() {
     const rows = state.filteredRows || [];
 
     return BANDS.map((band) => {
       const items = rows.filter((r) => {
-        const rate = Number(r["原価率"] || 0);
+        const rate = Number(r["原価率"] ?? 0);
         return rate >= band.min && rate <= band.max;
       });
 
       const count = items.length;
-      const sales = items.reduce(
-        (sum, r) => sum + Number(r["総売上"] || 0),
-        0
-      );
+      const sales = items.reduce((sum, r) => sum + Number(r["総売上"] ?? 0), 0);
 
-      return {
-        ...band,
-        count,
-        sales,
-        items,
-      };
+      return { ...band, count, sales, items };
     });
   }
 
-  /* ===== 描画 ===== */
+  /* ===== 中段描画 ===== */
   function draw() {
-    clear(chartArea);
+    const wrap = histWrap.querySelector(".w2-histWrap");
+    clear(wrap);
 
-    const dist = buildDistribution();
+    const dist = buildDistribution_();
     const maxValue = Math.max(
       ...dist.map((d) => (mode === "sales" ? d.sales : d.count)),
       1
@@ -91,127 +82,153 @@ export function renderWidget2CostHist(mount, state) {
       const height = (value / maxValue) * 100;
 
       const bar = el("div", {
-        class: "histBar",
-        style: `height:${height}%`,
-        title:
-          mode === "sales"
-            ? `${d.label} : ${fmtYen(d.sales)}`
-            : `${d.label} : ${d.count}台`,
+        class: "w2-bar",
+        style: `height:${height}%;`,
+        title: mode === "sales"
+          ? `${d.label} : ${fmtYen(d.sales)}`
+          : `${d.label} : ${d.count}台`,
       });
 
-      const wrap = el("div", { class: "histCol" }, [
+      const col = el("div", { class: "w2-histCol" }, [
         bar,
-        el("div", { class: "histLabel", text: d.label }),
+        el("div", { class: "w2-histLabel", text: d.label }),
       ]);
 
-      chartArea.append(wrap);
+      wrap.append(col);
     });
   }
 
-  /* ===== 拡大表示 ===== */
-  function openExpand() {
-    const overlay = el("div", { class: "overlay" });
-    const container = el("div", { class: "expandContainer" });
+  /* ===== 拡大（遷移） ===== */
+  function openExpand_() {
+    const dist = buildDistribution_();
 
-    const topChart = el("div", { class: "expandChart" });
-    const cardArea = el("div", { class: "cardArea" });
+    // 初期：売上最大の帯
+    let selected = dist.reduce((max, cur) => (cur.sales > max.sales ? cur : max), dist[0]);
 
-    overlay.append(container);
-    container.append(topChart, cardArea);
+    const overlay = el("div", { class: "w2-overlay" });
+    const modal = el("div", { class: "w2-modal" });
+
+    const top = el("div", { class: "w2-modalTop" }, [
+      el("div", { class: "w2-modalTitle", text: "原価率分布（拡大）" }),
+      el("div", { class: "w2-toggle" }, [
+        el("button", {
+          class: "btn small",
+          text: "台数",
+          onClick: () => { mode = "count"; renderExpand_(); },
+        }),
+        el("button", {
+          class: "btn small",
+          text: "売上",
+          onClick: () => { mode = "sales"; renderExpand_(); },
+        }),
+        el("button", {
+          class: "btn ghost w2-close",
+          text: "閉じる",
+          onClick: () => overlay.remove(),
+        }),
+      ]),
+    ]);
+
+    const body = el("div", { class: "w2-modalBody" });
+    const chart = el("div", { class: "w2-expandChart" }, [
+      el("div", { class: "w2-histWrap" }),
+    ]);
+    const cards = el("div", { class: "w2-cards" }, [
+      el("div", { class: "w2-cardsGrid" }),
+    ]);
+
+    body.append(chart, cards);
+    modal.append(top, body);
+    overlay.append(modal);
     document.body.append(overlay);
 
-    const dist = buildDistribution();
-
-    let selectedBand = getMaxBand(dist);
-
-    drawExpandChart();
-    drawCards(selectedBand);
-
-    function drawExpandChart() {
-      clear(topChart);
-
-      dist.forEach((d) => {
-        const value = mode === "sales" ? d.sales : d.count;
-        const maxValue = Math.max(
-          ...dist.map((x) => (mode === "sales" ? x.sales : x.count)),
-          1
-        );
-
-        const height = (value / maxValue) * 100;
-
-        const bar = el("div", {
-          class: "histBar",
-          style: `height:${height}%`,
-          onClick: () => {
-            selectedBand = d;
-            drawCards(d);
-            highlight();
-          },
-        });
-
-        const wrap = el("div", { class: "histCol" }, [
-          bar,
-          el("div", { class: "histLabel", text: d.label }),
-        ]);
-
-        topChart.append(wrap);
-      });
-
-      highlight();
-    }
-
-    function highlight() {
-      [...topChart.querySelectorAll(".histCol")].forEach((col, i) => {
-        col.classList.toggle(
-          "active",
-          dist[i].key === selectedBand.key
-        );
-      });
-    }
-
-    function drawCards(band) {
-      clear(cardArea);
-
-      if (!band.items.length) {
-        cardArea.append(
-          el("div", { class: "empty", text: "該当なし" })
-        );
-        return;
-      }
-
-      const sorted = [...band.items].sort(
-        (a, b) =>
-          Number(b["総売上"] || 0) - Number(a["総売上"] || 0)
-      );
-
-      sorted.forEach((r) => {
-        const card = el("div", { class: "itemCard" }, [
-          el("div", {
-            class: "itemTitle",
-            text: `${r["景品名"] || "-"} / ${
-              r["対応マシン名"] || "-"
-            }`,
-          }),
-          el("div", {
-            text: `売上：${fmtYen(r["総売上"] || 0)}`,
-          }),
-          el("div", {
-            text: `原価率：${fmtPct(r["原価率"] || 0)}`,
-          }),
-        ]);
-
-        cardArea.append(card);
-      });
-    }
-
+    // 背景クリックで閉じる（モーダル外のみ）
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) overlay.remove();
     });
-  }
 
-  function getMaxBand(dist) {
-    return dist.reduce((max, cur) =>
-      cur.sales > max.sales ? cur : max
-    );
+    renderExpand_();
+
+    function renderExpand_() {
+      renderExpandChart_();
+      renderCards_();
+    }
+
+    function renderExpandChart_() {
+      const wrap = chart.querySelector(".w2-histWrap");
+      clear(wrap);
+
+      const maxValue = Math.max(
+        ...dist.map((d) => (mode === "sales" ? d.sales : d.count)),
+        1
+      );
+
+      dist.forEach((d) => {
+        const value = mode === "sales" ? d.sales : d.count;
+        const height = (value / maxValue) * 100;
+
+        const bar = el("div", {
+          class: "w2-bar",
+          style: `height:${height}%;`,
+          title: mode === "sales"
+            ? `${d.label} : ${fmtYen(d.sales)}`
+            : `${d.label} : ${d.count}台`,
+          onClick: () => {
+            selected = d;
+            renderCards_();
+            highlight_();
+          },
+        });
+
+        const col = el("div", { class: "w2-histCol" }, [
+          bar,
+          el("div", { class: "w2-histLabel", text: d.label }),
+        ]);
+
+        wrap.append(col);
+      });
+
+      highlight_();
+    }
+
+    function highlight_() {
+      const cols = [...chart.querySelectorAll(".w2-histCol")];
+      cols.forEach((c, i) => c.classList.toggle("is-active", dist[i].key === selected.key));
+    }
+
+    function renderCards_() {
+      const grid = cards.querySelector(".w2-cardsGrid");
+      clear(grid);
+
+      const items = selected.items || [];
+      if (!items.length) {
+        grid.append(el("div", { class: "w2-empty", text: "該当なし" }));
+        return;
+      }
+
+      // 影響度優先：常に売上降順
+      const sorted = [...items].sort((a, b) => Number(b["総売上"] ?? 0) - Number(a["総売上"] ?? 0));
+
+      sorted.forEach((r) => {
+        const prize = r["景品名"] ?? "-";
+        const machine = r["対応マシン名"] ?? "-";
+        const sales = Number(r["総売上"] ?? 0);
+        const rate = Number(r["原価率"] ?? 0);
+
+        grid.append(
+          el("div", { class: "w2-itemCard" }, [
+            el("div", { class: "w2-itemTitle", text: `${prize} / ${machine}` }),
+            el("div", { class: "w2-row" }, [
+              el("div", { text: "売上" }),
+              el("div", { text: fmtYen(sales) }),
+            ]),
+            el("div", { class: "w2-row" }, [
+              el("div", { text: "原価率" }),
+              el("div", { text: fmtPct(rate) }),
+            ]),
+          ])
+        );
+      });
+    }
   }
 }
