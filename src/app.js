@@ -15,7 +15,8 @@ import { loadRawData } from "./data/load.js";
 import { applyFilters } from "./logic/filter.js";
 import { buildViewModel } from "./logic/aggregate.js";
 
-import { renderCharts } from "./ui/charts.js";
+// ❌ charts はウィジェットが自分で描く（枠に干渉させない）
+// import { renderCharts } from "./ui/charts.js";
 import { renderFocusOverlay } from "./ui/focusOverlay.js";
 
 const DEFAULT_MID_SLOTS = ["widget1", "widget2", "dummyA", "dummyB"];
@@ -133,7 +134,7 @@ const actions = {
     actions.requestRender();
   },
 
-  // ✅ 決定＝確定＋閉じる（zip版のRAFは外して確実に反映）
+  // ✅ 決定＝確定＋閉じる
   onApplyMidSlots: () => {
     store.set((s) => {
       const fixed = [...s.midSlotsDraft];
@@ -200,11 +201,8 @@ function renderAll(state) {
   renderTopKpi(mounts.topKpi, state.topKpi);
   renderMidKpi(mounts, state, actions);
 
-  // チャートはDOMが確定してから描く
-  requestAnimationFrame(() => {
-    renderCharts(mounts, state);
-  });
-  renderCharts(mounts, state);
+  // ✅ チャート描画は「各ウィジェットが自分で行う」方針に変更済み
+  // （app.js から共通チャート描画を呼ばない＝中身に干渉しない）
 
   renderFocusOverlay(mounts.focusOverlay, mounts.focusModal, state, actions);
   renderDetail(mounts.detailMount, state, actions);
