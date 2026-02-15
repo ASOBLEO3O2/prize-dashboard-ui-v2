@@ -88,6 +88,72 @@ function getAxisFromState_(state) {
 }
 
 /* =========================
+   ✅ 拡大時のブレ対策：canvasサイズ確定チェック
+   ========================= */
+function canvasReady_(el) {
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  // “0/極小”で作ると、そのサイズで固定されて崩れやすい
+  return r.width >= 120 && r.height >= 160;
+}
+
+/* =========================
+   ✅ 拡大時のブレ対策：ResizeObserverで最後に確定resize
+   ========================= */
+function ensureW1ResizeTracking_(mount) {
+  if (mount.__w1_ro) return;
+
+  const wrap = mount.__w1_chartWrap;
+  if (!wrap) return;
+
+  let raf = 0;
+  let t1 = 0;
+  let t2 = 0;
+
+  const kick = () => {
+    const ch = mount.__w1_chart;
+    if (!ch) return;
+
+    if (raf) cancelAnimationFrame(raf);
+    if (t1) clearTimeout(t1);
+    if (t2) clearTimeout(t2);
+
+    // transition中の連打を吸収して、最後に安定サイズで確定させる
+    raf = requestAnimationFrame(() => {
+      try { ch.resize(); } catch (_) {}
+      raf = 0;
+    });
+    t1 = setTimeout(() => { try { mount.__w1_chart?.resize(); } catch (_) {} }, 80);
+    t2 = setTimeout(() => { try { mount.__w1_chart?.resize(); } catch (_) {} }, 220);
+  };
+
+  const ro = new ResizeObserver(() => kick());
+  ro.observe(wrap);
+
+  const onWin = () => kick();
+  window.addEventListener("resize", onWin, { passive: true });
+
+  mount.__w1_ro = ro;
+  mount.__w1_onWin = onWin;
+  mount.__w1_kickResize = kick;
+
+  // 初回も1回
+  kick();
+}
+
+function disposeW1ResizeTracking_(mount) {
+  if (mount.__w1_ro) {
+    try { mount.__w1_ro.disconnect(); } catch (_) {}
+    mount.__w1_ro = null;
+  }
+  if (mount.__w1_onWin) {
+    window.removeEventListener("resize", mount.__w1_onWin);
+    mount.__w1_onWin = null;
+  }
+  mount.__w1_kickResize = null;
+}
+
+/* =========================
    色（カテゴリkeyから安定生成）
    ========================= */
 function hashHue_(str) {
@@ -255,22 +321,20 @@ function ensureDom_(mount, actions, mode) {
   const chartWrap = el("div", { class: "widget1ChartWrap" });
   const canvas = el("canvas", { class: "widget1Canvas" });
 
-  // =========================================================
-  // Phase2（中央の空白を埋める）：DOMを重ねるだけ（状態追加なし）
-  // =========================================================
+  // Phase2（中央の空白を埋める）
   const center = el("div", { class: "w1Center" }, [
     el("div", { class: "w1CenterLabel", text: "合計売上" }),
     el("div", { class: "w1CenterValue", text: "—" }),
   ]);
 
-  // ✅ tooltip box（ドーナツ領域内・下部固定）
+  // tooltip box（ドーナツ領域内・下部固定）
   const tip = el("div", { class: "w1Tip" });
 
   chartWrap.appendChild(canvas);
   chartWrap.appendChild(center);
   chartWrap.appendChild(tip);
 
-  const legendWrap = el("div", { class: "widget1ABC" }); // 既存CSS名を維持（中身は凡例として使う）
+  const legendWrap = el("div", { class: "widget1ABC" });
 
   body.appendChild(chartWrap);
   body.appendChild(legendWrap);
@@ -286,6 +350,9 @@ function ensureDom_(mount, actions, mode) {
   mount.__w1_select = select;
   mount.__w1_canvas = canvas;
   mount.__w1_legend = legendWrap;
+
+  // ✅ ぶれ対策：wrap参照を保持（ResizeObserverで使う）
+  mount.__w1_chartWrap = chartWrap;
 
   // Phase2 refs
   mount.__w1_center = center;
@@ -356,6 +423,12 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   const canvas = mount.__w1_canvas;
   if (!Chart || !canvas) return;
 
+  // ✅ サイズ未確定の瞬間に作ると拡大時に“ぶれる/潰れる”ので待つ
+  if (!mount.__w1_chart && !canvasReady_(canvas)) {
+    requestAnimationFrame(() => upsertChart_(mount, items, totalSales, totalBooths));
+    return;
+  }
+
   const labels = items.map((x) => x.label);
   const dataBooths = items.map((x) => (totalBooths ? x.booths / totalBooths : 0));
   const dataSales = items.map((x) => (totalSales ? x.sales / totalSales : 0));
@@ -366,6 +439,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
   // 既存が別canvasなら破棄
   if (mount.__w1_chart && mount.__w1_chart.canvas !== canvas) {
     try {
+      disposeW1ResizeTracking_(mount);
       mount.__w1_chart.destroy();
     } catch (_) {}
     mount.__w1_chart = null;
@@ -386,17 +460,15 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
       // ✅ 最新参照（“ステーション0化”対策）
       ch.$w1 = { items, totalSales, totalBooths, dataSales, dataBooths };
 
-      // tooltip（external）更新：Chart.js が afterEvent で external を呼ぶが、
-      // update("none") でも十分。念のため消しておく。
-      const tipEl = mount.__w1_tip;
-      if (tipEl && !tipEl.matches(":hover")) {
-        // 何もしない（hover判定は不要。外部tooltipは tooltip.opacity で制御）
-      }
-
       ch.update("none");
+
+      // ✅ 更新後も一応キック（拡大/縮小直後のズレ保険）
+      mount.__w1_kickResize?.();
+
       return;
     } catch (e) {
       try {
+        disposeW1ResizeTracking_(mount);
         ch.destroy();
       } catch (_) {}
       mount.__w1_chart = null;
@@ -438,7 +510,7 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
         plugins: {
           legend: { display: false },
           tooltip: {
-            enabled: false, // ✅ 標準tooltip無効（はみ出し禁止を確実に）
+            enabled: false,
             external: (context) => {
               const { chart, tooltip } = context;
               const tipEl = mount.__w1_tip;
@@ -484,6 +556,9 @@ function upsertChart_(mount, items, totalSales, totalBooths) {
 
     ch.$w1 = { items, totalSales, totalBooths, dataSales, dataBooths };
     mount.__w1_chart = ch;
+
+    // ✅ ぶれ対策：ここで追従を開始（拡大/縮小のtransitionに勝つ）
+    ensureW1ResizeTracking_(mount);
   } catch (e) {
     console.error("[W1] Chart create failed:", e);
   }
