@@ -1,10 +1,11 @@
 // src/ui/focusOverlay.js
-console.log("FOCUS_OVERLAY_BUILD 2026-01-31 r3");
+console.log("FOCUS_OVERLAY_BUILD 2026-02-15 r1");
 
 import { el, clear } from "../utils/dom.js";
 import { renderDonut } from "../charts/donut.js?v=20260131";
 import { GENRES } from "../constants.js";
-import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
+
+import { renderWidget1ShareDonutFocus } from "./widget1ShareDonut.js";
 import { renderWidget2CostHistFocus } from "./widget2CostHist.js";
 
 /**
@@ -19,11 +20,9 @@ function destroyChartsUnder_(rootEl) {
   const canvases = rootEl.querySelectorAll?.("canvas");
   if (!canvases || canvases.length === 0) return;
 
-  // v3/v4: Chart.getChart
   const getChart =
     typeof Chart.getChart === "function" ? (c) => Chart.getChart(c) : null;
 
-  // fallback: Chart.instances（配列/Map/オブジェクト）
   const listInstances = () => {
     const inst = Chart.instances;
     if (!inst) return [];
@@ -49,24 +48,21 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   const focus = state?.focus || { open: false };
   if (!overlayEl || !modalEl) return;
 
-  // close
+  // ===== close =====
   if (!focus.open) {
     overlayEl.classList.remove("open");
 
-    // ✅ DOMを消す前に Chart を必ず破棄する
     destroyChartsUnder_(modalEl);
-
     clear(modalEl);
-    document.body.style.overflow = "";
 
+    document.body.style.overflow = "";
     overlayEl.onclick = null;
     return;
   }
 
-  // open
+  // ===== open =====
   overlayEl.classList.add("open");
 
-  // open時に一旦掃除
   destroyChartsUnder_(modalEl);
   clear(modalEl);
 
@@ -76,6 +72,7 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
     if (e.target === overlayEl) actions.onCloseFocus?.();
   };
 
+  // 枠（共通ヘッダー）
   const header = el("div", { class: "focusHeader" }, [
     el("button", {
       class: "btn ghost",
@@ -94,21 +91,20 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   modalEl.appendChild(header);
   modalEl.appendChild(body);
 
-  // ✅ widget1 expanded（中身はwidget側）
+  // ===== kind → widget focus renderer =====
   if (focus.kind === "shareDonut") {
-    renderWidget1ShareDonut(body, state, actions, { mode: "expanded" });
+    renderWidget1ShareDonutFocus(body, state, actions);
     return;
   }
 
-  // ✅ donut expanded（このファイルが担当している既存領域：そのまま）
-  if (focus.kind === "salesDonut" || focus.kind === "machineDonut") {
-    renderDonutFocus_(body, state, focus, actions);
-    return;
-  }
-
-  // ✅ widget2 costHist expanded（中身はwidget2へ委譲）
   if (focus.kind === "costHist") {
     renderWidget2CostHistFocus(body, state, actions);
+    return;
+  }
+
+  // ===== existing donuts（これはウィジェットではないのでこのファイル管理でOK）=====
+  if (focus.kind === "salesDonut" || focus.kind === "machineDonut") {
+    renderDonutFocus_(body, state, focus, actions);
     return;
   }
 
