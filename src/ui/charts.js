@@ -1,226 +1,64 @@
 // src/ui/charts.js
+// ✅ ChartHost：チャートの器だけ（中身は一切知らない）
 
-let costHistChart = null;
-let salesCostScatter = null;
+const _charts = new Map(); // id -> Chart instance
 
-const COST_BINS = [
-  { label: "〜3%",   min: 0.00, max: 0.03 },
-  { label: "3–5%",  min: 0.03, max: 0.05 },
-  { label: "5–8%",  min: 0.05, max: 0.08 },
-  { label: "8–10%", min: 0.08, max: 0.10 },
-  { label: "10%〜", min: 0.10, max: Infinity },
-];
-
-function toNum(v) {
-  if (v == null) return null;
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string") {
-    const s = v.trim().replace(/,/g, "");
-    if (!s) return null;
-    if (s.endsWith("%")) {
-      const n = Number(s.slice(0, -1));
-      return Number.isFinite(n) ? n / 100 : null;
-    }
-    const n = Number(s);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
-function findCanvasAndMode() {
-  const costCanvas = document.getElementById("costHistChart");
-  const scatterCanvas = document.getElementById("salesCostScatter");
-  const modeSelect = document.getElementById("costHistMode");
-  return { costCanvas, scatterCanvas, modeSelect };
-}
-
-/**
- * 初回描画対策（重要）
- * - “高さがある” ことがまず必須
- * - 幅は DevTools ドック等で一瞬極細になり得るので緩める
- */
 function canvasReady(canvas) {
   if (!canvas) return false;
   const r = canvas.getBoundingClientRect();
-  // 高さ優先。幅は最低限だけ見る（狭くても初期化は許可）
   return r.height >= 120 && r.width >= 40;
 }
 
-function ensureCostHist(costCanvas) {
+/**
+ * renderChart(id, canvas, config, plugins?)
+ * - id単位でChartを管理
+ * - canvas差し替え（ドロワー切替等）を検知したら、そのidだけdestroyして作り直す
+ * - configはウィジェット側が生成（集計も含めてウィジェット側）
+ */
+export function renderChart(id, canvas, config, plugins = null) {
   const Chart = window.Chart;
   if (!Chart) return false;
-  if (!canvasReady(costCanvas)) return false;
+  if (!canvasReady(canvas)) return false;
 
-  const ctx = costCanvas.getContext?.("2d");
-  if (!ctx) return false;
-
-  if (!costHistChart) {
-    costHistChart = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: COST_BINS.map((b) => b.label),
-        datasets: [{ label: "台数", data: [0, 0, 0, 0, 0] }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false } },
-          y: { beginAtZero: true },
-        },
-      },
-    });
-
-    // 直後に幅が変わるケースがあるので1フレーム後に再計算
-    requestAnimationFrame(() => costHistChart?.resize());
+  const prev = _charts.get(id);
+  if (prev && prev.canvas !== canvas) {
+    try { prev.destroy(); } catch (e) {}
+    _charts.delete(id);
   }
 
+  const ctx = canvas.getContext?.("2d");
+  if (!ctx) return false;
+
+  if (!_charts.has(id)) {
+    const ch = new Chart(ctx, {
+      ...config,
+      ...(plugins ? { plugins } : {}),
+    });
+    _charts.set(id, ch);
+    requestAnimationFrame(() => ch?.resize());
+    return true;
+  }
+
+  // 既存更新：configを丸ごと差し替え（中身はウィジェットの責務）
+  const ch = _charts.get(id);
+
+  // typeが変わるような更新はdestroy→recreateが安全
+  if (config?.type && ch.config?.type && config.type !== ch.config.type) {
+    try { ch.destroy(); } catch (e) {}
+    _charts.delete(id);
+    return renderChart(id, canvas, config, plugins);
+  }
+
+  ch.config.data = config.data;
+  ch.config.options = config.options || ch.config.options;
+  ch.update();
   return true;
 }
 
-function ensureScatter(scatterCanvas) {
-  const Chart = window.Chart;
-  if (!Chart) return false;
-  if (!canvasReady(scatterCanvas)) return false;
-
-  const ctx = scatterCanvas.getContext?.("2d");
-  if (!ctx) return false;
-
-  if (!salesCostScatter) {
-    const quadLines = {
-      id: "quadLines",
-      afterDraw(chart) {
-        const { ctx, chartArea, scales } = chart;
-        if (!chartArea) return;
-
-        const x = scales.x.getPixelForValue(10000);
-        const y = scales.y.getPixelForValue(0.05);
-
-        ctx.save();
-        ctx.globalAlpha = 0.35;
-        ctx.lineWidth = 1;
-
-        ctx.beginPath();
-        ctx.moveTo(x, chartArea.top);
-        ctx.lineTo(x, chartArea.bottom);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(chartArea.left, y);
-        ctx.lineTo(chartArea.right, y);
-        ctx.stroke();
-
-        ctx.restore();
-      },
-    };
-
-    salesCostScatter = new Chart(ctx, {
-      type: "scatter",
-      data: { datasets: [{ label: "マシン", data: [] }] },
-      plugins: [quadLines],
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        parsing: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (c) => {
-                const p = c.raw;
-                const yen = new Intl.NumberFormat("ja-JP").format(Math.round(p.x));
-                const pct = (p.y * 100).toFixed(1);
-                const name = p._name ? ` ${p._name}` : "";
-                return `${yen}円 / ${pct}%${name}`;
-              },
-            },
-          },
-        },
-        scales: {
-          x: { title: { display: true, text: "売上（円）" }, beginAtZero: true },
-          y: {
-            title: { display: true, text: "原価率" },
-            beginAtZero: true,
-            suggestedMax: 0.2,
-            ticks: { callback: (v) => `${Math.round(v * 100)}%` },
-          },
-        },
-      },
-    });
-
-    requestAnimationFrame(() => salesCostScatter?.resize());
-  }
-
-  return true;
-}
-
-function computeCostHistogram(rows, mode) {
-  const arr = COST_BINS.map(() => 0);
-
-  for (const r of rows) {
-    const rate = toNum(r?.cost_rate ?? r?.原価率);
-    const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
-    if (rate == null) continue;
-
-    const idx = COST_BINS.findIndex((b) => rate >= b.min && rate < b.max);
-    if (idx < 0) continue;
-
-    arr[idx] += mode === "sales" ? sales : 1;
-  }
-  return arr;
-}
-
-function computeScatter(rows) {
-  const pts = [];
-  for (const r of rows) {
-    const x = toNum(r?.sales ?? r?.総売上);
-    const y = toNum(r?.cost_rate ?? r?.原価率);
-    if (x == null || y == null) continue;
-
-    pts.push({
-      x,
-      y,
-      _name: r?.machine_ref ?? r?.対応マシン名 ?? r?.booth_id ?? "",
-    });
-  }
-  return pts;
-}
-
-export function renderCharts(mounts, state) {
-  const { costCanvas, scatterCanvas, modeSelect } = findCanvasAndMode();
-
-  // ★片方だけでも初期化する（ここが前と違う）
-  const ok1 = ensureCostHist(costCanvas);
-  const ok2 = ensureScatter(scatterCanvas);
-
-  // まだどっちも作れないなら次フレームで再試行
-  if ((!costHistChart && !salesCostScatter) || (!ok1 && !ok2)) {
-    requestAnimationFrame(() => renderCharts(mounts, state));
-    return;
-  }
-
-  const rows = Array.isArray(state.filteredRows) ? state.filteredRows : [];
-  const mode = modeSelect?.value || "count";
-
-  // 原価率分布（ある時だけ更新）
-  if (costHistChart) {
-    const hist = computeCostHistogram(rows, mode);
-    costHistChart.data.datasets[0].data = hist;
-    costHistChart.data.datasets[0].label = mode === "sales" ? "売上" : "台数";
-    costHistChart.update();
-  }
-
-  // 散布（ある時だけ更新）
-  if (salesCostScatter) {
-    const pts = computeScatter(rows);
-    salesCostScatter.data.datasets[0].data = pts;
-    salesCostScatter.update();
-  }
-
-  // mode変更時にも即反映（イベントは1回だけ）
-  if (modeSelect && !modeSelect.__bound) {
-    modeSelect.addEventListener("change", () => renderCharts(mounts, state));
-    modeSelect.__bound = true;
+export function destroyChart(id) {
+  const ch = _charts.get(id);
+  if (ch) {
+    try { ch.destroy(); } catch (e) {}
+    _charts.delete(id);
   }
 }
