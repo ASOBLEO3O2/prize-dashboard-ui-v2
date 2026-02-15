@@ -2,97 +2,75 @@
 import { el, clear } from "../utils/dom.js";
 
 /**
- * midスロットの「構造」を1回だけ作る（再生成しない）
- * ただし、slotKey（=割当type）が変わったら「器」ごと作り直す。
- * - slotMount.__midSlotKey に現在のキー
- * - slotMount.__midSlot に { card, header, body, noHeader }
- * - 同一slotKeyの間は body の中身だけを renderBody で更新する
- *
- * 目的：
- * - Chart.js の「初回サイズ崩れ」を避けるため、同一typeのときは canvas を生かす
- * - ただし type が変わったときはヘッダー/ツール構成も変わるので器を作り直す
+ * renderMidSlot
+ * - mount(セル) の中に「カード構造」を構築して保持
+ * - ただし slotKey が変わったら、構造ごと作り直す（←これが重要）
+ * - 同じ slotKey なら body のみ更新
  */
-export function renderMidSlot(slotMount, {
-  slotKey = "",          // ✅ 追加：このスロットに割り当てられている type（widget1 / widget2 / scatter / dummyA...）
-  title = "",
-  tools = null,
-  onFocus = null,
-  noHeader = false,      // widget1用：外側ヘッダー不要（内部で持っているため）
-  renderBody,            // (bodyEl) => void
-}) {
-  if (!slotMount) return;
+export function renderMidSlot(mount, opts) {
+  const o = opts || {};
+  const slotKey = String(o.slotKey || "_").trim() || "_";
 
-  const key = String(slotKey || "").trim() || "_";
+  // ===== slotKey が変わったら作り直す =====
+  const prevKey = mount.__midSlotKey;
+  const needRebuild = !mount.__midSlot || prevKey !== slotKey;
 
-  // typeが変わったら必ず作り直す（残骸/ヘッダー不整合防止）
-  if (slotMount.__midSlotKey !== key) {
-    clear(slotMount);
-    delete slotMount.__midSlot;
-    slotMount.__midSlotKey = key;
-  }
+  if (needRebuild) {
+    clear(mount);
 
-  // 1回だけ構造を作る
-  if (!slotMount.__midSlot) {
-    const card = el("div", { class: "card midPanel" });
+    // card
+    const card = el("div", { class: "slotCard" });
 
-    let header = null;
-    if (!noHeader && (title || tools || onFocus)) {
-      const headerRight = el("div", {
-        style: "display:flex; align-items:center; gap:10px;",
-      });
+    // header
+    const header = el("div", { class: "slotHeader" });
 
-      if (tools) headerRight.appendChild(tools);
+    const title = el("div", { class: "slotTitle", text: o.title || "" });
+    const tools = el("div", { class: "slotTools" });
 
-      if (onFocus) {
-        headerRight.appendChild(
-          el("button", {
-            class: "btn ghost midPanelBtn",
-            text: "拡大",
-            onClick: (e) => {
-              e.preventDefault();
-              onFocus();
-            },
-          })
-        );
-      }
+    // focus button（必要なら）
+    const focusBtn = el("button", {
+      class: "btn icon ghost slotFocusBtn",
+      text: "拡大",
+      onClick: () => o.onFocus?.(),
+    });
 
-      header = el("div", { class: "midPanelHeader" }, [
-        el("div", { class: "midPanelTitleWrap" }, [
-          el("div", { class: "midPanelTitle", text: title }),
-          el("div", { class: "midPanelSub", text: "" }),
-        ]),
-        headerRight,
-      ]);
-
-      card.appendChild(header);
+    // noHeader の場合は header を作らない（widget1用）
+    if (!o.noHeader) {
+      header.append(title, tools, focusBtn);
+      card.append(header);
+    } else {
+      // noHeaderでも tools を入れたいケースがあるならここで調整可能
+      // 現状は widget1 の方針どおり header 自体なし
     }
 
-    const body = el("div", { class: "midPanelBody" });
-    card.appendChild(body);
+    // body
+    const body = el("div", { class: "slotBody" });
+    card.append(body);
 
-    // bodyクリックでも拡大（select操作などを邪魔しない）
-    if (onFocus) {
-      body.addEventListener("click", (e) => {
-        const tag = (e.target?.tagName || "").toLowerCase();
-        if (tag === "select" || tag === "option" || tag === "button") return;
-        onFocus();
-      });
-    }
+    mount.append(card);
 
-    slotMount.appendChild(card);
-    slotMount.__midSlot = { card, header, body, noHeader };
+    mount.__midSlot = { card, header, title, tools, body };
+    mount.__midSlotKey = slotKey;
   }
 
-  // 2回目以降：ヘッダー文字だけ更新（同一slotKey内）
-  const api = slotMount.__midSlot;
+  // ===== ここから「更新」 =====
+  const { title, tools, body } = mount.__midSlot;
 
-  if (!api.noHeader && api.header) {
-    const titleEl = api.header.querySelector(".midPanelTitle");
-    if (titleEl) titleEl.textContent = title || "";
+  // タイトル（headerありの時だけ）
+  if (!o.noHeader) {
+    if (title) title.textContent = o.title || "";
   }
 
-  // 中身だけ描画（中身側が clear(body) してOK）
-  if (typeof renderBody === "function") {
-    renderBody(api.body);
+  // tools（毎回差し替え）
+  if (tools) {
+    clear(tools);
+    if (o.tools) tools.appendChild(o.tools);
+  }
+
+  // body（毎回再描画）
+  if (typeof o.renderBody === "function") {
+    o.renderBody(body);
+  } else {
+    clear(body);
   }
 }
