@@ -55,12 +55,15 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
+
+  /* ✅ 拡大/縮小のぶれ軽減（効く環境では効く） */
+  contain: layout paint size;
 }
 
-/* canvas は常に領域いっぱい */
+/* canvas は常に領域いっぱい（!important は外す） */
 .widget1Canvas{
-  width: 100% !important;
-  height: 100% !important;
+  width: 100%;
+  height: 100%;
   display: block;
   max-height: none;
 }
@@ -135,7 +138,10 @@
   }
 }
 
-/* tooltip（ドーナツ領域内・下部固定） */
+/* =========================
+   Tooltip（ドーナツ領域内・下部固定）
+   ========================= */
+
 .w1Tip{
   position:absolute;
   left:10px;
@@ -150,7 +156,7 @@
   line-height:1.25;
   opacity:0;
   transform: translateY(6px);
-  pointer-events:none; /* hoverの邪魔をしない */
+  pointer-events:none;
   transition: opacity .12s ease, transform .12s ease;
 }
 
