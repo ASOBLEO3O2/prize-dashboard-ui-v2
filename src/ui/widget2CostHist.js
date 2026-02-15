@@ -132,13 +132,16 @@ function pickPrizeName_(r) {
   return "";
 }
 
+/**
+ * ✅ 修正：ブースIDは「ブースID系だけ」に限定
+ * - ここで machine_ref などに逃がすと、machine行と重複して2行になる
+ */
 function pickBoothId_(r) {
   return (
     r?.booth_id ??
     r?.["ブースID"] ??
     r?.boothId ??
-    r?.machine_key ??
-    r?.machine_ref ??
+    r?.["boothId"] ??
     ""
   );
 }
@@ -278,8 +281,14 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
 
   // ✅ 右は必ずスクロール領域
   list.style.overflow = "auto";
+  list.style.flex = "1";
+  list.style.minHeight = "0";
 
-  // ✅ 常に左右2カラム固定（縦長でもカードが見える）
+  /**
+   * ✅ 修正：高さcalcをやめる（環境差で崩れる）
+   * - focusBody が高さ管理している前提で「100%フィット」にする
+   * - 左右は常に2カラム固定
+   */
   const grid = el(
     "div",
     {
@@ -290,15 +299,13 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
         "gap:14px",
         "align-items:stretch",
         "min-width:0",
-        // オーバーレイのヘッダー/余白ぶんを引いて、左右同じ高さにする
-        "height:calc(100vh - 220px)",
+        "height:100%",
         "min-height:420px",
       ].join(";"),
     },
     [
       el("div", { style: "min-width:0; min-height:0; display:flex;" }, [
         (() => {
-          // 左：グリッド高さに追従させる（固定pxを捨てる）
           chartWrap.style.height = "100%";
           chartWrap.style.minHeight = "0";
           chartWrap.style.overflow = "hidden";
@@ -308,15 +315,7 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
       el(
         "div",
         { style: "min-width:0; min-height:0; display:flex; flex-direction:column; gap:10px;" },
-        [
-          listTitle,
-          (() => {
-            // 右：リストを残り高さにフィット＋スクロール
-            list.style.flex = "1";
-            list.style.minHeight = "0";
-            return list;
-          })(),
-        ]
+        [listTitle, list]
       ),
     ]
   );
@@ -342,13 +341,11 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
       if (key === "rate") {
         const ra = toNum(a?.cost_rate ?? a?.原価率);
         const rb = toNum(b?.cost_rate ?? b?.原価率);
-        // null は末尾へ寄せる
         const na = ra == null ? (dir === "asc" ? Infinity : -Infinity) : ra;
         const nb = rb == null ? (dir === "asc" ? Infinity : -Infinity) : rb;
         return (na - nb) * sign;
       }
 
-      // sales
       const sa = toNum(a?.sales ?? a?.総売上);
       const sb = toNum(b?.sales ?? b?.総売上);
       const na = sa == null ? (dir === "asc" ? Infinity : -Infinity) : sa;
@@ -376,13 +373,16 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
       return;
     }
 
-    const MAX = 120; // ちょい多め（重いなら下げる）
+    const MAX = 120;
     const shown = picked.slice(0, MAX);
 
     shown.forEach((r) => {
       const prize = pickPrizeName_(r) || "（景品名なし）";
       const booth = pickBoothId_(r) || "（ブースIDなし）";
-      const machine = pickMachineName_(r) || "";
+      const machineRaw = pickMachineName_(r) || "";
+      // ✅ 修正：同じなら2行目を出さない
+      const machine = machineRaw && machineRaw !== booth ? machineRaw : "";
+
       const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
       const rate = toNum(r?.cost_rate ?? r?.原価率);
 
@@ -415,7 +415,6 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
     const mode = modeSel.value || "count";
     const hist = computeHistogram_(rows, mode);
 
-    // 既存破棄
     if (focusCostHistChart && typeof focusCostHistChart.destroy === "function") {
       try {
         focusCostHistChart.destroy();
@@ -452,13 +451,11 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
       },
     });
 
-    // 初期状態
     listTitle.textContent = "選択中：—";
     clear(list);
     list.appendChild(el("div", { class: "focusHint", text: "棒をクリックすると一覧が出ます" }));
     lastBinIndex = null;
 
-    // レイアウト確定後に resize
     requestAnimationFrame(() => focusCostHistChart?.resize?.());
   }
 
