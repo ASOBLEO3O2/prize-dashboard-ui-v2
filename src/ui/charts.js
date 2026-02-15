@@ -1,12 +1,19 @@
 // src/ui/charts.js
-import { W2_COST_BINS } from "./widget2CostHist.js";
 
 let costHistChart = null;
 let salesCostScatter = null;
 
-// 初期化リトライ管理（無限ループ防止）
-let __w2_initTries = 0;
-let __w2_initTimer = null;
+let __roCost = null;
+let __roScatter = null;
+
+// ✅ ウィジェット②と同じ “自然区切り”
+const COST_BINS = [
+  { label: "0–10%",  min: 0.0,  max: 0.10, incMin: true,  incMax: true },
+  { label: "11–25%", min: 0.10, max: 0.25, incMin: false, incMax: true },
+  { label: "26–32%", min: 0.25, max: 0.32, incMin: false, incMax: true },
+  { label: "33–40%", min: 0.32, max: 0.40, incMin: false, incMax: false },
+  { label: "40%〜",   min: 0.40, max: Infinity, incMin: true,  incMax: true },
+];
 
 function toNum(v) {
   if (v == null) return null;
@@ -41,26 +48,31 @@ function findCanvasAndMode() {
   return { costCanvas, scatterCanvas, modeSelect };
 }
 
-/**
- * 初回描画の “0px” 問題対策
- * - 2×2の器直後は height が 0 になりがち
- * - なので閾値を緩め、なおダメならリトライで救う
- */
-function canvasReady(canvas) {
-  if (!canvas) return false;
-  const r = canvas.getBoundingClientRect();
-  // 高さは最優先。0→数px→最終サイズの遷移が起きるので緩める
-  return r.height >= 20 && r.width >= 20;
+function attachResizeObserver_(canvas, chart, kind) {
+  const host = canvas?.parentElement;
+  if (!host || !window.ResizeObserver) return;
+
+  const ro = new ResizeObserver(() => {
+    try {
+      chart?.resize?.();
+      chart?.update?.("none");
+    } catch (e) {}
+  });
+
+  ro.observe(host);
+
+  if (kind === "cost") {
+    if (__roCost) try { __roCost.disconnect(); } catch (e) {}
+    __roCost = ro;
+  } else {
+    if (__roScatter) try { __roScatter.disconnect(); } catch (e) {}
+    __roScatter = ro;
+  }
 }
 
 function ensureCostHist(costCanvas) {
   const Chart = window.Chart;
-  if (!Chart) return false;
-  if (!costCanvas) return false;
-
-  // canvasが0pxでも “作れるなら作る” 方針に寄せる
-  // ただし完全に0のときは ctx が取れても描画が崩れるので避ける
-  if (!canvasReady(costCanvas)) return false;
+  if (!Chart || !costCanvas) return false;
 
   const ctx = costCanvas.getContext?.("2d");
   if (!ctx) return false;
@@ -69,8 +81,8 @@ function ensureCostHist(costCanvas) {
     costHistChart = new Chart(ctx, {
       type: "bar",
       data: {
-        labels: W2_COST_BINS.map((b) => b.label),
-        datasets: [{ label: "台数", data: W2_COST_BINS.map(() => 0) }],
+        labels: COST_BINS.map((b) => b.label),
+        datasets: [{ label: "台数", data: COST_BINS.map(() => 0) }],
       },
       options: {
         responsive: true,
@@ -83,7 +95,10 @@ function ensureCostHist(costCanvas) {
       },
     });
 
-    // レイアウト確定後に追従
+    // ✅ 初回0pxでも作る → サイズ確定後に追従
+    attachResizeObserver_(costCanvas, costHistChart, "cost");
+
+    // 念のため次フレームでも1回だけ追い打ち
     requestAnimationFrame(() => {
       try {
         costHistChart?.resize?.();
@@ -97,9 +112,7 @@ function ensureCostHist(costCanvas) {
 
 function ensureScatter(scatterCanvas) {
   const Chart = window.Chart;
-  if (!Chart) return false;
-  if (!scatterCanvas) return false;
-  if (!canvasReady(scatterCanvas)) return false;
+  if (!Chart || !scatterCanvas) return false;
 
   const ctx = scatterCanvas.getContext?.("2d");
   if (!ctx) return false;
@@ -166,6 +179,8 @@ function ensureScatter(scatterCanvas) {
       },
     });
 
+    attachResizeObserver_(scatterCanvas, salesCostScatter, "scatter");
+
     requestAnimationFrame(() => {
       try {
         salesCostScatter?.resize?.();
@@ -178,14 +193,14 @@ function ensureScatter(scatterCanvas) {
 }
 
 function computeCostHistogram(rows, mode) {
-  const arr = W2_COST_BINS.map(() => 0);
+  const arr = COST_BINS.map(() => 0);
 
   for (const r of rows) {
     const rate = toNum(r?.cost_rate ?? r?.原価率);
     const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
     if (rate == null) continue;
 
-    const idx = W2_COST_BINS.findIndex((b) => inBin_(rate, b));
+    const idx = COST_BINS.findIndex((b) => inBin_(rate, b));
     if (idx < 0) continue;
 
     arr[idx] += mode === "sales" ? sales : 1;
@@ -209,59 +224,29 @@ function computeScatter(rows) {
   return pts;
 }
 
-function scheduleRetry_(mounts, state) {
-  // すでにchartが作れてるなら不要
-  if (costHistChart) return;
-
-  // 15回くらいまで（約0.5〜1秒程度の範囲で十分）
-  if (__w2_initTries >= 15) return;
-  __w2_initTries++;
-
-  // RAFだけだとレイアウト確定に負ける環境があるのでsetTimeoutも併用
-  if (__w2_initTimer) clearTimeout(__w2_initTimer);
-  __w2_initTimer = setTimeout(() => {
-    requestAnimationFrame(() => renderCharts(mounts, state));
-  }, 60);
-}
-
 export function renderCharts(mounts, state) {
   const { costCanvas, scatterCanvas, modeSelect } = findCanvasAndMode();
 
-  const ok1 = ensureCostHist(costCanvas);
-  const ok2 = ensureScatter(scatterCanvas);
-
-  // costHist が作れないなら、初期描画救済リトライ
-  if (!ok1 && !costHistChart) {
-    scheduleRetry_(mounts, state);
-  } else {
-    // 作れたらリトライ状態は解除
-    __w2_initTries = 0;
-    if (__w2_initTimer) {
-      clearTimeout(__w2_initTimer);
-      __w2_initTimer = null;
-    }
-  }
+  ensureCostHist(costCanvas);
+  ensureScatter(scatterCanvas);
 
   const rows = Array.isArray(state.filteredRows) ? state.filteredRows : [];
   const mode = modeSelect?.value || "count";
 
-  // costHist update
   if (costHistChart) {
     const hist = computeCostHistogram(rows, mode);
-    costHistChart.data.labels = W2_COST_BINS.map((b) => b.label);
+    costHistChart.data.labels = COST_BINS.map((b) => b.label);
     costHistChart.data.datasets[0].data = hist;
     costHistChart.data.datasets[0].label = mode === "sales" ? "売上" : "台数";
     costHistChart.update();
   }
 
-  // scatter update
   if (salesCostScatter) {
     const pts = computeScatter(rows);
     salesCostScatter.data.datasets[0].data = pts;
     salesCostScatter.update();
   }
 
-  // mode変更時にも即反映（イベントは1回だけ）
   if (modeSelect && !modeSelect.__bound) {
     modeSelect.addEventListener("change", () => renderCharts(mounts, state));
     modeSelect.__bound = true;
