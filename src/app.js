@@ -21,8 +21,6 @@ import { renderFocusOverlay } from "./ui/focusOverlay.js";
 const DEFAULT_MID_SLOTS = ["widget1", "widget2", "dummyA", "dummyB"];
 
 const initialState = {
-  __rev: 0, // ✅ 強制再描画用（必ず増やす）
-
   updatedDate: MOCK.updatedDate,
   topKpi: structuredClone(MOCK.topKpi),
   byGenre: structuredClone(MOCK.byGenre),
@@ -80,9 +78,10 @@ const actions = {
     store.set((s) => ({ ...s, midDetail: payloadOrNull }));
   },
 
-  // ✅ ここを変更：必ず rev を増やして再描画を発火
   requestRender: () => {
-    store.set((s) => ({ ...s, __rev: (s.__rev || 0) + 1 }));
+    // store実装次第で「同値更新」がまとめられることがあるため
+    // 明示的に1回叩けるよう残す（subscribeに任せるのが基本）
+    store.set((s) => ({ ...s }));
   },
 
   onToggleDetail: (genre) => {
@@ -107,7 +106,6 @@ const actions = {
     }));
   },
 
-  // ✅ ドロワー操作は必ず requestRender も呼ぶ（即プレビュー/確定反映）
   onOpenDrawer: () => {
     store.set((s) => ({ ...s, drawerOpen: true }));
     actions.requestRender();
@@ -135,15 +133,15 @@ const actions = {
     actions.requestRender();
   },
 
-  // ✅ 決定＝確定＋閉じる（RAFは不要）
+  // ✅ 決定＝確定＋閉じる（zip版のRAFは外して確実に反映）
   onApplyMidSlots: () => {
     store.set((s) => {
       const fixed = [...s.midSlotsDraft];
       return {
         ...s,
         midSlots: fixed,
-        midSlotsDraft: fixed, // 任意：ズレ防止（おすすめ）
-        drawerOpen: false,    // ★重要
+        midSlotsDraft: fixed,
+        drawerOpen: false,
       };
     });
     actions.requestRender();
