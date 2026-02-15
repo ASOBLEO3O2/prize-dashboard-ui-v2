@@ -1,4 +1,7 @@
 // src/ui/widget1ShareDonut.js
+console.log("[W1] LOADED 2026-02-15 a");
+
+
 import { el, clear } from "../utils/dom.js";
 
 /**
