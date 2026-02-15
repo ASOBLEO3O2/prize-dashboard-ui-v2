@@ -1,0 +1,192 @@
+/* css/31_widget2.css
+ * Widget② 専用（w2- prefix）
+ * 既存の focusOverlay / widget1 と衝突しない設計
+ */
+
+/* ---- 中段カード内 ---- */
+.w2-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.w2-title {
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+.w2-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.w2-hist {
+  padding: 10px 12px 12px;
+}
+
+.w2-histWrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 160px;
+  width: 100%;
+}
+
+.w2-histCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.w2-bar {
+  width: 100%;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform .12s ease, filter .12s ease, opacity .12s ease;
+  opacity: .92;
+}
+
+.w2-bar:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.05);
+  opacity: 1;
+}
+
+.w2-histLabel {
+  font-size: 12px;
+  opacity: .85;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.w2-expandRow {
+  padding: 0 12px 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.w2-expandBtn {
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
+/* ---- 拡大オーバーレイ ---- */
+.w2-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999; /* focusOverlayより上に */
+  background: rgba(0, 0, 0, .72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.w2-modal {
+  width: min(1100px, 92vw);
+  height: min(720px, 88vh);
+  background: rgba(18, 26, 34, .96);
+  border: 1px solid rgba(148, 163, 184, .25);
+  border-radius: 18px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .55);
+  overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.w2-modalTop {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, .18);
+}
+
+.w2-modalTitle {
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+
+.w2-close {
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
+.w2-modalBody {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.w2-expandChart {
+  padding: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+}
+
+.w2-expandChart .w2-histWrap {
+  height: 200px;
+  gap: 12px;
+}
+
+.w2-histCol.is-active .w2-bar {
+  filter: brightness(1.1);
+  outline: 2px solid rgba(255, 255, 255, .35);
+  opacity: 1;
+}
+
+.w2-cards {
+  padding: 12px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* カードは“縦並び”でも“2列”でも崩れない */
+.w2-cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 820px) {
+  .w2-cardsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.w2-itemCard {
+  background: rgba(2, 6, 23, .55);
+  border: 1px solid rgba(148, 163, 184, .16);
+  border-radius: 14px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.25);
+}
+
+.w2-itemTitle {
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+
+.w2-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  opacity: .95;
+}
+
+.w2-empty {
+  padding: 22px 10px;
+  text-align: center;
+  opacity: .8;
+  border: 1px dashed rgba(148, 163, 184, .22);
+  border-radius: 14px;
+}
