@@ -15,7 +15,7 @@ import {
  *
  * 重要（今日の方針）：
  * - slotの「器」は renderMidSlot が一元管理
- * - widget2 も renderMidSlot 経由に統一（①が消える/器崩れの元を断つ）
+ * - widget2 も renderMidSlot 経由に統一
  */
 export function renderMidKpi(mounts, state, actions) {
   const slotMounts = [
@@ -50,7 +50,7 @@ export function renderMidKpi(mounts, state, actions) {
       continue;
     }
 
-    // ===== widget2（★器はrenderMidSlotで統一） =====
+    // ===== widget2（器はrenderMidSlotで統一） =====
     if (type === "widget2") {
       renderMidSlot(mount, {
         slotKey: "widget2",
@@ -58,7 +58,8 @@ export function renderMidKpi(mounts, state, actions) {
         tools: buildWidget2CostHistTools(actions),
         onFocus: () => actions?.onOpenFocus?.("costHist"),
         renderBody: (body) => {
-          renderWidget2CostHist(body, actions);
+          // ✅ state を渡す（中身はwidget2に閉じる）
+          renderWidget2CostHist(body, state, actions);
         },
       });
       continue;
