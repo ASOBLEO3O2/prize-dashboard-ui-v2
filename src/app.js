@@ -21,6 +21,8 @@ import { renderFocusOverlay } from "./ui/focusOverlay.js";
 const DEFAULT_MID_SLOTS = ["widget1", "widget2", "dummyA", "dummyB"];
 
 const initialState = {
+  __rev: 0, // ✅ 強制再描画用（必ず増やす）
+
   updatedDate: MOCK.updatedDate,
   topKpi: structuredClone(MOCK.topKpi),
   byGenre: structuredClone(MOCK.byGenre),
@@ -78,8 +80,9 @@ const actions = {
     store.set((s) => ({ ...s, midDetail: payloadOrNull }));
   },
 
+  // ✅ ここを変更：必ず rev を増やして再描画を発火
   requestRender: () => {
-    store.set((s) => ({ ...s }));
+    store.set((s) => ({ ...s, __rev: (s.__rev || 0) + 1 }));
   },
 
   onToggleDetail: (genre) => {
@@ -104,9 +107,16 @@ const actions = {
     }));
   },
 
-  onOpenDrawer: () => store.set((s) => ({ ...s, drawerOpen: true })),
+  // ✅ ドロワー操作は必ず requestRender も呼ぶ（即プレビュー/確定反映）
+  onOpenDrawer: () => {
+    store.set((s) => ({ ...s, drawerOpen: true }));
+    actions.requestRender();
+  },
 
-  onCloseDrawer: () => store.set((s) => ({ ...s, drawerOpen: false })),
+  onCloseDrawer: () => {
+    store.set((s) => ({ ...s, drawerOpen: false }));
+    actions.requestRender();
+  },
 
   onSetMidSlotDraft: (index, value) => {
     store.set((s) => {
@@ -114,6 +124,7 @@ const actions = {
       next[index] = String(value || "").trim();
       return { ...s, midSlotsDraft: next };
     });
+    actions.requestRender(); // ★即プレビューを確実に
   },
 
   onCancelMidSlots: () => {
@@ -121,9 +132,10 @@ const actions = {
       ...s,
       midSlotsDraft: [...s.midSlots],
     }));
+    actions.requestRender();
   },
 
-  // ✅ ここを修正：決定＝確定＋閉じる
+  // ✅ 決定＝確定＋閉じる（RAFは不要）
   onApplyMidSlots: () => {
     store.set((s) => {
       const fixed = [...s.midSlotsDraft];
@@ -131,15 +143,10 @@ const actions = {
         ...s,
         midSlots: fixed,
         midSlotsDraft: fixed, // 任意：ズレ防止（おすすめ）
-        drawerOpen: false,    // ★これが重要
+        drawerOpen: false,    // ★重要
       };
     });
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        actions.requestRender?.();
-      });
-    });
+    actions.requestRender();
   },
 
   onOpenFocus: (kind) => {
