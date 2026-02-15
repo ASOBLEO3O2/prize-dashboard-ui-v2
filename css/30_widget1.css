@@ -134,3 +134,30 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* tooltip（ドーナツ領域内・下部固定） */
+.w1Tip{
+  position:absolute;
+  left:10px;
+  right:10px;
+  bottom:10px;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:rgba(15,21,29,.85);
+  backdrop-filter: blur(6px);
+  font-size:12px;
+  line-height:1.25;
+  opacity:0;
+  transform: translateY(6px);
+  pointer-events:none; /* hoverの邪魔をしない */
+  transition: opacity .12s ease, transform .12s ease;
+}
+
+.w1Tip.show{
+  opacity:1;
+  transform:none;
+}
+
+.w1TipTitle{ font-weight:900; margin-bottom:4px; }
+.w1TipLine{ opacity:.85; }
