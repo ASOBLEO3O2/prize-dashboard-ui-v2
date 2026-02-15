@@ -3,19 +3,16 @@ import { el, clear } from "../utils/dom.js";
 import { renderMidSlot } from "./renderMidSlot.js";
 
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
-import {
-  renderWidget2CostHist,
-  buildWidget2CostHistTools,
-} from "./widget2CostHist.js";
+import { renderWidget2CostHist, buildWidget2CostHistTools } from "./widget2CostHist.js";
 
 /**
  * 中段：2×2（スロット切替対応）
  * - drawerOpen中：midSlotsDraft を即プレビュー
  * - drawerOpen閉：midSlots（確定）を表示
  *
- * 重要（今日の方針）：
+ * 重要（方針A）：
  * - slotの「器」は renderMidSlot が一元管理
- * - widget2 も renderMidSlot 経由に統一
+ * - 各ウィジェットは “自分の中身” を自分で描く（app.js/charts.js から干渉しない）
  */
 export function renderMidKpi(mounts, state, actions) {
   const slotMounts = [
@@ -58,7 +55,7 @@ export function renderMidKpi(mounts, state, actions) {
         tools: buildWidget2CostHistTools(actions),
         onFocus: () => actions?.onOpenFocus?.("costHist"),
         renderBody: (body) => {
-          // ✅ state を渡す（中身はwidget2に閉じる）
+          // ✅ 初期描画なし対策のため state を渡す（widget2内でChart生成/更新）
           renderWidget2CostHist(body, state, actions);
         },
       });
@@ -75,10 +72,7 @@ export function renderMidKpi(mounts, state, actions) {
       renderBody: (body) => {
         clear(body);
         body.appendChild(
-          el("div", {
-            class: "frameOnlyHint",
-            text: `type: ${type}`,
-          })
+          el("div", { class: "frameOnlyHint", text: `type: ${type}` })
         );
       },
     });
