@@ -6,9 +6,17 @@ import { renderChart } from "./charts.js";
  * Widget②：原価率 分布（ヒスト）
  * ✅ 中身（仕様・集計・ビン）はここに閉じる
  * ✅ charts.js は「描画ホスト」なので中身に干渉しない
+ *
+ * 注意：
+ * - 拡大前と拡大後で DOM id が衝突しないように、id/key を外から渡せる
  */
 
-const W2_ID = "w2-costHist";
+const DEFAULTS = {
+  chartKey: "w2-costHist",        // ChartHost上のID
+  canvasId: "costHistChart",      // canvasのDOM id（必須ではないがCSS等に残ってる場合のため）
+  modeSelectId: "costHistMode",   // selectのDOM id（既存互換）
+  title: null,                    // ここでは使わないが将来用
+};
 
 // あなたの自然レンジ
 const COST_BINS = [
@@ -46,8 +54,11 @@ function toNum(v) {
   return null;
 }
 
-export function buildWidget2CostHistTools(actions) {
-  const sel = el("select", { class: "select", id: "costHistMode" }, [
+// tools（mode select）も id を外から渡せる
+export function buildWidget2CostHistTools(actions, opts = {}) {
+  const o = { ...DEFAULTS, ...opts };
+
+  const sel = el("select", { class: "select", id: o.modeSelectId }, [
     el("option", { value: "count", text: "台数" }),
     el("option", { value: "sales", text: "売上" }),
   ]);
@@ -101,19 +112,20 @@ function buildConfig(hist, mode) {
 }
 
 /**
- * renderWidget2CostHist(body, state, actions)
- * - ✅ state を受け取り、集計→config生成→renderChart に渡す
- * - ✅ canvasが無ければ作る（slot切替耐性）
+ * renderWidget2CostHist(body, state, actions, opts?)
+ * - optsで拡大前/拡大後のid衝突を回避
  */
-export function renderWidget2CostHist(body, state, actions) {
+export function renderWidget2CostHist(body, state, actions, opts = {}) {
   if (!body) return;
 
-  // canvas存在を正とする（__w2_builtに依存しない）
-  let canvas = body.querySelector("#costHistChart");
+  const o = { ...DEFAULTS, ...opts };
+
+  // canvas存在を正とする（__builtに依存しない）
+  let canvas = body.querySelector("canvas");
   if (!canvas) {
     clear(body);
     body.classList.add("chartBody");
-    canvas = el("canvas", { id: "costHistChart" });
+    canvas = el("canvas", { id: o.canvasId });
     body.appendChild(canvas);
 
     // bodyクリックで拡大（select等は除外）
@@ -122,9 +134,12 @@ export function renderWidget2CostHist(body, state, actions) {
       if (tag === "select" || tag === "option" || tag === "button") return;
       actions?.onOpenFocus?.("costHist");
     });
+  } else {
+    // idが違う呼び出しに切り替わった場合の保険
+    if (o.canvasId && canvas.id !== o.canvasId) canvas.id = o.canvasId;
   }
 
-  const modeSelect = document.getElementById("costHistMode");
+  const modeSelect = document.getElementById(o.modeSelectId);
   const mode = modeSelect?.value || "count";
   const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
 
@@ -132,5 +147,5 @@ export function renderWidget2CostHist(body, state, actions) {
   const config = buildConfig(hist, mode);
 
   // ✅ charts.js は中身を知らず、id+canvas+configで描くだけ
-  renderChart(W2_ID, canvas, config);
+  renderChart(o.chartKey, canvas, config);
 }
