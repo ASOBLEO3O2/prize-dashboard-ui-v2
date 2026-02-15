@@ -3,14 +3,8 @@ import { el, clear } from "../utils/dom.js";
 
 /**
  * Widget②：原価率 分布（ヒスト）
- *
- * 方針A（責務分離）：
- * - 拡大前（mid）：このファイルが「器」+「Chart生成/更新」まで担当（＝初期描画が出る）
- *   └ app.js / charts.js から呼ばない（枠に干渉させない）
- *
- * - 拡大後（focus）：このファイルが「Chart生成 + 棒クリックでカード表示」まで担当
- *   └ カード並び替え（ブースID自然順 / 売上 / 原価率）もここで完結
- *   └ レイアウトは常に左右2カラム固定（縦長でもカードが見える）
+ * - mid：Chart生成/更新
+ * - focus：Chart + 棒クリックでカード表示 + 並び替え
  */
 
 // ===== bins（あなたの自然区切り）=====
@@ -60,7 +54,6 @@ function inBin_(rate01, b) {
 
 function computeHistogram_(rows, mode) {
   const arr = W2_COST_BINS.map(() => 0);
-
   for (const r of rows) {
     const rate = toNum(r?.cost_rate ?? r?.原価率);
     const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
@@ -103,7 +96,6 @@ function pickPrizeName_(r) {
   const s1 = String(direct || "").trim();
   if (s1) return s1;
 
-  // 取りこぼし救済（キー揺れ）
   const norm = (k) =>
     String(k || "")
       .trim()
@@ -145,7 +137,7 @@ function pickMachineName_(r) {
 const BOOTH_COLLATOR = new Intl.Collator("ja-JP", { numeric: true, sensitivity: "base" });
 
 /* =============================================================================
- * mid（拡大前）：tools + canvas + Chart生成/更新（← 初期描画なし対策の本丸）
+ * mid（拡大前）：tools + canvas + Chart生成/更新
  * ============================================================================= */
 
 let midCostHistChart = null;
@@ -155,7 +147,6 @@ function canvasReady_(cv) {
   if (!cv) return false;
   const r = cv.getBoundingClientRect?.();
   if (!r) return false;
-  // 高さが無いとChart.jsが作れないケースがある
   return r.height >= 80 && r.width >= 40;
 }
 
@@ -167,33 +158,55 @@ function destroyMidChart_() {
   midCostHistCanvas = null;
 }
 
+function getThemeColors_() {
+  const root = document.documentElement;
+  const cs = getComputedStyle(root);
+  const text = (cs.getPropertyValue("--text") || "#e5e7eb").trim();
+  const muted = (cs.getPropertyValue("--muted") || "#94a3b8").trim();
+  return { text, muted };
+}
+
 function ensureMidChart_(canvas) {
   const Chart = window.Chart;
   if (!Chart) return false;
   if (!canvasReady_(canvas)) return false;
 
-  // canvas が差し替わったら破棄して作り直す
-  if (midCostHistCanvas && midCostHistCanvas !== canvas) {
-    destroyMidChart_();
-  }
+  if (midCostHistCanvas && midCostHistCanvas !== canvas) destroyMidChart_();
 
   if (!midCostHistChart) {
     const ctx = canvas.getContext?.("2d");
     if (!ctx) return false;
 
+    const { muted } = getThemeColors_();
+
     midCostHistChart = new Chart(ctx, {
       type: "bar",
       data: {
         labels: W2_COST_BINS.map((b) => b.label),
-        datasets: [{ label: "台数", data: W2_COST_BINS.map(() => 0) }],
+        datasets: [{
+          label: "台数",
+          data: W2_COST_BINS.map(() => 0),
+          borderRadius: 10,
+          borderSkipped: false,
+          categoryPercentage: 0.88,
+          barPercentage: 0.86,
+        }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
+        layout: { padding: { top: 6, right: 10, bottom: 4, left: 6 } },
         scales: {
-          x: { grid: { display: false } },
-          y: { beginAtZero: true },
+          x: {
+            grid: { display: false },
+            ticks: { color: muted, font: { size: 11, weight: "600" } },
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: "rgba(148,163,184,.16)" },
+            ticks: { color: muted, font: { size: 11, weight: "600" } },
+          },
         },
       },
     });
@@ -201,7 +214,6 @@ function ensureMidChart_(canvas) {
     midCostHistCanvas = canvas;
     requestAnimationFrame(() => midCostHistChart?.resize?.());
   }
-
   return true;
 }
 
@@ -211,6 +223,9 @@ function updateMidChart_(rows, mode) {
 
   midCostHistChart.data.datasets[0].data = hist;
   midCostHistChart.data.datasets[0].label = (mode === "sales") ? "売上" : "台数";
+  midCostHistChart.options.scales.y.ticks.callback =
+    (mode === "sales") ? ((v) => `${fmtYen(v)}円`) : undefined;
+
   midCostHistChart.update();
 }
 
@@ -222,7 +237,6 @@ export function buildWidget2CostHistTools(actions, opts = {}) {
     el("option", { value: "sales", text: "売上" }),
   ]);
 
-  // mode変更時：ウィジェット自身が再描画（kpiMid->renderWidget2CostHistが再実行される）
   if (!sel.__bound) {
     sel.addEventListener("change", () => actions?.requestRender?.());
     sel.__bound = true;
@@ -259,7 +273,6 @@ export function renderWidget2CostHist(body, state, actions) {
   const modeSel = document.getElementById("costHistMode");
   const mode = modeSel?.value || "count";
 
-  // 初期描画なし対策：サイズが付くまで数フレームだけ待って作る
   if (!ensureMidChart_(canvas)) {
     const tries = (body.__w2_tryCount || 0);
     if (tries < 30) {
@@ -269,12 +282,11 @@ export function renderWidget2CostHist(body, state, actions) {
     return;
   }
 
-  // 生成できたら更新
   updateMidChart_(rows, mode);
 }
 
 /* =============================================================================
- * focus（拡大後）：Chart + 棒クリックでカード + 並び替え + 左右固定
+ * focus（拡大後）
  * ============================================================================= */
 
 let focusCostHistChart = null;
@@ -299,14 +311,14 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
     return;
   }
 
+  const { muted } = getThemeColors_();
+
   // --- 上部ツール ---
-  // ※ modeSel は「棒の集計（台数/売上）」であり、カード並び替えとは別
   const modeSel = el("select", { class: "select", id: "w2FocusMode" }, [
     el("option", { value: "count", text: "台数（棒の集計）" }),
     el("option", { value: "sales", text: "売上（棒の集計）" }),
   ]);
 
-  // ✅ カード並び替え
   const sortKeySel = el("select", { class: "select", id: "w2CardSortKey" }, [
     el("option", { value: "booth", text: "カード：ブースID（自然順）" }),
     el("option", { value: "sales", text: "カード：売上" }),
@@ -318,20 +330,17 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
     el("option", { value: "desc", text: "降順" }),
   ]);
 
-  // 初期：ブースID自然順（昇順）
   sortKeySel.value = "booth";
   sortDirSel.value = "asc";
 
-  const hint = el("div", { class: "focusHint", text: "棒クリックでカード表示（並び替えは右）" });
+  const hint = el("div", { class: "w2HintPill", text: "棒クリックでカード表示" });
 
   const nav = el("div", { class: "focusNav" }, [
     el("div", { class: "focusCrumb", text: "原価率 分布（拡大）" }),
-    el("div", { style: "display:flex; gap:10px; align-items:center; flex-wrap:wrap;" }, [
-      modeSel, sortKeySel, sortDirSel, hint,
-    ]),
+    el("div", { class: "w2ToolsRow" }, [modeSel, sortKeySel, sortDirSel, hint]),
   ]);
 
-  const panel = el("div", { class: "focusPanel" }, [
+  const panel = el("div", { class: "focusPanel w2Focus" }, [
     el("div", { class: "focusPanelTop" }, [
       el("div", { class: "focusPanelTitle", text: "原価率 分布" }),
       el("div", { class: "focusPanelNote", text: "※台数/売上＝棒の集計。カード並び替えは別セレクト。" }),
@@ -339,51 +348,24 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
     nav,
   ]);
 
-  // --- 左：チャート ---
-  const chartWrap = el("div", { class: "focusDonutWrap" });
+  // --- 左：チャート（Widget②専用ラップに変更） ---
+  const chartWrap = el("div", { class: "w2ChartWrap" });
   const canvas = el("canvas", { id: "w2FocusCostHistChart" });
   canvas.style.width = "100%";
   canvas.style.height = "100%";
   canvas.style.display = "block";
   chartWrap.appendChild(canvas);
 
-  // --- 右：カード一覧 ---
-  const listTitle = el("div", { class: "focusCrumb", text: "選択中：—" });
-  const list = el("div", { class: "focusLegend" });
-  list.style.overflow = "auto";
+  // --- 右：カード一覧（Widget②専用） ---
+  const listTitle = el("div", { class: "w2ListTitle", text: "選択中：—" });
+  const list = el("div", { class: "w2List" });
 
-  // ✅ 常に左右2カラム固定（縦長でもカードが見える）
   const grid = el(
     "div",
-    {
-      class: "focusDonutGrid",
-      style: [
-        "display:grid",
-        "grid-template-columns:minmax(0, 1.15fr) minmax(0, 0.85fr)",
-        "gap:14px",
-        "align-items:stretch",
-        "min-width:0",
-        "height:calc(100vh - 220px)",
-        "min-height:420px",
-      ].join(";"),
-    },
+    { class: "focusDonutGrid w2Grid" },
     [
-      el("div", { style: "min-width:0; min-height:0; display:flex;" }, [
-        (() => {
-          chartWrap.style.height = "100%";
-          chartWrap.style.minHeight = "0";
-          chartWrap.style.overflow = "hidden";
-          return chartWrap;
-        })(),
-      ]),
-      el("div", { style: "min-width:0; min-height:0; display:flex; flex-direction:column; gap:10px;" }, [
-        listTitle,
-        (() => {
-          list.style.flex = "1";
-          list.style.minHeight = "0";
-          return list;
-        })(),
-      ]),
+      el("div", { class: "w2Left" }, [chartWrap]),
+      el("div", { class: "w2Right" }, [listTitle, list]),
     ]
   );
 
@@ -413,7 +395,6 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
         return (na - nb) * sign;
       }
 
-      // sales
       const sa = toNum(a?.sales ?? a?.総売上);
       const sb = toNum(b?.sales ?? b?.総売上);
       const na = sa == null ? (dir === "asc" ? Infinity : -Infinity) : sa;
@@ -435,7 +416,7 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
 
     clear(list);
     if (picked.length === 0) {
-      list.appendChild(el("div", { class: "focusPlaceholder", text: "該当アイテムがありません" }));
+      list.appendChild(el("div", { class: "w2Empty", text: "該当アイテムがありません" }));
       return;
     }
 
@@ -449,19 +430,16 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
       const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
       const rate = toNum(r?.cost_rate ?? r?.原価率);
 
-      // ✅ 「ブースIDが2行」対策：machine が booth と同じなら表示しない
       const showMachine = machine && machine.trim() && machine.trim() !== booth.trim();
 
       list.appendChild(
-        el("div", { class: "focusLegendItem", style: "display:block; text-align:left;" }, [
-          el("div", { style: "font-weight:900; margin-bottom:4px;", text: prize }),
-          el("div", { style: "opacity:.95; margin-bottom:4px;", text: booth }),
-          showMachine
-            ? el("div", { style: "opacity:.85; margin-bottom:4px;", text: machine })
-            : el("div", { style: "display:none;" }),
-          el("div", { style: "display:flex; gap:12px; flex-wrap:wrap; opacity:.95;" }, [
-            el("span", { text: `売上: ${fmtYen(sales)}円` }),
-            el("span", { text: `原価率: ${rate == null ? "—" : fmtPct01(rate)}` }),
+        el("div", { class: "w2Card" }, [
+          el("div", { class: "w2CardTitle", text: prize }),
+          el("div", { class: "w2CardSub", text: booth }),
+          showMachine ? el("div", { class: "w2CardSub2", text: machine }) : el("div", { class: "w2CardSub2 is-hidden", text: "" }),
+          el("div", { class: "w2CardMetrics" }, [
+            el("span", { class: "w2Chip", text: `売上: ${fmtYen(sales)}円` }),
+            el("span", { class: "w2Chip", text: `原価率: ${rate == null ? "—" : fmtPct01(rate)}` }),
           ]),
         ])
       );
@@ -469,7 +447,7 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
 
     if (picked.length > MAX) {
       list.appendChild(
-        el("div", { class: "focusHint", text: `※表示は上位${MAX}件まで（全${picked.length}件）` })
+        el("div", { class: "w2Hint", text: `※表示は上位${MAX}件まで（全${picked.length}件）` })
       );
     }
   }
@@ -478,7 +456,6 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
     const mode = modeSel.value || "count";
     const hist = computeHistogram_(rows, mode);
 
-    // 既存破棄
     destroyWidget2CostHistFocus();
 
     const ctx = canvas.getContext("2d");
@@ -486,15 +463,34 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
       type: "bar",
       data: {
         labels: W2_COST_BINS.map((b) => b.label),
-        datasets: [{ label: mode === "sales" ? "売上" : "台数", data: hist }],
+        datasets: [{
+          label: mode === "sales" ? "売上" : "台数",
+          data: hist,
+          borderRadius: 12,
+          borderSkipped: false,
+          categoryPercentage: 0.86,
+          barPercentage: 0.84,
+        }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
+        layout: { padding: { top: 10, right: 14, bottom: 10, left: 10 } },
         scales: {
-          x: { grid: { display: false } },
-          y: { beginAtZero: true },
+          x: {
+            grid: { display: false },
+            ticks: { color: muted, font: { size: 12, weight: "700" } },
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: "rgba(148,163,184,.16)" },
+            ticks: {
+              color: muted,
+              font: { size: 12, weight: "700" },
+              callback: mode === "sales" ? ((v) => `${fmtYen(v)}円`) : undefined,
+            },
+          },
         },
         onClick: (evt) => {
           if (!focusCostHistChart) return;
@@ -507,13 +503,11 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
       },
     });
 
-    // 初期状態
     listTitle.textContent = "選択中：—";
     clear(list);
-    list.appendChild(el("div", { class: "focusHint", text: "棒をクリックすると一覧が出ます" }));
+    list.appendChild(el("div", { class: "w2Hint", text: "棒をクリックすると一覧が出ます" }));
     lastBinIndex = null;
 
-    // レイアウト確定後に resize
     requestAnimationFrame(() => focusCostHistChart?.resize?.());
   }
 
