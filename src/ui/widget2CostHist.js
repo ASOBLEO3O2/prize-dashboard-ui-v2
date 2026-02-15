@@ -5,8 +5,8 @@ import { el, clear } from "../utils/dom.js";
  * Widget②：原価率 分布（ヒスト）
  *
  * 方針A（責務分離）：
- * - 拡大前（mid）：このファイルは「器（canvas + select）」だけ作る
- *   └ 実描画は src/ui/charts.js（renderCharts）が担当
+ * - 拡大前（mid）：このファイルが「器」+「Chart生成/更新」まで担当（＝初期描画が出る）
+ *   └ app.js / charts.js から呼ばない（枠に干渉させない）
  *
  * - 拡大後（focus）：このファイルが「Chart生成 + 棒クリックでカード表示」まで担当
  *   └ カード並び替え（ブースID自然順 / 売上 / 原価率）もここで完結
@@ -55,7 +55,6 @@ function inBin_(rate01, b) {
 
   const geMin = b.incMin ? r >= b.min : r > b.min;
   const ltMax = (b.max === Infinity) ? true : (b.incMax ? r <= b.max : r < b.max);
-
   return geMin && ltMax;
 }
 
@@ -145,9 +144,76 @@ function pickMachineName_(r) {
 // ✅ ブースID自然順（数字を数値として比較）
 const BOOTH_COLLATOR = new Intl.Collator("ja-JP", { numeric: true, sensitivity: "base" });
 
-// =============================================================================
-// mid（拡大前）：器だけ（描画は charts.js）
-// =============================================================================
+/* =============================================================================
+ * mid（拡大前）：tools + canvas + Chart生成/更新（← 初期描画なし対策の本丸）
+ * ============================================================================= */
+
+let midCostHistChart = null;
+let midCostHistCanvas = null;
+
+function canvasReady_(cv) {
+  if (!cv) return false;
+  const r = cv.getBoundingClientRect?.();
+  if (!r) return false;
+  // 高さが無いとChart.jsが作れないケースがある
+  return r.height >= 80 && r.width >= 40;
+}
+
+function destroyMidChart_() {
+  if (midCostHistChart && typeof midCostHistChart.destroy === "function") {
+    try { midCostHistChart.destroy(); } catch (e) {}
+  }
+  midCostHistChart = null;
+  midCostHistCanvas = null;
+}
+
+function ensureMidChart_(canvas) {
+  const Chart = window.Chart;
+  if (!Chart) return false;
+  if (!canvasReady_(canvas)) return false;
+
+  // canvas が差し替わったら破棄して作り直す
+  if (midCostHistCanvas && midCostHistCanvas !== canvas) {
+    destroyMidChart_();
+  }
+
+  if (!midCostHistChart) {
+    const ctx = canvas.getContext?.("2d");
+    if (!ctx) return false;
+
+    midCostHistChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: W2_COST_BINS.map((b) => b.label),
+        datasets: [{ label: "台数", data: W2_COST_BINS.map(() => 0) }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true },
+        },
+      },
+    });
+
+    midCostHistCanvas = canvas;
+    requestAnimationFrame(() => midCostHistChart?.resize?.());
+  }
+
+  return true;
+}
+
+function updateMidChart_(rows, mode) {
+  if (!midCostHistChart) return;
+  const hist = computeHistogram_(rows, mode);
+
+  midCostHistChart.data.datasets[0].data = hist;
+  midCostHistChart.data.datasets[0].label = (mode === "sales") ? "売上" : "台数";
+  midCostHistChart.update();
+}
+
 export function buildWidget2CostHistTools(actions, opts = {}) {
   const id = String(opts.modeSelectId || "costHistMode").trim() || "costHistMode";
 
@@ -156,6 +222,7 @@ export function buildWidget2CostHistTools(actions, opts = {}) {
     el("option", { value: "sales", text: "売上" }),
   ]);
 
+  // mode変更時：ウィジェット自身が再描画（kpiMid->renderWidget2CostHistが再実行される）
   if (!sel.__bound) {
     sel.addEventListener("change", () => actions?.requestRender?.());
     sel.__bound = true;
@@ -164,19 +231,19 @@ export function buildWidget2CostHistTools(actions, opts = {}) {
   return el("div", { class: "chartTools" }, [sel]);
 }
 
-export function renderWidget2CostHist(body, actions) {
+export function renderWidget2CostHist(body, state, actions) {
   if (!body) return;
+
+  const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
 
   if (!body.__w2_built) {
     clear(body);
     body.classList.add("chartBody");
 
     const cv = el("canvas", { id: "costHistChart" });
-    // ✅ 初期描画なし対策：canvasを親サイズに追従させる
     cv.style.width = "100%";
     cv.style.height = "100%";
     cv.style.display = "block";
-
     body.appendChild(cv);
 
     body.addEventListener("click", (e) => {
@@ -187,11 +254,29 @@ export function renderWidget2CostHist(body, actions) {
 
     body.__w2_built = true;
   }
+
+  const canvas = body.querySelector?.("#costHistChart");
+  const modeSel = document.getElementById("costHistMode");
+  const mode = modeSel?.value || "count";
+
+  // 初期描画なし対策：サイズが付くまで数フレームだけ待って作る
+  if (!ensureMidChart_(canvas)) {
+    const tries = (body.__w2_tryCount || 0);
+    if (tries < 30) {
+      body.__w2_tryCount = tries + 1;
+      requestAnimationFrame(() => renderWidget2CostHist(body, state, actions));
+    }
+    return;
+  }
+
+  // 生成できたら更新
+  updateMidChart_(rows, mode);
 }
 
-// =============================================================================
-// focus（拡大後）：Chart + 棒クリックでカード + 並び替え + 左右固定レイアウト
-// =============================================================================
+/* =============================================================================
+ * focus（拡大後）：Chart + 棒クリックでカード + 並び替え + 左右固定
+ * ============================================================================= */
+
 let focusCostHistChart = null;
 
 export function destroyWidget2CostHistFocus() {
@@ -215,11 +300,13 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
   }
 
   // --- 上部ツール ---
+  // ※ modeSel は「棒の集計（台数/売上）」であり、カード並び替えとは別
   const modeSel = el("select", { class: "select", id: "w2FocusMode" }, [
     el("option", { value: "count", text: "台数（棒の集計）" }),
     el("option", { value: "sales", text: "売上（棒の集計）" }),
   ]);
 
+  // ✅ カード並び替え
   const sortKeySel = el("select", { class: "select", id: "w2CardSortKey" }, [
     el("option", { value: "booth", text: "カード：ブースID（自然順）" }),
     el("option", { value: "sales", text: "カード：売上" }),
@@ -240,10 +327,7 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
   const nav = el("div", { class: "focusNav" }, [
     el("div", { class: "focusCrumb", text: "原価率 分布（拡大）" }),
     el("div", { style: "display:flex; gap:10px; align-items:center; flex-wrap:wrap;" }, [
-      modeSel,
-      sortKeySel,
-      sortDirSel,
-      hint,
+      modeSel, sortKeySel, sortDirSel, hint,
     ]),
   ]);
 
@@ -329,6 +413,7 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
         return (na - nb) * sign;
       }
 
+      // sales
       const sa = toNum(a?.sales ?? a?.総売上);
       const sb = toNum(b?.sales ?? b?.総売上);
       const na = sa == null ? (dir === "asc" ? Infinity : -Infinity) : sa;
@@ -413,7 +498,9 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
         },
         onClick: (evt) => {
           if (!focusCostHistChart) return;
-          const pts = focusCostHistChart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, true);
+          const pts = focusCostHistChart.getElementsAtEventForMode(
+            evt, "nearest", { intersect: true }, true
+          );
           if (!pts || pts.length === 0) return;
           renderList(pts[0].index);
         },
