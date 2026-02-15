@@ -2,133 +2,112 @@
 import { el, clear } from "../utils/dom.js";
 
 /**
- * Drawer（中段4枠の差し替え）
- * - draft を編集（即プレビューは mid 側が対応）
- * - 「決定」で midSlots に確定
- * - select の表示が切り替わらない問題は
- *   「select.value を DOMプロパティとして必ずセット」で解消する
+ * Drawer（中段スロット切替）
+ * - state.drawerOpen: true で表示
+ * - state.midSlotsDraft を編集（即プレビュー）
+ * - 決定: actions.onApplyMidSlots()
+ * - キャンセル: actions.onCancelMidSlots() + 閉じる
+ *
+ * 前提：actions には以下がある
+ * - onSetMidSlotDraft(index, value)
+ * - onApplyMidSlots()
+ * - onCancelMidSlots()
+ * - onCloseDrawer()
+ * - requestRender()
  */
+export function renderDrawer(drawerMount, drawerOverlay, state, actions) {
+  if (!drawerMount || !drawerOverlay) return;
 
-const OPTIONS = [
-  { value: "widget1", label: "① 構成比ドーナツ（既存）" },
-  { value: "widget2", label: "② 原価率分布（既存）" },
-  { value: "scatter", label: "③ 売上×原価率（散布）" }, // 使わないなら選ばなければOK
-  { value: "dummyA", label: "ダミーA" },
-  { value: "dummyB", label: "ダミーB" },
-  { value: "dummyC", label: "ダミーC" },
-  { value: "dummyD", label: "ダミーD" },
-];
+  // 表示/非表示
+  const open = !!state.drawerOpen;
+  drawerOverlay.style.display = open ? "block" : "none";
+  drawerMount.style.display = open ? "block" : "none";
 
-function norm4(arr, fallback) {
-  const a = Array.isArray(arr) ? arr.slice(0, 4) : fallback.slice(0, 4);
-  while (a.length < 4) a.push(fallback[a.length] || "dummyA");
-  return a.map((x) => String(x || "").trim() || "dummyA");
-}
+  if (!open) return;
 
-/**
- * ★重要：select は attribute の value では表示が追従しないことがあるため
- * DOMプロパティとして sel.value を必ずセットする
- */
-function buildSlotSelect_(currentValue, onChange) {
-  const sel = el("select", {
-    class: "select",
-    onChange,
-  });
+  clear(drawerMount);
+  clear(drawerOverlay);
 
-  // option は selected を使わない（ブラウザ差＆el()差を避ける）
-  for (const op of OPTIONS) {
-    sel.appendChild(el("option", { value: op.value, text: op.label }));
-  }
+  // オーバーレイ（外クリックで閉じる）
+  drawerOverlay.className = "drawerOverlay";
+  drawerOverlay.addEventListener("click", () => {
+    actions?.onCloseDrawer?.();
+    actions?.requestRender?.();
+  }, { once: true });
 
-  // ★ここが本丸：DOMプロパティとして value をセット
-  sel.value = String(currentValue || "");
+  const panel = el("div", { class: "drawerPanel" });
+  panel.addEventListener("click", (e) => e.stopPropagation()); // パネル内クリックは閉じない
 
-  // 保険：存在しない値なら先頭に落とす
-  if (!OPTIONS.some((o) => o.value === sel.value)) {
-    sel.value = OPTIONS[0]?.value || "";
-  }
+  const title = el("div", { class: "drawerTitle", text: "中段スロット切替" });
 
-  return sel;
-}
+  // スロット候補（必要なら増やしてOK）
+  const OPTIONS = [
+    { value: "widget1", text: "widget1（構成比ドーナツ）" },
+    { value: "widget2", text: "widget2（原価率分布）" },
+    { value: "scatter", text: "scatter" },
+    { value: "dummyA", text: "空き枠A" },
+    { value: "dummyB", text: "空き枠B" },
+    { value: "dummyC", text: "空き枠C" },
+    { value: "dummyD", text: "空き枠D" },
+  ];
 
-export function renderDrawer(drawer, overlay, state, actions) {
-  clear(drawer);
+  const draft = Array.isArray(state.midSlotsDraft) ? state.midSlotsDraft : [];
+  const rows = el("div", { class: "drawerRows" });
 
-  const slots = norm4(state.midSlots, ["widget1", "widget2", "dummyA", "dummyB"]);
-  const draft = norm4(state.midSlotsDraft, slots);
-
-  // =========================
-  // Header
-  // =========================
-  drawer.appendChild(
-    el("div", { class: "drawerHeader" }, [
-      el("div", { class: "drawerTitle", text: "ドロワー" }),
-      el("div", { style: "display:flex; gap:10px; align-items:center;" }, [
-        el("button", {
-          class: "btn ghost",
-          text: "取消",
-          onClick: (e) => {
-            e.preventDefault();
-            actions.onCancelMidSlots?.();
-          },
-        }),
-        el("button", {
-          class: "btn primary",
-          text: "決定",
-          onClick: (e) => {
-            e.preventDefault();
-            actions.onApplyMidSlots?.();
-          },
-        }),
-        el("button", {
-          class: "btn ghost",
-          text: "閉じる",
-          onClick: actions.onCloseDrawer,
-        }),
-      ]),
-    ])
-  );
-
-  // =========================
-  // Body
-  // =========================
-  const body = el("div", { class: "drawerBody" }, [
-    el("div", { class: "drawerCard" }, [
-      el("h4", { text: "中段KPI（4枠）の表示内容" }),
-      el("p", { text: "選択中は draft。『決定』で確定（midSlots）になります。" }),
-    ]),
-  ]);
-
-  // 4スロット
   for (let i = 0; i < 4; i++) {
-    body.appendChild(
-      el("div", { class: "drawerCard" }, [
-        el("div", {
-          style: "font-weight:900; margin-bottom:8px;",
-          text: `スロット ${i + 1}`,
-        }),
-        buildSlotSelect_(draft[i], (e) => {
-          actions.onSetMidSlotDraft?.(i, e.target.value);
-        }),
+    const current = String(draft[i] || "").trim() || "dummyA";
+
+    const sel = el(
+      "select",
+      {
+        class: "select drawerSelect",
+        onChange: (e) => {
+          const v = e.target.value;
+          actions?.onSetMidSlotDraft?.(i, v);
+          actions?.requestRender?.(); // ✅ 即プレビュー
+        },
+      },
+      OPTIONS.map((o) =>
+        el("option", {
+          value: o.value,
+          text: o.text,
+          selected: o.value === current,
+        })
+      )
+    );
+
+    rows.appendChild(
+      el("div", { class: "drawerRow" }, [
+        el("div", { class: "drawerLabel", text: `枠${i + 1}` }),
+        sel,
       ])
     );
   }
 
-  // debug
-  body.appendChild(
-    el("div", { class: "drawerCard" }, [
-      el("h4", { text: "現在の状態（debug）" }),
-      el("p", { text: `midSlots (確定): ${JSON.stringify(slots)}` }),
-      el("p", { text: `midSlotsDraft (編集中): ${JSON.stringify(draft)}` }),
-      el("p", { text: `drawerOpen: ${state.drawerOpen ? "true" : "false"}` }),
-    ])
-  );
+  const btns = el("div", { class: "drawerBtns" }, [
+    el("button", {
+      class: "btn ghost",
+      text: "キャンセル",
+      onClick: () => {
+        actions?.onCancelMidSlots?.();
+        actions?.onCloseDrawer?.();
+        actions?.requestRender?.();
+      },
+    }),
+    el("button", {
+      class: "btn primary",
+      text: "決定",
+      onClick: () => {
+        actions?.onApplyMidSlots?.(); // onApply側で閉じる想定
+        actions?.requestRender?.();
+      },
+    }),
+  ]);
 
-  drawer.appendChild(body);
+  panel.append(title, rows, btns);
+  drawerMount.append(panel);
 
-  // =========================
-  // Open / Close
-  // =========================
-  overlay.classList.toggle("open", !!state.drawerOpen);
-  drawer.classList.toggle("open", !!state.drawerOpen);
+  // overlay の中に drawerMount を載せる構成の場合
+  // （既存のDOM構造次第で不要なら消してOK）
+  drawerOverlay.append(drawerMount);
 }
