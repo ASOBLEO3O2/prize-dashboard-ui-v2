@@ -44,17 +44,47 @@ function destroyChartsUnder_(rootEl) {
   });
 }
 
-// ===== Widget2（costHist）拡大：別ID・別Chart =====
+// ===== Widget2（costHist）拡大：別ID・別Chart + 棒クリックでカード =====
 let focusCostHistChart = null;
 
-// charts.js と同じ bin（中段と拡大の一致を優先）
+/**
+ * ✅ 拡大前（Widget②）と同じ「自然レンジ」に揃える
+ * ① 0–10%（<=10）
+ * ② 11–25%（>10 && <=25）
+ * ③ 26–32%（>25 && <=32）
+ * ④ 33–40%（>32 && <40）
+ * ⑤ 40%〜（>=40）
+ */
 const COST_BINS = [
-  { label: "〜3%", min: 0.0, max: 0.03 },
-  { label: "3–5%", min: 0.03, max: 0.05 },
-  { label: "5–8%", min: 0.05, max: 0.08 },
-  { label: "8–10%", min: 0.08, max: 0.1 },
-  { label: "10%〜", min: 0.1, max: Infinity },
+  { label: "0–10%" },
+  { label: "11–25%" },
+  { label: "26–32%" },
+  { label: "33–40%" },
+  { label: "40%〜" },
 ];
+
+function pickCostBinIndex_(rate01) {
+  const r = Number(rate01);
+  if (!Number.isFinite(r) || r < 0) return -1;
+
+  if (r <= 0.10) return 0;
+  if (r <= 0.25) return 1;
+  if (r <= 0.32) return 2;
+  if (r < 0.40) return 3; // 40未満
+  return 4; // 40以上
+}
+
+function inBin_(rate01, idx) {
+  const r = Number(rate01);
+  if (!Number.isFinite(r) || r < 0) return false;
+
+  if (idx === 0) return r <= 0.10;
+  if (idx === 1) return r > 0.10 && r <= 0.25;
+  if (idx === 2) return r > 0.25 && r <= 0.32;
+  if (idx === 3) return r > 0.32 && r < 0.40;
+  if (idx === 4) return r >= 0.40;
+  return false;
+}
 
 function toNum(v) {
   if (v == null) return null;
@@ -84,12 +114,13 @@ function fmtPct01(v) {
 
 function computeCostHistogram(rows, mode) {
   const arr = COST_BINS.map(() => 0);
+
   for (const r of rows) {
     const rate = toNum(r?.cost_rate ?? r?.原価率);
     const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
     if (rate == null) continue;
 
-    const idx = COST_BINS.findIndex((b) => rate >= b.min && rate < b.max);
+    const idx = pickCostBinIndex_(rate);
     if (idx < 0) continue;
 
     arr[idx] += mode === "sales" ? sales : 1;
@@ -98,11 +129,9 @@ function computeCostHistogram(rows, mode) {
 }
 
 function rowsInBin_(rows, binIndex) {
-  const b = COST_BINS[binIndex];
-  if (!b) return [];
   return rows.filter((r) => {
     const rate = toNum(r?.cost_rate ?? r?.原価率);
-    return rate != null && rate >= b.min && rate < b.max;
+    return rate != null && inBin_(rate, binIndex);
   });
 }
 
@@ -132,8 +161,11 @@ function pickMachineName_(r) {
 function renderCostHistFocus_(mount, state, actions) {
   const Chart = window.Chart;
   const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
+
   if (!Chart) {
-    mount.appendChild(el("div", { class: "focusPlaceholder", text: "Chart.js が未ロードです" }));
+    mount.appendChild(
+      el("div", { class: "focusPlaceholder", text: "Chart.js が未ロードです" })
+    );
     return;
   }
 
@@ -144,10 +176,18 @@ function renderCostHistFocus_(mount, state, actions) {
     el("option", { value: "sales", text: "売上" }),
   ]);
 
-  const hint = el("div", { class: "focusHint", text: "棒をクリックすると該当アイテムを表示します" });
+  const hint = el("div", {
+    class: "focusHint",
+    text: "棒をクリックすると該当アイテムを表示します",
+  });
 
   topBar.appendChild(el("div", { class: "focusCrumb", text: "原価率 分布（拡大）" }));
-  topBar.appendChild(el("div", { style: "display:flex; gap:10px; align-items:center;" }, [modeSel, hint]));
+  topBar.appendChild(
+    el("div", { style: "display:flex; gap:10px; align-items:center;" }, [
+      modeSel,
+      hint,
+    ])
+  );
 
   const panel = el("div", { class: "focusPanel" }, [
     el("div", { class: "focusPanelTop" }, [
@@ -184,7 +224,7 @@ function renderCostHistFocus_(mount, state, actions) {
     type: "bar",
     data: {
       labels: COST_BINS.map((b) => b.label),
-      datasets: [{ label: "台数", data: [0, 0, 0, 0, 0] }],
+      datasets: [{ label: "台数", data: COST_BINS.map(() => 0) }],
     },
     options: {
       responsive: true,
@@ -224,7 +264,9 @@ function renderCostHistFocus_(mount, state, actions) {
         // リスト描画
         clear(list);
         if (picked.length === 0) {
-          list.appendChild(el("div", { class: "focusPlaceholder", text: "該当アイテムがありません" }));
+          list.appendChild(
+            el("div", { class: "focusPlaceholder", text: "該当アイテムがありません" })
+          );
           return;
         }
 
@@ -324,7 +366,11 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
       onClick: () => actions.onCloseFocus?.(),
     }),
     el("div", { class: "focusTitle", text: focus.title || "詳細" }),
-    el("button", { class: "btn ghost", text: "×", onClick: () => actions.onCloseFocus?.() }),
+    el("button", {
+      class: "btn ghost",
+      text: "×",
+      onClick: () => actions.onCloseFocus?.(),
+    }),
   ]);
 
   const body = el("div", { class: "focusBody" });
@@ -343,7 +389,7 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
     return;
   }
 
-  // ✅ costHist expanded（方針A：別ID・別Chart）
+  // ✅ costHist expanded（拡大後だけカード表示）
   if (focus.kind === "costHist") {
     renderCostHistFocus_(body, state, actions);
     return;
