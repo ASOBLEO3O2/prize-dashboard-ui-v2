@@ -5,6 +5,7 @@ import { el, clear } from "../utils/dom.js";
 import { renderDonut } from "../charts/donut.js?v=20260131";
 import { GENRES } from "../constants.js";
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
+import { renderWidget2CostHistFocus } from "./widget2CostHist.js";
 
 /**
  * modalEl 配下の Chart.js を破棄（DOM clear だけでは Chart が残るため）
@@ -44,287 +45,6 @@ function destroyChartsUnder_(rootEl) {
   });
 }
 
-// ===== Widget2（costHist）拡大：別ID・別Chart + 棒クリックでカード =====
-let focusCostHistChart = null;
-
-/**
- * ✅ 拡大前（Widget②）と同じ「自然レンジ」に揃える
- * ① 0–10%（<=10）
- * ② 11–25%（>10 && <=25）
- * ③ 26–32%（>25 && <=32）
- * ④ 33–40%（>32 && <40）
- * ⑤ 40%〜（>=40）
- */
-const COST_BINS = [
-  { label: "0–10%" },
-  { label: "11–25%" },
-  { label: "26–32%" },
-  { label: "33–40%" },
-  { label: "40%〜" },
-];
-
-function pickCostBinIndex_(rate01) {
-  const r = Number(rate01);
-  if (!Number.isFinite(r) || r < 0) return -1;
-
-  if (r <= 0.10) return 0;
-  if (r <= 0.25) return 1;
-  if (r <= 0.32) return 2;
-  if (r < 0.40) return 3; // 40未満
-  return 4; // 40以上
-}
-
-function inBin_(rate01, idx) {
-  const r = Number(rate01);
-  if (!Number.isFinite(r) || r < 0) return false;
-
-  if (idx === 0) return r <= 0.10;
-  if (idx === 1) return r > 0.10 && r <= 0.25;
-  if (idx === 2) return r > 0.25 && r <= 0.32;
-  if (idx === 3) return r > 0.32 && r < 0.40;
-  if (idx === 4) return r >= 0.40;
-  return false;
-}
-
-function toNum(v) {
-  if (v == null) return null;
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string") {
-    const s = v.trim().replace(/,/g, "");
-    if (!s) return null;
-    if (s.endsWith("%")) {
-      const n = Number(s.slice(0, -1));
-      return Number.isFinite(n) ? n / 100 : null;
-    }
-    const n = Number(s);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
-function fmtYen(v) {
-  const n = Number(v) || 0;
-  return new Intl.NumberFormat("ja-JP").format(Math.round(n));
-}
-function fmtPct01(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return `${(n * 100).toFixed(1)}%`;
-}
-
-function computeCostHistogram(rows, mode) {
-  const arr = COST_BINS.map(() => 0);
-
-  for (const r of rows) {
-    const rate = toNum(r?.cost_rate ?? r?.原価率);
-    const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
-    if (rate == null) continue;
-
-    const idx = pickCostBinIndex_(rate);
-    if (idx < 0) continue;
-
-    arr[idx] += mode === "sales" ? sales : 1;
-  }
-  return arr;
-}
-
-function rowsInBin_(rows, binIndex) {
-  return rows.filter((r) => {
-    const rate = toNum(r?.cost_rate ?? r?.原価率);
-    return rate != null && inBin_(rate, binIndex);
-  });
-}
-
-function pickPrizeName_(r) {
-  return (
-    r?.prize_name ??
-    r?.prize ??
-    r?.景品名 ??
-    r?.["景品名"] ??
-    r?.景品 ??
-    r?.["景品"] ??
-    ""
-  );
-}
-function pickMachineName_(r) {
-  return (
-    r?.machine_name ??
-    r?.machine_ref ??
-    r?.対応マシン名 ??
-    r?.["対応マシン名"] ??
-    r?.booth_id ??
-    r?.["ブースID"] ??
-    ""
-  );
-}
-
-function renderCostHistFocus_(mount, state, actions) {
-  const Chart = window.Chart;
-  const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
-
-  if (!Chart) {
-    mount.appendChild(
-      el("div", { class: "focusPlaceholder", text: "Chart.js が未ロードです" })
-    );
-    return;
-  }
-
-  // UI：上＝チャート、下＝アイテム
-  const topBar = el("div", { class: "focusNav" }, []);
-  const modeSel = el("select", { class: "select", id: "focusCostHistMode" }, [
-    el("option", { value: "count", text: "台数" }),
-    el("option", { value: "sales", text: "売上" }),
-  ]);
-
-  const hint = el("div", {
-    class: "focusHint",
-    text: "棒をクリックすると該当アイテムを表示します",
-  });
-
-  topBar.appendChild(el("div", { class: "focusCrumb", text: "原価率 分布（拡大）" }));
-  topBar.appendChild(
-    el("div", { style: "display:flex; gap:10px; align-items:center;" }, [
-      modeSel,
-      hint,
-    ])
-  );
-
-  const panel = el("div", { class: "focusPanel" }, [
-    el("div", { class: "focusPanelTop" }, [
-      el("div", { class: "focusPanelTitle", text: "原価率 分布" }),
-      el("div", { class: "focusPanelNote", text: "棒クリックでアイテム一覧" }),
-    ]),
-    topBar,
-  ]);
-
-  const chartWrap = el("div", { class: "focusDonutWrap" }); // 既存の大きい描画領域クラスを流用
-  chartWrap.style.height = "360px"; // 念のため高さ確保（Chart.js 初期化安定）
-  chartWrap.style.minHeight = "360px";
-
-  const canvas = el("canvas", { id: "focusCostHistChart" });
-  chartWrap.appendChild(canvas);
-
-  const listTitle = el("div", { class: "focusCrumb", text: "選択中：—" });
-  const list = el("div", { class: "focusLegend" }); // 既存のスクロール領域っぽい見た目を流用
-
-  const listWrap = el("div", { class: "focusDonutGrid" }, [
-    el("div", { style: "min-width:0;" }, [chartWrap]),
-    el("div", { style: "min-width:0; display:flex; flex-direction:column; gap:10px;" }, [
-      listTitle,
-      list,
-    ]),
-  ]);
-
-  panel.appendChild(listWrap);
-  mount.appendChild(panel);
-
-  // chart を作る（毎回 open 時に destroy 済みの前提）
-  const ctx = canvas.getContext("2d");
-  focusCostHistChart = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: COST_BINS.map((b) => b.label),
-      datasets: [{ label: "台数", data: COST_BINS.map(() => 0) }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display: false } },
-        y: { beginAtZero: true },
-      },
-      onClick: (evt) => {
-        if (!focusCostHistChart) return;
-
-        const pts = focusCostHistChart.getElementsAtEventForMode(
-          evt,
-          "nearest",
-          { intersect: true },
-          true
-        );
-        if (!pts || pts.length === 0) return;
-
-        const idx = pts[0].index;
-        const bin = COST_BINS[idx];
-        if (!bin) return;
-
-        const picked = rowsInBin_(rows, idx);
-
-        // ソート：売上降順
-        picked.sort((a, b) => {
-          const sa = toNum(a?.sales ?? a?.総売上) ?? 0;
-          const sb = toNum(b?.sales ?? b?.総売上) ?? 0;
-          return sb - sa;
-        });
-
-        // タイトル更新
-        listTitle.textContent = `選択中：${bin.label}（${picked.length}件）`;
-
-        // リスト描画
-        clear(list);
-        if (picked.length === 0) {
-          list.appendChild(
-            el("div", { class: "focusPlaceholder", text: "該当アイテムがありません" })
-          );
-          return;
-        }
-
-        // 上限（重すぎ防止）
-        const MAX = 80;
-        const shown = picked.slice(0, MAX);
-
-        shown.forEach((r) => {
-          const prize = pickPrizeName_(r) || "（景品名なし）";
-          const machine = pickMachineName_(r) || "（マシン名なし）";
-          const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
-          const rate = toNum(r?.cost_rate ?? r?.原価率);
-
-          list.appendChild(
-            el("div", { class: "focusLegendItem", style: "display:block; text-align:left;" }, [
-              el("div", { style: "font-weight:900; margin-bottom:4px;", text: prize }),
-              el("div", { style: "opacity:.9; margin-bottom:4px;", text: machine }),
-              el("div", { style: "display:flex; gap:12px; flex-wrap:wrap; opacity:.95;" }, [
-                el("span", { text: `売上: ${fmtYen(sales)}円` }),
-                el("span", { text: `原価率: ${rate == null ? "—" : fmtPct01(rate)}` }),
-              ]),
-            ])
-          );
-        });
-
-        if (picked.length > MAX) {
-          list.appendChild(
-            el("div", {
-              class: "focusHint",
-              text: `※表示は上位${MAX}件まで（全${picked.length}件）`,
-            })
-          );
-        }
-      },
-    },
-  });
-
-  // 初回データ反映
-  const apply = () => {
-    if (!focusCostHistChart) return;
-    const mode = modeSel.value || "count";
-    const hist = computeCostHistogram(rows, mode);
-
-    focusCostHistChart.data.datasets[0].data = hist;
-    focusCostHistChart.data.datasets[0].label = mode === "sales" ? "売上" : "台数";
-    focusCostHistChart.update();
-
-    // 初期表示は未選択状態
-    listTitle.textContent = "選択中：—";
-    clear(list);
-    list.appendChild(el("div", { class: "focusHint", text: "棒をクリックすると一覧が出ます" }));
-  };
-
-  modeSel.addEventListener("change", apply);
-  requestAnimationFrame(() => focusCostHistChart?.resize());
-  apply();
-}
-
 export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   const focus = state?.focus || { open: false };
   if (!overlayEl || !modalEl) return;
@@ -333,14 +53,12 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   if (!focus.open) {
     overlayEl.classList.remove("open");
 
-    // ✅ ここが重要：DOMを消す前に Chart を必ず破棄する
+    // ✅ DOMを消す前に Chart を必ず破棄する
     destroyChartsUnder_(modalEl);
-    focusCostHistChart = null;
 
     clear(modalEl);
     document.body.style.overflow = "";
 
-    // 念のためクリックハンドラも解除（積み上がり防止）
     overlayEl.onclick = null;
     return;
   }
@@ -348,9 +66,8 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   // open
   overlayEl.classList.add("open");
 
-  // open時に一旦掃除（前回の残骸がある場合の保険）
+  // open時に一旦掃除
   destroyChartsUnder_(modalEl);
-  focusCostHistChart = null;
   clear(modalEl);
 
   document.body.style.overflow = "hidden";
@@ -377,26 +94,28 @@ export function renderFocusOverlay(overlayEl, modalEl, state, actions) {
   modalEl.appendChild(header);
   modalEl.appendChild(body);
 
-  // ✅ widget1 expanded
+  // ✅ widget1 expanded（中身はwidget側）
   if (focus.kind === "shareDonut") {
     renderWidget1ShareDonut(body, state, actions, { mode: "expanded" });
     return;
   }
 
-  // ✅ existing donuts
+  // ✅ donut expanded（このファイルが担当している既存領域：そのまま）
   if (focus.kind === "salesDonut" || focus.kind === "machineDonut") {
     renderDonutFocus_(body, state, focus, actions);
     return;
   }
 
-  // ✅ costHist expanded（拡大後だけカード表示）
+  // ✅ widget2 costHist expanded（中身はwidget2へ委譲）
   if (focus.kind === "costHist") {
-    renderCostHistFocus_(body, state, actions);
+    renderWidget2CostHistFocus(body, state, actions);
     return;
   }
 
   body.appendChild(el("div", { class: "focusPlaceholder", text: "（拡大表示：準備中）" }));
 }
+
+/* ===== donuts (existing) ===== */
 
 function renderDonutFocus_(mount, state, focus, actions) {
   const top = buildGenreTopView_(state);
