@@ -5,6 +5,9 @@ import { renderMidSlot } from "./renderMidSlot.js";
 import { renderWidget1ShareDonut } from "./widget1ShareDonut.js";
 import { renderWidget2CostHist, buildWidget2CostHistTools } from "./widget2CostHist.js";
 
+// ✅ 追加：Widget③
+import { renderWidget3Scatter } from "./widget3Scatter.js";
+
 /**
  * 中段：2×2（スロット切替対応）
  * - drawerOpen中：midSlotsDraft を即プレビュー
@@ -55,25 +58,32 @@ export function renderMidKpi(mounts, state, actions) {
         tools: buildWidget2CostHistTools(actions),
         onFocus: () => actions?.onOpenFocus?.("costHist"),
         renderBody: (body) => {
-          // ✅ 初期描画なし対策のため state を渡す（widget2内でChart生成/更新）
           renderWidget2CostHist(body, state, actions);
         },
       });
       continue;
     }
 
-    // ===== scatter / dummy =====
+    // ===== widget3（scatter v0） =====
+    if (type === "scatter") {
+      renderMidSlot(mount, {
+        slotKey: "scatter",
+        title: "売上 × 原価率",
+        onFocus: () => actions?.onOpenFocus?.("scatter"),
+        renderBody: (body) => {
+          renderWidget3Scatter(body, state, actions);
+        },
+      });
+      continue;
+    }
+
+    // ===== dummy =====
     renderMidSlot(mount, {
       slotKey: String(type || "").trim() || "_",
       title: titleOf_(type, i),
-      onFocus: () => {
-        if (type === "scatter") actions?.onOpenFocus?.("scatter");
-      },
       renderBody: (body) => {
         clear(body);
-        body.appendChild(
-          el("div", { class: "frameOnlyHint", text: `type: ${type}` })
-        );
+        body.appendChild(el("div", { class: "frameOnlyHint", text: `type: ${type}` }));
       },
     });
   }
@@ -90,7 +100,6 @@ function norm4_(arr, fallback) {
 
 function titleOf_(type, idx) {
   const map = {
-    scatter: "Scatter（未復活）",
     dummyA: "空き枠A",
     dummyB: "空き枠B",
     dummyC: "空き枠C",
