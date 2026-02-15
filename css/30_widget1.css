@@ -1,13 +1,14 @@
 /* =======================================================
-   Widget① : 売上 / ステーション 構成比（CSS-only 改修）
-   - 既存DOM/JSを一切変えず、見た目と縦長崩壊を改善
+   Widget① : 売上 / ステーション 構成比（CSS-only / 情報削減なし）
+   - 既存DOM/JSはそのまま
+   - 縦長でも情報は消さず「圧縮＆整列」で見やすく
    ======================================================= */
 
 .widget1{
-  height:100%;
-  min-height:0;
-  display:flex;
-  flex-direction:column;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* =========================
@@ -15,38 +16,37 @@
    ========================= */
 
 .widget1Header{
-  flex:0 0 auto;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding:10px 10px 0;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 10px 0;
 }
 
 .widget1Title{
-  font-weight:900;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* 右側（拡大ボタン/セレクト）を締める */
 .widget1HeaderRight{
   display:flex;
   align-items:center;
   gap:10px;
 }
 
-/* select の見た目（存在している前提） */
-.widget1SelectWrap{ display:flex; }
+/* 既存の wrap があっても無くても崩れない */
+.widget1SelectWrap{ display:flex; align-items:center; }
 .widget1Select{
-  height:30px;
-  border-radius:12px;
-  border:1px solid var(--border);
-  background:rgba(18,26,34,.55);
-  color:var(--text);
-  padding:0 10px;
-  font-weight:800;
+  height: 30px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(18,26,34,.55);
+  color: var(--text);
+  padding: 0 10px;
+  font-weight: 800;
 }
 
 /* =========================
@@ -54,16 +54,16 @@
    ========================= */
 
 .widget1Body{
-  flex:1 1 auto;
-  min-height:0;
-  display:grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
 
-  /* 基本：ドーナツ : 凡例 = 1 : 1 */
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  /* ドーナツ : 凡例 = 1 : 1 */
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
 
-  gap:12px;
-  padding:10px;
-  overflow:hidden;
+  gap: 12px;
+  padding: 10px;
+  overflow: hidden;
 }
 
 /* =========================
@@ -71,151 +71,152 @@
    ========================= */
 
 .widget1ChartWrap{
-  position:relative;
-  min-height:0;
-  height:100%;
-  overflow:hidden;
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 
-  /* “カード感”を出してダサさを消す */
-  border-radius:16px;
-  border:1px solid rgba(255,255,255,.08);
-  background:rgba(255,255,255,.03);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.03);
 
-  /* canvasのレイアウトぶれ抑制 */
+  /* レイアウトぶれ抑制 */
   contain: layout paint size;
 }
 
 .widget1Canvas{
-  width:100% !important;
-  height:100% !important;
-  display:block;
-  max-height:none;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  max-height: none;
 }
 
 /* ドーナツ中央表示 */
 .w1Center{
-  position:absolute;
-  inset:0;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  pointer-events:none;
-  gap:3px;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  gap: 3px;
 }
 
 .w1CenterLabel{
-  font-size:12px;
-  opacity:.75;
-  line-height:1.1;
+  font-size: 12px;
+  opacity: .75;
+  line-height: 1.1;
 }
 
 .w1CenterValue{
-  font-weight:900;
-  font-size:16px;
-  line-height:1.1;
+  font-weight: 900;
+  font-size: 16px;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
 /* =========================
-   Legend（現行DOMのまま締める）
+   Legend（現行DOMのまま整形）
+   - 情報は削らない
    ========================= */
 
 .widget1ABC{
-  min-height:0;
-  overflow:auto;
-  padding-right:6px;
-  font-size:12px;
-  line-height:1.2;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
-/* 1項目 = “カード風”に */
+/* 1カテゴリをカード化 */
 .w1LegendItem{
-  padding:10px 10px;
-  border-radius:14px;
-  border:1px solid rgba(255,255,255,.06);
-  background:rgba(255,255,255,.02);
-  margin-bottom:10px;
+  padding: 10px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.06);
+  background: rgba(255,255,255,.02);
+  margin-bottom: 10px;
 }
 
-/* 見出し（色チップ+ラベル） */
+/* ヘッダ（色チップ + 名前） */
 .w1LegendHead{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  min-width:0;
-  margin-bottom:8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 8px;
 }
 
 .w1LegendSwatch{
-  width:10px;
-  height:10px;
-  border-radius:50%;
-  flex:0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
 }
 
 .w1LegendLabel{
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  font-weight:900;
-  min-width:0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 900;
+  min-width: 0;
 }
 
-/* 売上・構成比の並びを “行UI” に寄せる */
+/* 売上 */
 .w1LegendSales{
-  margin-top:2px;
-  text-align:right;
-  font-weight:900;
+  text-align: right;
+  font-weight: 900;
   font-variant-numeric: tabular-nums;
 }
 
-/* shares（文章感を減らしてピル風に） */
+/* 構成比：文章をやめてピル化（情報は同じ） */
 .w1LegendShares{
-  margin-top:6px;
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
-  justify-content:flex-end;
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .w1LegendShare{
-  font-size:11px;
-  padding:4px 8px;
-  border-radius:999px;
-  border:1px solid rgba(255,255,255,.10);
-  background:rgba(18,26,34,.45);
-  opacity:.9;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(18,26,34,.45);
+  opacity: .9;
   font-variant-numeric: tabular-nums;
 }
 
-.w1LegendShareSep{ display:none; }
+.w1LegendShareSep{ display: none; }
 
-/* 詳細メタ（多いので見やすく） */
+/* 詳細メタ：常時表示（削らない） */
 .w1LegendMeta{
-  margin-top:10px;
-  border-top:1px solid rgba(255,255,255,.06);
-  padding-top:8px;
-  opacity:.9;
+  margin-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding-top: 8px;
+  opacity: .9;
 }
 
+/* 2列で見やすく（縦長でも情報量は維持しつつ高さを抑える） */
 .w1LegendMetaRow{
-  display:flex;
-  justify-content:space-between;
-  gap:10px;
-  font-size:11px;
-  padding:2px 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 11px;
+  padding: 2px 0;
   font-variant-numeric: tabular-nums;
 }
 
-.w1LegendMetaRow .k{ opacity:.75; }
-.w1LegendMetaRow .v{ font-weight:800; }
+.w1LegendMetaRow .k{ opacity: .75; }
+.w1LegendMetaRow .v{ font-weight: 800; text-align: right; }
 
 /* 注記 */
 .widget1Note{
-  margin-top:8px;
-  font-size:11px;
-  opacity:.7;
+  margin-top: 8px;
+  font-size: 11px;
+  opacity: .7;
 }
 
 /* =========================
@@ -224,27 +225,60 @@
 
 @media (max-width: 900px){
   .widget1Body{
-    grid-template-columns:1fr;
+    grid-template-columns: 1fr;
   }
   .widget1ChartWrap{
-    min-height:260px;
+    min-height: 260px;
   }
 }
 
 /* =========================
-   Responsive（縦長：崩壊防止）
-   - 縦が足りない時は “詳細” を畳んで一覧性優先
+   Responsive（縦長：情報は削らず“圧縮”）
    ========================= */
 
 @media (max-height: 680px){
-  .widget1ChartWrap{ min-height:260px; }
-  .w1LegendMeta{ display:none; } /* ← ここが効く */
-  .widget1ABC{ font-size:11px; }
+  .widget1Body{
+    gap: 10px;
+    padding: 8px;
+  }
+
+  /* ドーナツが潰れない最低ライン */
+  .widget1ChartWrap{
+    min-height: 260px;
+  }
+
+  /* 凡例カードを締める */
+  .w1LegendItem{
+    padding: 9px 10px;
+    margin-bottom: 8px;
+  }
+
+  .w1LegendHead{ margin-bottom: 6px; }
+
+  .w1LegendShare{
+    font-size: 10.5px;
+    padding: 3px 7px;
+  }
+
+  .w1LegendMeta{
+    margin-top: 8px;
+    padding-top: 6px;
+  }
+
+  .w1LegendMetaRow{
+    font-size: 10.5px;
+    padding: 1px 0;
+  }
 }
 
+/* さらに縦が短い時：1列化して“詰め込まず”見やすさ優先 */
 @media (max-height: 560px){
-  .widget1Body{ grid-template-columns:1fr; }
-  .widget1ChartWrap{ min-height:240px; }
+  .widget1Body{
+    grid-template-columns: 1fr;
+  }
+  .widget1ChartWrap{
+    min-height: 240px;
+  }
 }
 
 /* =========================
@@ -252,27 +286,27 @@
    ========================= */
 
 .w1Tip{
-  position:absolute;
-  left:10px;
-  right:10px;
-  bottom:10px;
-  padding:8px 10px;
-  border:1px solid var(--border);
-  border-radius:12px;
-  background:rgba(15,21,29,.85);
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(15,21,29,.85);
   backdrop-filter: blur(6px);
-  font-size:12px;
-  line-height:1.25;
-  opacity:0;
+  font-size: 12px;
+  line-height: 1.25;
+  opacity: 0;
   transform: translateY(6px);
-  pointer-events:none;
+  pointer-events: none;
   transition: opacity .12s ease, transform .12s ease;
 }
 
 .w1Tip.show{
-  opacity:1;
-  transform:none;
+  opacity: 1;
+  transform: none;
 }
 
-.w1TipTitle{ font-weight:900; margin-bottom:4px; }
-.w1TipLine{ opacity:.85; }
+.w1TipTitle{ font-weight: 900; margin-bottom: 4px; }
+.w1TipLine{ opacity: .85; }
