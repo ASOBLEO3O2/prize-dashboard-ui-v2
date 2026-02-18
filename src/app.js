@@ -276,7 +276,7 @@ async function hydrateFromRaw() {
   const filtered = applyFilters(rawEnrichedRows, st.filters);
 
   // ✅ B案の本体：入口で1回だけ正規化して state に持つ
-  const normRows = filtered.map(normalizeRow);
+  const normRows = filtered.map((r) => normalizeRow(r, codebook));
 
   // 既存VM（トップ等）が filtered を見ている前提があるので、まずは互換維持
   const vm = buildViewModel(filtered, summary);
