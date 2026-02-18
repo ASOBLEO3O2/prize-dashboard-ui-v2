@@ -9,13 +9,13 @@ import { buildByAxis } from "./logic/byAxis.js";
 
 import { MOCK } from "./constants.js";
 import { fmtDate } from "./utils/format.js";
-
 import { decodeSymbol } from "./logic/decodeSymbol.js";
+
 import { loadRawData } from "./data/load.js";
+import { applyFilters } from "./logic/filter.js"; // ✅ normRows 前提
+import { buildViewModel } from "./logic/aggregate.js";
 
 import { normalizeRow } from "./data/normalizeRow.js";
-import { applyFilters } from "./logic/filter.js"; // ✅ normRows 前提
-import { buildViewModel } from "./logic/aggregate.js"; // ※トップKPI等の既存VM用
 import { renderFocusOverlay } from "./ui/focusOverlay.js";
 
 const DEFAULT_MID_SLOTS = ["widget1", "widget2", "dummyA", "dummyB"];
@@ -28,10 +28,14 @@ const initialState = {
 
   widget1Axis: "景品ジャンル",
 
-  // ✅ B案：正規化済み（全件）
+  // ✅ B案：正規化（全件）
   normRowsAll: [],
-  // ✅ B案：正規化済み（フィルタ適用後＝表示対象）
+
+  // ✅ B案：正規化（フィルタ後＝表示対象）
   normRows: [],
+
+  // 互換が必要な場合のみ使う（常に normRows と同じ集合に揃える）
+  filteredRows: [],
 
   byAxis: {},
 
@@ -167,7 +171,7 @@ const actions = {
     actions.requestRender();
   },
 
-  // ===== existing（UI動作）=====
+  // ===== existing =====
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
@@ -181,7 +185,6 @@ const actions = {
   },
 
   requestRender: () => {
-    // store実装次第で同値更新がまとめられることがあるため、明示的に叩けるよう残す
     store.set((s) => ({ ...s }));
   },
 
@@ -333,8 +336,8 @@ async function hydrateFromRaw() {
     codebook = {};
   }
 
-  // 1) enrich（master合流 + decode）※ここは「入口処理」の一部
-  const enriched = rows.map((r) => {
+  // enrich（master合流 + decode）
+  const rawEnrichedRows = rows.map((r) => {
     const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
     const m = key ? masterDict?.[key] : null;
     const decoded = key ? decodeSymbol(key, codebook) : {};
@@ -344,7 +347,7 @@ async function hydrateFromRaw() {
       ...(m || {}),
       ...decoded,
 
-      // raw側の値は“明示的に残す”（揺れ負け防止）
+      // raw側の値は“明示的に残す”（列の揺れに負けない）
       booth_id: r?.booth_id,
       machine_name: r?.machine_name,
       machine_key: r?.machine_key,
@@ -358,18 +361,20 @@ async function hydrateFromRaw() {
     };
   });
 
-  // 2) ✅ 正規化は入口で1回（ここだけ）
-  const normRowsAll = enriched.map(normalizeRow);
+  // ✅ 正規化は入口で1回（全件）
+  const normRowsAll = rawEnrichedRows.map(normalizeRow);
 
-  // 3) ✅ appフィルタ（正規化済みだけを見る）
+  // ✅ appフィルタ：正規化済みだけを対象にする
   const st = store.get();
   const normRows = applyFilters(normRowsAll, st.filters);
 
-  // 4) VM（トップKPI等）※現状の既存集計が enriched 前提なら、ここは当面そのまま
-  //    将来は buildViewModel も normRows へ寄せる（別フェーズ）
-  const vm = buildViewModel(enriched, summary);
+  // ✅ 互換の rawRows が必要なら、必ず normRows と同じ集合に揃える
+  const filteredRows = normRows.map((r) => r?._raw).filter(Boolean);
 
-  // 5) byAxis は “表示対象（=normRows）” に合わせる
+  // VM/summary 側が raw を要求する場合にだけ使う（集合は一致している）
+  const vm = buildViewModel(filteredRows, summary);
+
+  // byAxis は “表示対象” に合わせる（フィルタ反映）
   const axis = buildByAxis(normRows);
 
   store.set((s) => ({
@@ -379,8 +384,11 @@ async function hydrateFromRaw() {
     byGenre: vm.byGenre,
     details: vm.details,
     byAxis: axis,
+
+    filteredRows, // ← normRowsと同じ集合
     normRowsAll,
     normRows,
+
     loadError: null,
   }));
 }
