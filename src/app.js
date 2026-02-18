@@ -12,10 +12,9 @@ import { fmtDate } from "./utils/format.js";
 import { decodeSymbol } from "./logic/decodeSymbol.js";
 
 import { loadRawData } from "./data/load.js";
-import { applyFilters } from "./logic/filter.js";
+import { applyFilters } from "./logic/filter.js"; // ★ normRows前提のフィルタに置き換える
 import { buildViewModel } from "./logic/aggregate.js";
 
-// ✅ B案：入口で1回だけ正規化し、以後は state.normRows を使う
 import { normalizeRow } from "./data/normalizeRow.js";
 
 // ❌ charts はウィジェットが自分で描く（枠に干渉させない）
@@ -32,10 +31,13 @@ const initialState = {
 
   widget1Axis: "景品ジャンル",
 
-  // 既存互換：生寄り（enrich済み）+ フィルタ適用済み
+  // 互換（必要なら残す）：enrich済み
   filteredRows: [],
 
-  // ✅ 本命：正規化済み（以後ウィジェットはこれを見る）
+  // ✅ B案：正規化済み（全件）
+  normRowsAll: [],
+
+  // ✅ B案：正規化済み（フィルタ適用後＝表示対象）
   normRows: [],
 
   byAxis: {},
@@ -45,7 +47,16 @@ const initialState = {
   midSortKey: "sales",
   midSortDir: "desc",
 
-  filters: {},
+  // appフィルタ（上層→下層にも対応）
+  filters: {
+    machineNames: [],
+    feeKeys: [],
+    prizeGenreKey: "",
+    subGenreKey: "",
+    charaKey: "",
+    charaSubKey: "",
+    flags: { movie: null, reserve: null, wl: null },
+  },
 
   focusGenre: null,
   openDetailGenre: null,
@@ -70,12 +81,100 @@ const initialState = {
 const store = createStore(initialState);
 const root = document.getElementById("app");
 
-// ✅ デバッグ用（任意だが便利）
+// ✅ デバッグ用
 window.store = store;
 window.getState = () => store.get();
 
 // ===== actions =====
 const actions = {
+  // ----- app filter setters（UIから呼ぶ想定） -----
+  onSetMachineNames: (names) => {
+    store.set((s) => ({
+      ...s,
+      filters: { ...(s.filters || {}), machineNames: Array.isArray(names) ? names : [] },
+    }));
+    actions.requestRender();
+  },
+
+  onSetFeeKeys: (keys) => {
+    store.set((s) => ({
+      ...s,
+      filters: { ...(s.filters || {}), feeKeys: Array.isArray(keys) ? keys : [] },
+    }));
+    actions.requestRender();
+  },
+
+  onSetPrizeGenre: (keyOrEmpty) => {
+    store.set((s) => ({
+      ...s,
+      filters: {
+        ...(s.filters || {}),
+        prizeGenreKey: String(keyOrEmpty || "").trim(),
+        subGenreKey: "", // ★親変更で子をリセット
+      },
+    }));
+    actions.requestRender();
+  },
+
+  onSetPrizeSubGenre: (subKeyOrEmpty) => {
+    store.set((s) => ({
+      ...s,
+      filters: { ...(s.filters || {}), subGenreKey: String(subKeyOrEmpty || "").trim() },
+    }));
+    actions.requestRender();
+  },
+
+  onSetChara: (keyOrEmpty) => {
+    store.set((s) => ({
+      ...s,
+      filters: {
+        ...(s.filters || {}),
+        charaKey: String(keyOrEmpty || "").trim(),
+        charaSubKey: "", // ★親変更で子をリセット
+      },
+    }));
+    actions.requestRender();
+  },
+
+  onSetCharaSub: (subKeyOrEmpty) => {
+    store.set((s) => ({
+      ...s,
+      filters: { ...(s.filters || {}), charaSubKey: String(subKeyOrEmpty || "").trim() },
+    }));
+    actions.requestRender();
+  },
+
+  onSetFlags: (nextFlags) => {
+    store.set((s) => ({
+      ...s,
+      filters: {
+        ...(s.filters || {}),
+        flags: {
+          ...(s.filters?.flags || { movie: null, reserve: null, wl: null }),
+          ...(nextFlags || {}),
+        },
+      },
+    }));
+    actions.requestRender();
+  },
+
+  onClearFilters: () => {
+    store.set((s) => ({
+      ...s,
+      filters: {
+        machineNames: [],
+        feeKeys: [],
+        prizeGenreKey: "",
+        subGenreKey: "",
+        charaKey: "",
+        charaSubKey: "",
+        flags: { movie: null, reserve: null, wl: null },
+      },
+    }));
+    actions.requestRender();
+  },
+
+  // ----- 既存アクション（UI挙動） -----
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
@@ -89,8 +188,6 @@ const actions = {
   },
 
   requestRender: () => {
-    // store実装次第で「同値更新」がまとめられることがあるため
-    // 明示的に1回叩けるよう残す（subscribeに任せるのが基本）
     store.set((s) => ({ ...s }));
   },
 
@@ -132,7 +229,7 @@ const actions = {
       next[index] = String(value || "").trim();
       return { ...s, midSlotsDraft: next };
     });
-    actions.requestRender(); // ★即プレビューを確実に
+    actions.requestRender();
   },
 
   onCancelMidSlots: () => {
@@ -143,7 +240,6 @@ const actions = {
     actions.requestRender();
   },
 
-  // ✅ 決定＝確定＋閉じる
   onApplyMidSlots: () => {
     store.set((s) => {
       const fixed = [...s.midSlotsDraft];
@@ -210,9 +306,6 @@ function renderAll(state) {
   renderTopKpi(mounts.topKpi, state.topKpi);
   renderMidKpi(mounts, state, actions);
 
-  // ✅ チャート描画は「各ウィジェットが自分で行う」方針に変更済み
-  // （app.js から共通チャート描画を呼ばない＝中身に干渉しない）
-
   renderFocusOverlay(mounts.focusOverlay, mounts.focusModal, state, actions);
   renderDetail(mounts.detailMount, state, actions);
   renderDrawer(mounts.drawer, mounts.drawerOverlay, state, actions);
@@ -221,6 +314,7 @@ function renderAll(state) {
 renderAll(store.get());
 store.subscribe(renderAll);
 
+// 初回ロード
 hydrateFromRaw().catch((e) => {
   console.error(e);
   store.set((s) => ({
@@ -236,6 +330,7 @@ async function hydrateFromRaw() {
   const summary = raw?.summary ?? null;
   const masterDict = raw?.masterDict ?? {};
 
+  // codebook（decodeSymbol 用）
   let codebook = {};
   try {
     const res = await fetch("./data/master/codebook.json", {
@@ -246,7 +341,7 @@ async function hydrateFromRaw() {
     codebook = {};
   }
 
-  // ✅ ここは enrich（マスター合流 + decode）であって「揺れ吸収の正規化」ではない
+  // enrich（master合流 + decode）
   const rawEnrichedRows = rows.map((r) => {
     const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
     const m = key ? masterDict?.[key] : null;
@@ -270,18 +365,20 @@ async function hydrateFromRaw() {
     };
   });
 
+  // ✅ B案：正規化は入口で1回（全件）
+  const normRowsAll = rawEnrichedRows.map(normalizeRow);
+
+  // ✅ appフィルタ：正規化済みだけを対象にする（列名揺れを持ち込まない）
   const st = store.get();
+  const normRows = applyFilters(normRowsAll, st.filters);
 
-  // 既存互換：フィルタ適用済みの「生寄り（enrich済み）」を残す
-  const filtered = applyFilters(rawEnrichedRows, st.filters);
+  // 互換が要る場合のみ：filteredRows を残す（不要なら後で削除）
+  const filteredRows = rawEnrichedRows; // いまは “互換用” に全件保持
 
-  // ✅ B案の本体：入口で1回だけ正規化して state に持つ
-  const normRows = filtered.map(normalizeRow); // そのままでOK（normalizeRow差し替えれば動く）
-  
-  // 既存VM（トップ等）が filtered を見ている前提があるので、まずは互換維持
-  const vm = buildViewModel(filtered, summary);
+  // 既存VM（トップ等）が filteredRows を見ている前提があるなら維持
+  const vm = buildViewModel(filteredRows, summary);
 
-  // ✅ ここは “揺れの影響を受けにくい” normRows を元にする
+  // byAxis は “表示対象” に合わせて作る（フィルタ反映）
   const axis = buildByAxis(normRows);
 
   store.set((s) => ({
@@ -291,8 +388,8 @@ async function hydrateFromRaw() {
     byGenre: vm.byGenre,
     details: vm.details,
     byAxis: axis,
-    filters: vm.filters ?? s.filters,
-    filteredRows: filtered,
+    filteredRows,
+    normRowsAll,
     normRows,
     loadError: null,
   }));
