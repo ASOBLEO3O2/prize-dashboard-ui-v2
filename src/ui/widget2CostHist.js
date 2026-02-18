@@ -3,8 +3,12 @@ import { el, clear } from "../utils/dom.js";
 
 /**
  * Widget②：原価率 分布（ヒスト）
- * - mid：Chart生成/更新
- * - focus：Chart + 棒クリックでカード表示 + 並び替え
+ * - B案：state.normRows（正規化済み）だけを見る
+ *   - 原価率: r.costRate01（0..1）
+ *   - 売上:   r.sales
+ *   - 景品名: r.prizeName
+ *   - ブース: r.boothId
+ *   - マシン: r.machineName
  */
 
 // ===== bins（あなたの自然区切り）=====
@@ -16,20 +20,13 @@ export const W2_COST_BINS = [
   { label: "40%〜",   min: 0.40, max: Infinity, incMin: true,  incMax: true },
 ];
 
-function toNum(v) {
-  if (v == null) return null;
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string") {
-    const s = v.trim().replace(/,/g, "");
-    if (!s) return null;
-    if (s.endsWith("%")) {
-      const n = Number(s.slice(0, -1));
-      return Number.isFinite(n) ? n / 100 : null;
-    }
-    const n = Number(s);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
+function toNumOr0(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+function toNumOrNull(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 function fmtYen(v) {
@@ -52,85 +49,46 @@ function inBin_(rate01, b) {
   return geMin && ltMax;
 }
 
-function computeHistogram_(rows, mode) {
+function computeHistogram_(normRows, mode) {
   const arr = W2_COST_BINS.map(() => 0);
-  for (const r of rows) {
-    const rate = toNum(r?.cost_rate ?? r?.原価率);
-    const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
+
+  for (const r of normRows || []) {
+    const rate = toNumOrNull(r?.costRate01);
     if (rate == null) continue;
 
     const idx = W2_COST_BINS.findIndex((b) => inBin_(rate, b));
     if (idx < 0) continue;
 
-    arr[idx] += mode === "sales" ? sales : 1;
+    if (mode === "sales") {
+      arr[idx] += toNumOr0(r?.sales);
+    } else {
+      arr[idx] += 1;
+    }
   }
+
   return arr;
 }
 
-function rowsInBin_(rows, idx) {
+function rowsInBin_(normRows, idx) {
   const b = W2_COST_BINS[idx];
   if (!b) return [];
-  return rows.filter((r) => {
-    const rate = toNum(r?.cost_rate ?? r?.原価率);
+  return (normRows || []).filter((r) => {
+    const rate = toNumOrNull(r?.costRate01);
     return rate != null && inBin_(rate, b);
   });
 }
 
 function pickPrizeName_(r) {
-  if (!r) return "";
-
-  const direct =
-    r.prize_name ??
-    r.prizeName ??
-    r.prize ??
-    r.item_name ??
-    r.itemName ??
-    r.name ??
-    r.title ??
-    r.景品名 ??
-    r["景品名"] ??
-    r.景品 ??
-    r["景品"] ??
-    "";
-
-  const s1 = String(direct || "").trim();
-  if (s1) return s1;
-
-  const norm = (k) =>
-    String(k || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[ \t\r\n\u3000]/g, "")
-      .replace(/[・_\-]/g, "");
-
-  const want = new Set(["景品名", "景品", "prizename", "prize", "itemname", "item", "name", "title"]);
-  for (const [k, v] of Object.entries(r)) {
-    if (!want.has(norm(k))) continue;
-    const sv = String(v || "").trim();
-    if (sv) return sv;
-  }
-  return "";
+  const s = String(r?.prizeName ?? "").trim();
+  return s;
 }
 
 function pickBoothId_(r) {
-  return (
-    r?.booth_id ??
-    r?.["ブースID"] ??
-    r?.boothId ??
-    r?.machine_key ??
-    r?.machine_ref ??
-    ""
-  );
+  return String(r?.boothId ?? "").trim();
 }
 
 function pickMachineName_(r) {
-  return (
-    r?.machine_name ??
-    r?.machine_ref ??
-    r?.対応マシン名 ??
-    r?.["対応マシン名"] ??
-    ""
-  );
+  return String(r?.machineName ?? "").trim();
 }
 
 // ✅ ブースID自然順（数字を数値として比較）
@@ -217,9 +175,9 @@ function ensureMidChart_(canvas) {
   return true;
 }
 
-function updateMidChart_(rows, mode) {
+function updateMidChart_(normRows, mode) {
   if (!midCostHistChart) return;
-  const hist = computeHistogram_(rows, mode);
+  const hist = computeHistogram_(normRows, mode);
 
   midCostHistChart.data.datasets[0].data = hist;
   midCostHistChart.data.datasets[0].label = (mode === "sales") ? "売上" : "台数";
@@ -248,7 +206,8 @@ export function buildWidget2CostHistTools(actions, opts = {}) {
 export function renderWidget2CostHist(body, state, actions) {
   if (!body) return;
 
-  const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
+  // ✅ B案：normRows に統一
+  const rows = Array.isArray(state?.normRows) ? state.normRows : [];
 
   if (!body.__w2_built) {
     clear(body);
@@ -302,7 +261,9 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
   if (!mount) return;
 
   const Chart = window.Chart;
-  const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
+
+  // ✅ B案：normRows に統一
+  const rows = Array.isArray(state?.normRows) ? state.normRows : [];
 
   clear(mount);
 
@@ -348,7 +309,7 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
     nav,
   ]);
 
-  // --- 左：チャート（Widget②専用ラップに変更） ---
+  // --- 左：チャート ---
   const chartWrap = el("div", { class: "w2ChartWrap" });
   const canvas = el("canvas", { id: "w2FocusCostHistChart" });
   canvas.style.width = "100%";
@@ -356,18 +317,14 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
   canvas.style.display = "block";
   chartWrap.appendChild(canvas);
 
-  // --- 右：カード一覧（Widget②専用） ---
+  // --- 右：カード一覧 ---
   const listTitle = el("div", { class: "w2ListTitle", text: "選択中：—" });
   const list = el("div", { class: "w2List" });
 
-  const grid = el(
-    "div",
-    { class: "focusDonutGrid w2Grid" },
-    [
-      el("div", { class: "w2Left" }, [chartWrap]),
-      el("div", { class: "w2Right" }, [listTitle, list]),
-    ]
-  );
+  const grid = el("div", { class: "focusDonutGrid w2Grid" }, [
+    el("div", { class: "w2Left" }, [chartWrap]),
+    el("div", { class: "w2Right" }, [listTitle, list]),
+  ]);
 
   panel.appendChild(grid);
   mount.appendChild(panel);
@@ -388,15 +345,15 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
       }
 
       if (key === "rate") {
-        const ra = toNum(a?.cost_rate ?? a?.原価率);
-        const rb = toNum(b?.cost_rate ?? b?.原価率);
+        const ra = toNumOrNull(a?.costRate01);
+        const rb = toNumOrNull(b?.costRate01);
         const na = ra == null ? (dir === "asc" ? Infinity : -Infinity) : ra;
         const nb = rb == null ? (dir === "asc" ? Infinity : -Infinity) : rb;
         return (na - nb) * sign;
       }
 
-      const sa = toNum(a?.sales ?? a?.総売上);
-      const sb = toNum(b?.sales ?? b?.総売上);
+      const sa = toNumOrNull(a?.sales);
+      const sb = toNumOrNull(b?.sales);
       const na = sa == null ? (dir === "asc" ? Infinity : -Infinity) : sa;
       const nb = sb == null ? (dir === "asc" ? Infinity : -Infinity) : sb;
       return (na - nb) * sign;
@@ -427,8 +384,8 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
       const prize = pickPrizeName_(r) || "（景品名なし）";
       const booth = String(pickBoothId_(r) || "（ブースIDなし）");
       const machine = String(pickMachineName_(r) || "");
-      const sales = toNum(r?.sales ?? r?.総売上) ?? 0;
-      const rate = toNum(r?.cost_rate ?? r?.原価率);
+      const sales = toNumOr0(r?.sales);
+      const rate = toNumOrNull(r?.costRate01);
 
       const showMachine = machine && machine.trim() && machine.trim() !== booth.trim();
 
@@ -436,7 +393,9 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
         el("div", { class: "w2Card" }, [
           el("div", { class: "w2CardTitle", text: prize }),
           el("div", { class: "w2CardSub", text: booth }),
-          showMachine ? el("div", { class: "w2CardSub2", text: machine }) : el("div", { class: "w2CardSub2 is-hidden", text: "" }),
+          showMachine
+            ? el("div", { class: "w2CardSub2", text: machine })
+            : el("div", { class: "w2CardSub2 is-hidden", text: "" }),
           el("div", { class: "w2CardMetrics" }, [
             el("span", { class: "w2Chip", text: `売上: ${fmtYen(sales)}円` }),
             el("span", { class: "w2Chip", text: `原価率: ${rate == null ? "—" : fmtPct01(rate)}` }),
@@ -446,9 +405,7 @@ export function renderWidget2CostHistFocus(mount, state, actions) {
     });
 
     if (picked.length > MAX) {
-      list.appendChild(
-        el("div", { class: "w2Hint", text: `※表示は上位${MAX}件まで（全${picked.length}件）` })
-      );
+      list.appendChild(el("div", { class: "w2Hint", text: `※表示は上位${MAX}件まで（全${picked.length}件）` }));
     }
   }
 
