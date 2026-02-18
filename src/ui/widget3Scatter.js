@@ -525,12 +525,16 @@ export function renderWidget3ScatterFocus(mount, state) {
             ticks: { callback: (v) => `${fmtYen(v)}円` },
             grid: { color: "rgba(148,163,184,.18)" },
           },
-          y: {
-            beginAtZero: true,
-            suggestedMax: 100,
-            ticks: { callback: (v) => `${v}%` },
-            grid: { color: "rgba(148,163,184,.18)" },
-          },
+         y: {
+  min: 0,
+  max: 100,                 // ✅ 上限固定
+  ticks: {
+    stepSize: 10,
+    callback: (v) => `${v}%`,
+  },
+  grid: { color: "rgba(148,163,184,.18)" },
+},
+
         },
         onClick(evt) {
           const hit = focusChart.getElementsAtEventForMode(
