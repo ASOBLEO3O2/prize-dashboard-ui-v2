@@ -15,6 +15,9 @@ import { loadRawData } from "./data/load.js";
 import { applyFilters } from "./logic/filter.js";
 import { buildViewModel } from "./logic/aggregate.js";
 
+// ✅ B案：入口で1回だけ正規化し、以後は state.normRows を使う
+import { normalizeRow } from "./data/normalizeRow.js";
+
 // ❌ charts はウィジェットが自分で描く（枠に干渉させない）
 // import { renderCharts } from "./ui/charts.js";
 import { renderFocusOverlay } from "./ui/focusOverlay.js";
@@ -28,7 +31,13 @@ const initialState = {
   details: structuredClone(MOCK.details),
 
   widget1Axis: "景品ジャンル",
+
+  // 既存互換：生寄り（enrich済み）+ フィルタ適用済み
   filteredRows: [],
+
+  // ✅ 本命：正規化済み（以後ウィジェットはこれを見る）
+  normRows: [],
+
   byAxis: {},
 
   midAxis: "ジャンル",
@@ -237,7 +246,8 @@ async function hydrateFromRaw() {
     codebook = {};
   }
 
-  const normalizedRows = rows.map((r) => {
+  // ✅ ここは enrich（マスター合流 + decode）であって「揺れ吸収の正規化」ではない
+  const rawEnrichedRows = rows.map((r) => {
     const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
     const m = key ? masterDict?.[key] : null;
     const decoded = key ? decodeSymbol(key, codebook) : {};
@@ -261,10 +271,18 @@ async function hydrateFromRaw() {
   });
 
   const st = store.get();
-  const filtered = applyFilters(normalizedRows, st.filters);
 
+  // 既存互換：フィルタ適用済みの「生寄り（enrich済み）」を残す
+  const filtered = applyFilters(rawEnrichedRows, st.filters);
+
+  // ✅ B案の本体：入口で1回だけ正規化して state に持つ
+  const normRows = filtered.map(normalizeRow);
+
+  // 既存VM（トップ等）が filtered を見ている前提があるので、まずは互換維持
   const vm = buildViewModel(filtered, summary);
-  const axis = buildByAxis(filtered);
+
+  // ✅ ここは “揺れの影響を受けにくい” normRows を元にする
+  const axis = buildByAxis(normRows);
 
   store.set((s) => ({
     ...s,
@@ -275,6 +293,7 @@ async function hydrateFromRaw() {
     byAxis: axis,
     filters: vm.filters ?? s.filters,
     filteredRows: filtered,
+    normRows,
     loadError: null,
   }));
 }
