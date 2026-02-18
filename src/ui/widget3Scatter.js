@@ -2,27 +2,24 @@
 import { el, clear } from "../utils/dom.js";
 import { GENRES } from "../constants.js";
 
+/**
+ * Widget③：売上 × 原価率（散布）
+ * - B案：state.normRows（正規化済み）だけを見る
+ *   - x: r.sales
+ *   - y: r.costRate01（0..1）→ 表示は %
+ *   - card: prizeName / boothId / machineName / claw / costRate01 / prizeGenreLabel
+ *
+ * 注意：
+ * - GENRES は constants.js で「配列」( [{key,label}, ...] )
+ * - 旧実装の Object.entries(GENRES) は [object Object] 系の原因になり得る
+ */
+
 /* =========================================================
  * Utils
  * ========================================================= */
 
-function toNum(v) {
-  if (v == null) return null;
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  const s = String(v).trim().replace(/,/g, "");
-  if (!s) return null;
-  if (s.endsWith("%")) {
-    const n = Number(s.slice(0, -1));
-    return Number.isFinite(n) ? n / 100 : null;
-  }
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-
-function normRate01(v) {
-  const n = toNum(v);
-  if (n == null) return null;
-  return n > 1.5 ? n / 100 : n; // 31 or 0.31 両対応
+function asStr(v) {
+  return String(v ?? "").trim();
 }
 
 function fmtYen(v) {
@@ -30,59 +27,54 @@ function fmtYen(v) {
 }
 
 function fmtPct01(v) {
-  if (!Number.isFinite(v)) return "—";
-  return `${(v * 100).toFixed(1)}%`;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return `${(n * 100).toFixed(1)}%`;
 }
 
-function pickGenreKey(r) {
-  // ※ジャンル値が key ではなく label の場合もあるため、後で normalize する
-  return (
-    r?.genre ??
-    r?.["ジャンル"] ??
-    r?.景品ジャンル ??
-    r?.["景品ジャンル"] ??
-    "未分類"
-  );
+function canvasReady(cv) {
+  if (!cv) return false;
+  const rect = cv.getBoundingClientRect?.();
+  if (!rect) return false;
+  return rect.width >= 40 && rect.height >= 80;
 }
 
-function normalizeGenreKey(g) {
-  const s = String(g || "").trim();
-  if (!s) return "未分類";
-  // すでに key の場合
-  if (GENRES && Object.prototype.hasOwnProperty.call(GENRES, s)) return s;
-  // label → key 変換
-  if (GENRES) {
-    const ent = Object.entries(GENRES).find(([, label]) => String(label) === s);
-    if (ent) return ent[0];
+function genresList_() {
+  // GENRES: [{key,label}, ...] 前提。念のため壊れてても落ちないように。
+  if (Array.isArray(GENRES)) {
+    return GENRES
+      .map((g) => ({
+        key: asStr(g?.key),
+        label: asStr(g?.label),
+      }))
+      .filter((g) => g.key);
   }
-  return s; // 不明値はそのまま保持（後方互換）
+  return [];
 }
 
-function genreLabelFromKey(key) {
-  if (!key) return "未分類";
-  if (GENRES && Object.prototype.hasOwnProperty.call(GENRES, key)) return GENRES[key];
-  return String(key);
+function buildGenreSelectOptions_() {
+  const list = genresList_();
+  // fallback: GENRESが無い/空なら「ALLだけ」
+  if (!list.length) {
+    return [el("option", { value: "ALL", text: "ジャンル：ALL" })];
+  }
+  return [
+    el("option", { value: "ALL", text: "ジャンル：ALL" }),
+    ...list.map((g) => el("option", { value: g.key, text: `ジャンル：${g.label || g.key}` })),
+  ];
 }
 
-function pickBoothId(r) {
-  return r?.booth_id ?? r?.["ブースID"] ?? r?.boothId ?? "—";
-}
-
-function pickMachine(r) {
-  return r?.machine_name ?? r?.["対応マシン名"] ?? r?.対応マシン名 ?? "—";
-}
-
-function pickPrize(r) {
-  return r?.item_name ?? r?.["景品名"] ?? r?.景品名 ?? r?.name ?? "（名称なし）";
-}
-
-function buildPoints(rows) {
+function buildPoints(normRows) {
   const pts = [];
-  for (const r of rows) {
-    const sales = toNum(r?.sales);
-    const rate = normRate01(r?.cost_rate ?? r?.原価率);
-    if (sales == null || rate == null) continue;
-    pts.push({ x: sales, y: rate * 100, _row: r });
+  for (const r of normRows || []) {
+    const sales = Number(r?.sales);
+    const rate01 = Number(r?.costRate01);
+
+    if (!Number.isFinite(sales)) continue;
+    if (!Number.isFinite(rate01)) continue;
+
+    // Chartは y を % で表示したいので *100
+    pts.push({ x: sales, y: rate01 * 100, _row: r });
   }
   return pts;
 }
@@ -100,13 +92,6 @@ function computeAverageFromPoints(points) {
   }
   if (!n) return { avgX: null, avgY: null };
   return { avgX: sx / n, avgY: sy / n };
-}
-
-function canvasReady(cv) {
-  if (!cv) return false;
-  const rect = cv.getBoundingClientRect?.();
-  if (!rect) return false;
-  return rect.width >= 40 && rect.height >= 80;
 }
 
 /* =========================================================
@@ -197,16 +182,12 @@ function ensureMid(canvas) {
         animation: false,
         scales: {
           x: {
-            ticks: {
-              callback: (v) => `${fmtYen(v)}円`,
-            },
+            ticks: { callback: (v) => `${fmtYen(v)}円` },
           },
           y: {
             beginAtZero: true,
             suggestedMax: 100,
-            ticks: {
-              callback: (v) => `${v}%`,
-            },
+            ticks: { callback: (v) => `${v}%` },
           },
         },
       },
@@ -219,10 +200,11 @@ function ensureMid(canvas) {
   return true;
 }
 
-function updateMid(rows) {
+function updateMid(normRows) {
   if (!midChart) return;
 
-  const pts = buildPoints(rows);
+  const pts = buildPoints(normRows);
+
   // v0：過負荷保険（表示上限）
   const MAX = 2500;
   midChart.data.datasets[0].data = pts.length > MAX ? pts.slice(0, MAX) : pts;
@@ -236,7 +218,8 @@ function updateMid(rows) {
 export function renderWidget3Scatter(body, state, actions) {
   if (!body) return;
 
-  const rows = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
+  // ✅ B案：normRows に統一
+  const rows = Array.isArray(state?.normRows) ? state.normRows : [];
 
   if (!body.__w3_built) {
     clear(body);
@@ -297,22 +280,18 @@ export function renderWidget3ScatterFocus(mount, state) {
   destroyWidget3ScatterFocus();
   clear(mount);
 
-  const rowsAll = Array.isArray(state?.filteredRows) ? state.filteredRows : [];
+  // ✅ B案：normRows に統一
+  const rowsAll = Array.isArray(state?.normRows) ? state.normRows : [];
 
   // ===== tools =====
-  const genreSel = el("select", { class: "select" }, [
-    el("option", { value: "ALL", text: "ジャンル：ALL" }),
-    ...Object.entries(GENRES || {}).map(([key, label]) =>
-      el("option", { value: key, text: `ジャンル：${label}` })
-    ),
-  ]);
+  const genreSel = el("select", { class: "select" }, buildGenreSelectOptions_());
 
-  const machineSet = new Set(rowsAll.map(pickMachine).filter(Boolean));
+  const machineSet = new Set(
+    (rowsAll || []).map((r) => asStr(r?.machineName)).filter(Boolean)
+  );
   const machineSel = el("select", { class: "select" }, [
     el("option", { value: "ALL", text: "マシン：ALL" }),
-    ...Array.from(machineSet).sort().map((m) =>
-      el("option", { value: m, text: `マシン：${m}` })
-    ),
+    ...Array.from(machineSet).sort().map((m) => el("option", { value: m, text: `マシン：${m}` })),
   ]);
 
   const toolsRow = el("div", { class: "w3ToolsRow" }, [genreSel, machineSel]);
@@ -352,9 +331,9 @@ export function renderWidget3ScatterFocus(mount, state) {
     const g = genreSel.value;
     const m = machineSel.value;
 
-    return rowsAll.filter((r) => {
-      const gk = normalizeGenreKey(pickGenreKey(r));
-      const mk = pickMachine(r);
+    return (rowsAll || []).filter((r) => {
+      const gk = asStr(r?.prizeGenreKey) || "other";
+      const mk = asStr(r?.machineName);
 
       if (g !== "ALL" && gk !== g) return false;
       if (m !== "ALL" && mk !== m) return false;
@@ -366,15 +345,15 @@ export function renderWidget3ScatterFocus(mount, state) {
   function renderCard(r) {
     clear(cardArea);
 
-    const booth = String(pickBoothId(r));
-    const machine = String(pickMachine(r));
-    const prize = String(pickPrize(r));
-    const gk = normalizeGenreKey(pickGenreKey(r));
-    const genreLabel = genreLabelFromKey(gk);
+    const booth = asStr(r?.boothId) || "—";
+    const machine = asStr(r?.machineName) || "—";
+    const prize = asStr(r?.prizeName) || "（名称なし）";
 
-    const sales = toNum(r?.sales) ?? 0;
-    const claw = toNum(r?.claw) ?? 0;
-    const rate01 = normRate01(r?.cost_rate ?? r?.原価率);
+    const genreLabel = asStr(r?.prizeGenreLabel) || "その他";
+
+    const sales = Number(r?.sales) || 0;
+    const claw = Number(r?.claw) || 0;
+    const rate01 = Number.isFinite(Number(r?.costRate01)) ? Number(r.costRate01) : null;
 
     titleArea.textContent = `選択中：${booth}`;
 
@@ -395,6 +374,7 @@ export function renderWidget3ScatterFocus(mount, state) {
   function renderChart() {
     const rows = filteredRows();
     const pts = buildPoints(rows);
+
     const { avgX, avgY } = computeAverageFromPoints(pts);
 
     // 表示過負荷保険
@@ -423,12 +403,10 @@ export function renderWidget3ScatterFocus(mount, state) {
         animation: false,
         plugins: {
           legend: { display: false },
-          avgLinesPlugin: { avgX, avgY }, // ← ここに渡す
+          avgLinesPlugin: { avgX, avgY },
         },
         scales: {
-          x: {
-            ticks: { callback: (v) => `${fmtYen(v)}円` },
-          },
+          x: { ticks: { callback: (v) => `${fmtYen(v)}円` } },
           y: {
             beginAtZero: true,
             suggestedMax: 100,
@@ -447,7 +425,7 @@ export function renderWidget3ScatterFocus(mount, state) {
           renderCard(r);
         },
       },
-      plugins: [AvgLinesPlugin], // ← 内蔵プラグインを注入
+      plugins: [AvgLinesPlugin],
     });
 
     // フィルタ変更で「選択中」表示はリセット
