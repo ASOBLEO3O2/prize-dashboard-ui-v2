@@ -1,19 +1,14 @@
 // src/data/normalizeRow.js
-// B案：入口で1回だけ正規化し、以後は state.normRows の固定キーだけを見る
-// - masterDict / decodeSymbol 由来の “記号キー” を codebook で label 化
-// - 取れないものは other/その他（運用で見直し）
-// - フラグは boolean に確定
+// decodeSymbol が返す「日本語列 + *_code」を入口で吸収し、固定キーへ変換する
 
 function asStr(v) {
   return String(v ?? "").trim();
 }
-
 function asNum(v) {
   if (v == null || v === "") return 0;
   const n = Number(String(v).replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : 0;
 }
-
 function pickFirst(obj, keys) {
   for (const k of keys) {
     const v = obj?.[k];
@@ -21,29 +16,14 @@ function pickFirst(obj, keys) {
   }
   return null;
 }
-
-function labelFrom(codebook, group, key) {
-  const k = asStr(key);
-  if (!k) return "";
-  const dict = codebook?.[group];
-  if (!dict) return "";
-  const v = dict[k];
-  return v != null ? String(v) : "";
-}
-
-function boolFromMaruBatsu(codebook, group, key) {
-  // codebookは "1":"〇", "2":"×" の形
-  const lbl = labelFrom(codebook, group, key);
-  if (lbl === "〇") return true;
-  if (lbl === "×") return false;
-  // 万一 codebook が変わった時の保険：キーが "1"/"2" の場合
-  const k = asStr(key);
-  if (k === "1") return true;
-  if (k === "2") return false;
+function toBoolFromCode(code) {
+  // codebook前提： "1"=〇, "2"=×（decodeSymbolの *_code を信頼）
+  const c = asStr(code);
+  if (c === "1") return true;
+  if (c === "2") return false;
   return false;
 }
-
-function ensureOther(key, label, otherKey = "other", otherLabel = "その他") {
+function ensureOtherKeyLabel(key, label, otherKey = "other", otherLabel = "その他") {
   const k = asStr(key);
   const l = asStr(label);
   if (k) return { key: k, label: l || "" };
@@ -51,28 +31,27 @@ function ensureOther(key, label, otherKey = "other", otherLabel = "その他") {
 }
 
 /**
- * normalizeRow(rawRow, codebook)
- * - rawRow: enrich済み（masterDict + decodeSymbol merge 後）想定
- * - codebook: codebook.json
+ * normalizeRow(rawRow)
+ * rawRow は app.js で masterDict と decodeSymbol を merge 済み想定
  */
-export function normalizeRow(rawRow, codebook) {
-  // ===== 基本キー（揺れ吸収） =====
-  const boothId = asStr(pickFirst(rawRow, ["boothId", "booth_id", "ブースID", "booth"]));
-  const labelId = asStr(pickFirst(rawRow, ["labelId", "label_id", "ラベルID", "label"]));
+export function normalizeRow(rawRow) {
+  // ===== 基本（masterDict由来） =====
+  const boothId = asStr(pickFirst(rawRow, ["boothId", "booth_id", "ブースID"]));
+  const labelId = asStr(pickFirst(rawRow, ["labelId", "label_id", "ラベルID"]));
   const machineName = asStr(pickFirst(rawRow, ["machineName", "machine_name", "対応マシン名", "マシン名"]));
 
-  const prizeName = asStr(pickFirst(rawRow, ["prizeName", "item_name", "prize_name", "景品名", "name"]));
+  const prizeName = asStr(pickFirst(rawRow, ["prizeName", "item_name", "景品名"]));
 
   const sales = asNum(pickFirst(rawRow, ["sales", "総売上", "売上"]));
-  const claw = asNum(pickFirst(rawRow, ["claw", "消化額", "cost", "原価"]));
-  const consumeCount = asNum(pickFirst(rawRow, ["consume_count", "消化数", "count"]));
+  const claw = asNum(pickFirst(rawRow, ["claw", "消化額"]));
+  const consumeCount = asNum(pickFirst(rawRow, ["consume_count", "消化数"]));
 
-  const w = asNum(pickFirst(rawRow, ["w", "width", "幅"]));
-  const d = asNum(pickFirst(rawRow, ["d", "depth", "奥行き"]));
-  const updatedDate = asStr(pickFirst(rawRow, ["updated_date", "updatedDate", "更新日"]));
+  const w = asNum(pickFirst(rawRow, ["w", "幅"]));
+  const d = asNum(pickFirst(rawRow, ["d", "奥行き"]));
+  const updatedDate = asStr(pickFirst(rawRow, ["updated_date", "更新日", "updatedDate"]));
 
-  // cost_rate が 0..1 / 0..100 / "8%" など揺れても 0..1 に寄せる
-  const crRaw = pickFirst(rawRow, ["costRate01", "cost_rate", "cost_rate01", "原価率"]);
+  // cost_rate は 0..1 に寄せる（masterDictは既に0..1想定）
+  const crRaw = pickFirst(rawRow, ["costRate01", "cost_rate", "原価率"]);
   let costRate01 = 0;
   if (typeof crRaw === "string" && crRaw.includes("%")) {
     costRate01 = asNum(crRaw.replace("%", "")) / 100;
@@ -82,85 +61,35 @@ export function normalizeRow(rawRow, codebook) {
   }
   if (!Number.isFinite(costRate01) || costRate01 < 0) costRate01 = 0;
 
-  // ===== ここからフィルタ用（記号→ラベル） =====
-  // decodeSymbol が返す “記号キー” はプロジェクト側の命名に合わせて拾う
-  // 例：feeKey / fee_code / fee など、揺れそうな名前はここで吸収する
+  // ===== ここから decodeSymbol（日本語列 + *_code）を固定キー化 =====
+  const fee = ensureOtherKeyLabel(rawRow?.["料金_code"], rawRow?.["料金"]);
+  const plays = ensureOtherKeyLabel(rawRow?.["回数_code"], rawRow?.["回数"]);
+  const method = ensureOtherKeyLabel(rawRow?.["投入法_code"], rawRow?.["投入法"]);
 
-  const feeKey0 = asStr(pickFirst(rawRow, ["feeKey", "fee_key", "fee", "料金記号"]));
-  const playsKey0 = asStr(pickFirst(rawRow, ["playsKey", "plays_key", "plays", "回数記号"]));
-  const methodKey0 = asStr(pickFirst(rawRow, ["methodKey", "method_key", "method", "投入法記号"]));
+  const claw3 = ensureOtherKeyLabel(rawRow?.["3本爪_code"], rawRow?.["3本爪"]);
+  const claw2 = ensureOtherKeyLabel(rawRow?.["2本爪_code"], rawRow?.["2本爪"]);
 
-  const claw3Key0 = asStr(pickFirst(rawRow, ["claw3Key", "claw3_key", "claw3", "3本爪記号"]));
-  const claw2Key0 = asStr(pickFirst(rawRow, ["claw2Key", "claw2_key", "claw2", "2本爪記号"]));
+  const prizeGenre = ensureOtherKeyLabel(rawRow?.["景品ジャンル_code"], rawRow?.["景品ジャンル"]);
 
-  const prizeGenreKey0 = asStr(pickFirst(rawRow, ["prizeGenreKey", "prizeGenre_key", "prizeGenre", "景品ジャンル記号"]));
-  const foodKey0 = asStr(pickFirst(rawRow, ["foodKey", "food_key", "food", "食品記号"]));
-  const plushKey0 = asStr(pickFirst(rawRow, ["plushKey", "plush_key", "plush", "ぬいぐるみ記号"]));
-  const goodsKey0 = asStr(pickFirst(rawRow, ["goodsKey", "goods_key", "goods", "雑貨記号"]));
+  // 子ジャンルは「該当時だけ code が入る」仕様なので、空は空で保持（=未該当）
+  const foodKey = asStr(rawRow?.["食品ジャンル_code"]);
+  const plushKey = asStr(rawRow?.["ぬいぐるみジャンル_code"]);
+  const goodsKey = asStr(rawRow?.["雑貨ジャンル_code"]);
 
-  const targetKey0 = asStr(pickFirst(rawRow, ["targetKey", "target_key", "target", "ターゲット記号"]));
-  const ageKey0 = asStr(pickFirst(rawRow, ["ageKey", "age_key", "age", "年代記号"]));
+  const foodLabel = foodKey ? asStr(rawRow?.["食品ジャンル"]) || "その他" : "";
+  const plushLabel = plushKey ? asStr(rawRow?.["ぬいぐるみジャンル"]) || "その他" : "";
+  const goodsLabel = goodsKey ? asStr(rawRow?.["雑貨ジャンル"]) || "その他" : "";
 
-  const charaKey0 = asStr(pickFirst(rawRow, ["charaKey", "chara_key", "chara", "キャラ記号"]));
-  const charaGenreKey0 = asStr(pickFirst(rawRow, ["charaGenreKey", "charaGenre_key", "charaGenre", "キャラジャンル記号"]));
-  const nonCharaGenreKey0 = asStr(pickFirst(rawRow, ["nonCharaGenreKey", "nonCharaGenre_key", "nonCharaGenre", "ノンキャラジャンル記号"]));
+  const target = ensureOtherKeyLabel(rawRow?.["ターゲット_code"], rawRow?.["ターゲット"]);
+  const age = ensureOtherKeyLabel(rawRow?.["年代_code"], rawRow?.["年代"]);
 
-  const movieKey0 = asStr(pickFirst(rawRow, ["movieKey", "movie_key", "movie", "映画記号"]));
-  const reserveKey0 = asStr(pickFirst(rawRow, ["reserveKey", "reserve_key", "reserve", "予約記号"]));
-  const wlKey0 = asStr(pickFirst(rawRow, ["wlKey", "wl_key", "wl", "WLオリジナル記号"]));
+  const chara = ensureOtherKeyLabel(rawRow?.["キャラ_code"], rawRow?.["キャラ"]);
+  const charaGenre = ensureOtherKeyLabel(rawRow?.["キャラジャンル_code"], rawRow?.["キャラジャンル"]);
+  const nonCharaGenre = ensureOtherKeyLabel(rawRow?.["ノンキャラジャンル_code"], rawRow?.["ノンキャラジャンル"]);
 
-  // label 化（未定義なら空）
-  const feeLabel0 = labelFrom(codebook, "fee", feeKey0);
-  const playsLabel0 = labelFrom(codebook, "plays", playsKey0);
-  const methodLabel0 = labelFrom(codebook, "method", methodKey0);
-
-  const claw3Label0 = labelFrom(codebook, "claw3", claw3Key0);
-  const claw2Label0 = labelFrom(codebook, "claw2", claw2Key0);
-
-  const prizeGenreLabel0 = labelFrom(codebook, "prizeGenre", prizeGenreKey0);
-  const foodLabel0 = labelFrom(codebook, "food", foodKey0);
-  const plushLabel0 = labelFrom(codebook, "plush", plushKey0);
-  const goodsLabel0 = labelFrom(codebook, "goods", goodsKey0);
-
-  const targetLabel0 = labelFrom(codebook, "target", targetKey0);
-  const ageLabel0 = labelFrom(codebook, "age", ageKey0);
-
-  const charaLabel0 = labelFrom(codebook, "chara", charaKey0);
-  const charaGenreLabel0 = labelFrom(codebook, "charaGenre", charaGenreKey0);
-  const nonCharaGenreLabel0 = labelFrom(codebook, "nonCharaGenre", nonCharaGenreKey0);
-
-  // “その他”ルール（空なら other/その他に落とす）
-  const fee = ensureOther(feeKey0, feeLabel0);
-  const plays = ensureOther(playsKey0, playsLabel0);
-  const method = ensureOther(methodKey0, methodLabel0);
-
-  const claw3 = ensureOther(claw3Key0, claw3Label0);
-  const claw2 = ensureOther(claw2Key0, claw2Label0);
-
-  // prizeGenre は "other" ではなく、空は空のままでも良いが、ここも統一するなら other に落とす
-  const prizeGenre = ensureOther(prizeGenreKey0, prizeGenreLabel0);
-
-  // サブジャンルは「空＝未該当」が自然なので other に落とさず空でOK、でも運用次第。
-  // 今回は “見直し” をしやすいように空は空で保持し、表示側で空は非表示にできる。
-  const foodKey = asStr(foodKey0);
-  const plushKey = asStr(plushKey0);
-  const goodsKey = asStr(goodsKey0);
-
-  const foodLabel = foodKey ? (foodLabel0 || "その他") : "";
-  const plushLabel = plushKey ? (plushLabel0 || "その他") : "";
-  const goodsLabel = goodsKey ? (goodsLabel0 || "その他") : "";
-
-  const target = ensureOther(targetKey0, targetLabel0);
-  const age = ensureOther(ageKey0, ageLabel0);
-
-  const chara = ensureOther(charaKey0, charaLabel0);
-  const charaGenre = ensureOther(charaGenreKey0, charaGenreLabel0);
-  const nonCharaGenre = ensureOther(nonCharaGenreKey0, nonCharaGenreLabel0);
-
-  // フラグは boolean に確定
-  const isMovie = boolFromMaruBatsu(codebook, "movie", movieKey0);
-  const isReserve = boolFromMaruBatsu(codebook, "reserve", reserveKey0);
-  const isWlOriginal = boolFromMaruBatsu(codebook, "wl", wlKey0);
+  const isMovie = toBoolFromCode(rawRow?.["映画_code"]);
+  const isReserve = toBoolFromCode(rawRow?.["予約_code"]);
+  const isWlOriginal = toBoolFromCode(rawRow?.["WLオリジナル_code"]);
 
   return {
     // ===== ID系 =====
@@ -168,7 +97,7 @@ export function normalizeRow(rawRow, codebook) {
     labelId,
     machineName,
 
-    // ===== 表示/数値 =====
+    // ===== 数値/表示 =====
     prizeName,
     sales,
     claw,
@@ -178,7 +107,7 @@ export function normalizeRow(rawRow, codebook) {
     d,
     updatedDate,
 
-    // ===== フィルタ用（固定キー） =====
+    // ===== フィルタ固定キー（Key/Label） =====
     feeKey: fee.key,
     feeLabel: fee.label,
 
@@ -199,10 +128,8 @@ export function normalizeRow(rawRow, codebook) {
 
     foodKey,
     foodLabel,
-
     plushKey,
     plushLabel,
-
     goodsKey,
     goodsLabel,
 
