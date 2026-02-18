@@ -4,41 +4,41 @@ import { GENRES } from "../constants.js";
 
 /**
  * Widget③：売上 × 原価率（散布）
- * - B案：state.normRows（正規化済み）だけを見る
- *   - x: r.sales
- *   - y: r.costRate01（0..1）→ 表示は %
- *   - card: normRows の情報をできるだけ出す（薄さ解消）
+ * - B案：state.normRows（正規化済み）だけを見る（raw列へ戻らない）
  *
- * 修正（2026-02-18）
- * - tooltip の「points:(x,y)大量列挙」を抑止
- * - focus（全画面）レイアウト：左最大化・右カードだけスクロール
- * - カード内容を normRows 情報で増やす
+ * 表示：
+ * - X軸：売上（円）
+ * - Y軸：原価率（%）= costRate01 * 100
+ *
+ * 2026-02（調整）
+ * - tooltip：重なり多数でも「1行 + (+n件)」にして大量列挙を抑止
+ * - midでもブースID（=表示ID）を出す
+ * - focus：右カードのみスクロール、縦長/狭幅は縦積み（CSS側）
+ * - カード情報を normRows 情報で濃くする
+ * - 点/軸/グリッドのコントラストを上げる
  */
 
 /* =========================================================
- * Utils
+ * 表示IDの方針（どれか1つ）
  * ========================================================= */
+const W3_ID_MODE = "booth"; // "booth" | "machine" | "label"
 
 function asStr(v) {
   return String(v ?? "").trim();
 }
-
 function fmtYen(v) {
   return new Intl.NumberFormat("ja-JP").format(Math.round(Number(v) || 0));
 }
-
 function fmtPct01(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   return `${(n * 100).toFixed(1)}%`;
 }
-
 function fmtPct100(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   return `${n.toFixed(1)}%`;
 }
-
 function canvasReady(cv) {
   if (!cv) return false;
   const rect = cv.getBoundingClientRect?.();
@@ -46,24 +46,28 @@ function canvasReady(cv) {
   return rect.width >= 40 && rect.height >= 80;
 }
 
-function genresList_() {
-  // GENRES: [{key,label}, ...] 前提。念のため壊れてても落ちないように。
-  if (Array.isArray(GENRES)) {
-    return GENRES
-      .map((g) => ({
-        key: asStr(g?.key),
-        label: asStr(g?.label),
-      }))
-      .filter((g) => g.key);
-  }
-  return [];
+// machineName は本来「対応マシン名」由来で左右が付かない想定。
+// 万一の混入に備え、表示だけ末尾の左右を落とす（データは変えない）
+function stripSideSuffix_(s) {
+  const t = asStr(s);
+  if (!t) return "";
+  return t.replace(/[ 　]*([左右上下])\s*$/u, "").trim();
 }
 
+function pickIdText_(r) {
+  if (W3_ID_MODE === "label") return asStr(r?.labelId) || "—";
+  if (W3_ID_MODE === "machine") return stripSideSuffix_(r?.machineName) || "—";
+  return asStr(r?.boothId) || "—";
+}
+
+function genresList_() {
+  if (!Array.isArray(GENRES)) return [];
+  return GENRES.map((g) => ({ key: asStr(g?.key), label: asStr(g?.label) })).filter(
+    (g) => g.key
+  );
+}
 function buildGenreSelectOptions_() {
   const list = genresList_();
-  if (!list.length) {
-    return [el("option", { value: "ALL", text: "ジャンル：ALL" })];
-  }
   return [
     el("option", { value: "ALL", text: "ジャンル：ALL" }),
     ...list.map((g) =>
@@ -77,11 +81,8 @@ function buildPoints(normRows) {
   for (const r of normRows || []) {
     const sales = Number(r?.sales);
     const rate01 = Number(r?.costRate01);
-
     if (!Number.isFinite(sales)) continue;
     if (!Number.isFinite(rate01)) continue;
-
-    // Chartは y を % 表示したいので *100
     pts.push({ x: sales, y: rate01 * 100, _row: r });
   }
   return pts;
@@ -89,9 +90,9 @@ function buildPoints(normRows) {
 
 function computeAverageFromPoints(points) {
   if (!points.length) return { avgX: null, avgY: null };
-  let sx = 0;
-  let sy = 0;
-  let n = 0;
+  let sx = 0,
+    sy = 0,
+    n = 0;
   for (const p of points) {
     if (p?.x == null || p?.y == null) continue;
     sx += p.x;
@@ -103,9 +104,8 @@ function computeAverageFromPoints(points) {
 }
 
 /* =========================================================
- * Average lines plugin
+ * 平均線プラグイン
  * ========================================================= */
-
 const AvgLinesPlugin = {
   id: "avgLinesPlugin",
   afterDatasetsDraw(chart, args, pluginOptions) {
@@ -121,9 +121,8 @@ const AvgLinesPlugin = {
     ctx.save();
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = "rgba(148,163,184,.9)";
+    ctx.strokeStyle = "rgba(148,163,184,.85)";
 
-    // vertical avgX
     if (avgX != null) {
       const x = xScale.getPixelForValue(avgX);
       ctx.beginPath();
@@ -131,8 +130,6 @@ const AvgLinesPlugin = {
       ctx.lineTo(x, chartArea.bottom);
       ctx.stroke();
     }
-
-    // horizontal avgY
     if (avgY != null) {
       const y = yScale.getPixelForValue(avgY);
       ctx.beginPath();
@@ -140,36 +137,33 @@ const AvgLinesPlugin = {
       ctx.lineTo(chartArea.right, y);
       ctx.stroke();
     }
-
     ctx.restore();
   },
 };
 
 /* =========================================================
- * Tooltip builders
+ * Tooltip（大量列挙抑止）
  * ========================================================= */
-
 function tooltipTitleOneLine_(items) {
   if (!items?.length) return "";
   const p0 = items[0]?.raw;
+  const r = p0?._row;
+  const id = r ? pickIdText_(r) : "—";
   const x = fmtYen(p0?.x);
   const y = fmtPct100(p0?.y);
   const extra = items.length > 1 ? `（+${items.length - 1}件）` : "";
-  return `${x}円 / ${y} ${extra}`;
+  return `${id} ｜ 売上 ${x}円 / 原価率 ${y}${extra}`;
 }
-
-function tooltipLabelOneRow_(item) {
+function tooltipLabelPrize_(item) {
   const r = item?.raw?._row;
   if (!r) return "";
-  const booth = asStr(r?.boothId) || "—";
   const prize = asStr(r?.prizeName) || "—";
-  return `${booth} / ${prize}`;
+  return `景品：${prize}`;
 }
 
 /* =========================================================
- * MID (拡大前)
+ * MID（拡大前）
  * ========================================================= */
-
 let midChart = null;
 let midCanvas = null;
 
@@ -201,8 +195,11 @@ function ensureMid(canvas) {
           {
             label: "points",
             data: [],
-            pointRadius: 3,
-            pointHoverRadius: 5,
+            pointRadius: 3.5,
+            pointHoverRadius: 6,
+            pointBorderWidth: 1,
+            pointBackgroundColor: "rgba(96, 165, 250, 0.85)",
+            pointBorderColor: "rgba(226, 232, 240, 0.9)",
           },
         ],
       },
@@ -210,8 +207,6 @@ function ensureMid(canvas) {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-
-        // ✅ tooltip 大量列挙抑止 + 最近傍で安定
         interaction: { mode: "nearest", intersect: true },
         plugins: {
           legend: { display: false },
@@ -219,17 +214,20 @@ function ensureMid(canvas) {
             displayColors: false,
             callbacks: {
               title: tooltipTitleOneLine_,
-              label: () => "", // 複数行列挙を抑止
+              label: () => "",
             },
           },
         },
-
         scales: {
-          x: { ticks: { callback: (v) => `${fmtYen(v)}円` } },
+          x: {
+            ticks: { callback: (v) => `${fmtYen(v)}円` },
+            grid: { color: "rgba(148,163,184,.18)" },
+          },
           y: {
             beginAtZero: true,
             suggestedMax: 100,
             ticks: { callback: (v) => `${v}%` },
+            grid: { color: "rgba(148,163,184,.18)" },
           },
         },
       },
@@ -244,28 +242,31 @@ function ensureMid(canvas) {
 
 function updateMid(normRows) {
   if (!midChart) return;
-
   const pts = buildPoints(normRows);
-
-  // 過負荷保険（表示上限）
   const MAX = 2500;
   midChart.data.datasets[0].data = pts.length > MAX ? pts.slice(0, MAX) : pts;
-
   midChart.update();
 }
 
 /**
- * ✅ kpiMid.js が import している拡大前描画
+ * kpiMid.js から呼ばれる
  */
 export function renderWidget3Scatter(body, state, actions) {
   if (!body) return;
 
-  // ✅ B案：normRows に統一
   const rows = Array.isArray(state?.normRows) ? state.normRows : [];
 
   if (!body.__w3_built) {
     clear(body);
     body.classList.add("chartBody");
+
+    // 軸説明（midでも最低限）
+    body.appendChild(
+      el("div", {
+        class: "w3AxisHint",
+        text: "X軸=売上（円） / Y軸=原価率（%）",
+      })
+    );
 
     const cv = el("canvas", { id: "w3ScatterChart" });
     cv.style.width = "100%";
@@ -297,9 +298,8 @@ export function renderWidget3Scatter(body, state, actions) {
 }
 
 /* =========================================================
- * FOCUS (拡大後)
+ * FOCUS（拡大後）
  * ========================================================= */
-
 let focusChart = null;
 
 export function destroyWidget3ScatterFocus() {
@@ -326,14 +326,13 @@ export function renderWidget3ScatterFocus(mount, state) {
   destroyWidget3ScatterFocus();
   clear(mount);
 
-  // ✅ B案：normRows に統一
   const rowsAll = Array.isArray(state?.normRows) ? state.normRows : [];
 
   // ===== tools =====
   const genreSel = el("select", { class: "select" }, buildGenreSelectOptions_());
 
   const machineSet = new Set(
-    (rowsAll || []).map((r) => asStr(r?.machineName)).filter(Boolean)
+    (rowsAll || []).map((r) => stripSideSuffix_(r?.machineName)).filter(Boolean)
   );
   const machineSel = el("select", { class: "select" }, [
     el("option", { value: "ALL", text: "マシン：ALL" }),
@@ -348,7 +347,7 @@ export function renderWidget3ScatterFocus(mount, state) {
     el("div", { class: "focusPanelTitle", text: "売上 × 原価率" }),
     el("div", {
       class: "focusPanelNote",
-      text: "ジャンル・マシンで絞込 / 平均線表示 / 点クリックでカード1枚",
+      text: "X軸=売上（円） / Y軸=原価率（%）｜ジャンル・マシンで絞込｜平均線｜点クリックでカード",
     }),
   ]);
 
@@ -384,7 +383,7 @@ export function renderWidget3ScatterFocus(mount, state) {
 
     return (rowsAll || []).filter((r) => {
       const gk = asStr(r?.prizeGenreKey) || "other";
-      const mk = asStr(r?.machineName);
+      const mk = stripSideSuffix_(r?.machineName);
 
       if (g !== "ALL" && gk !== g) return false;
       if (m !== "ALL" && mk !== m) return false;
@@ -397,7 +396,6 @@ export function renderWidget3ScatterFocus(mount, state) {
     if (parent === "食品") return asStr(r?.foodLabel) || "未分類";
     if (parent === "ぬいぐるみ") return asStr(r?.plushLabel) || "未分類";
     if (parent === "雑貨") return asStr(r?.goodsLabel) || "未分類";
-    // その他は空にせず、拾えるものを拾う
     return (
       asStr(r?.plushLabel) ||
       asStr(r?.foodLabel) ||
@@ -417,20 +415,19 @@ export function renderWidget3ScatterFocus(mount, state) {
   function chip(text) {
     return el("div", { class: "w3Chip", text });
   }
-
   function chipRow(items) {
     return el("div", { class: "w3ChipRow" }, items);
   }
 
-  // ===== card (single) =====
+  // ===== card =====
   function renderCard(r) {
     clear(cardArea);
 
-    const booth = asStr(r?.boothId) || "—";
-    const machine = asStr(r?.machineName) || "—";
     const prize = asStr(r?.prizeName) || "（名称なし）";
-    const labelId = asStr(r?.labelId) || "—";
     const updated = asStr(r?.updatedDate) || "—";
+
+    const idText = pickIdText_(r);
+    titleArea.textContent = `選択中：${idText}`;
 
     const genreLabel = asStr(r?.prizeGenreLabel) || "その他";
     const subGenre = pickSubGenreLabel_(r);
@@ -459,47 +456,19 @@ export function renderWidget3ScatterFocus(mount, state) {
         ? asStr(r?.nonCharaGenreLabel) || "未分類"
         : asStr(r?.charaGenreLabel) || "未分類";
 
-    titleArea.textContent = `選択中：${booth}`;
-
     cardArea.appendChild(
       el("div", { class: "w3Card" }, [
         el("div", { class: "w3CardTitle", text: prize }),
-        el("div", { class: "w3CardSub", text: `ブース：${booth}` }),
-        el("div", { class: "w3CardSub", text: `マシン：${machine}` }),
-        el("div", { class: "w3CardSub", text: `ラベルID：${labelId} / 更新：${updated}` }),
+        el("div", { class: "w3CardSub", text: `ID：${idText} / 更新：${updated}` }),
 
-        chipRow([
-          chip(`ジャンル：${genreLabel}`),
-          chip(`サブ：${subGenre}`),
-        ]),
-
-        chipRow([
-          chip(`料金：${fee || "—"}`),
-          chip(`回数：${plays || "—"}`),
-        ]),
-
-        chipRow([
-          chip(`投入法：${method}`),
-          chip(`内訳：${clawDetail}`),
-        ]),
-
-        chipRow([
-          chip(`年代：${age}`),
-          chip(`ターゲット：${target}`),
-        ]),
-
-        chipRow([
-          chip(`キャラ：${chara}`),
-          chip(`分類：${charaGenre}`),
-        ]),
-
+        chipRow([chip(`ジャンル：${genreLabel}`), chip(`サブ：${subGenre}`)]),
+        chipRow([chip(`料金：${fee}`), chip(`回数：${plays}`)]),
+        chipRow([chip(`投入法：${method}`), chip(`内訳：${clawDetail}`)]),
+        chipRow([chip(`年代：${age}`), chip(`ターゲット：${target}`)]),
+        chipRow([chip(`キャラ：${chara}`), chip(`分類：${charaGenre}`)]),
         chipRow([chip(`フラグ：${flagsText_(r)}`)]),
 
-        // KPI
-        chipRow([
-          chip(`売上：${fmtYen(sales)}円`),
-          chip(`消化額：${fmtYen(claw)}円`),
-        ]),
+        chipRow([chip(`売上：${fmtYen(sales)}円`), chip(`消化額：${fmtYen(claw)}円`)]),
         chipRow([chip(`原価率：${rate01 == null ? "—" : fmtPct01(rate01)}`)]),
       ])
     );
@@ -509,10 +478,8 @@ export function renderWidget3ScatterFocus(mount, state) {
   function renderChart() {
     const rows = filteredRows();
     const pts = buildPoints(rows);
-
     const { avgX, avgY } = computeAverageFromPoints(pts);
 
-    // 表示過負荷保険
     const MAX = 6000;
     const data = pts.length > MAX ? pts.slice(0, MAX) : pts;
 
@@ -531,6 +498,9 @@ export function renderWidget3ScatterFocus(mount, state) {
             data,
             pointRadius: 4,
             pointHoverRadius: 6,
+            pointBorderWidth: 1,
+            pointBackgroundColor: "rgba(96, 165, 250, 0.85)",
+            pointBorderColor: "rgba(226, 232, 240, 0.9)",
           },
         ],
       },
@@ -538,8 +508,6 @@ export function renderWidget3ScatterFocus(mount, state) {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-
-        // ✅ tooltip 大量列挙抑止 + 最近傍で安定
         interaction: { mode: "nearest", intersect: true },
         plugins: {
           legend: { display: false },
@@ -548,20 +516,22 @@ export function renderWidget3ScatterFocus(mount, state) {
             displayColors: false,
             callbacks: {
               title: tooltipTitleOneLine_,
-              label: tooltipLabelOneRow_, // 先頭点だけ補足（薄さ対策）
+              label: tooltipLabelPrize_,
             },
           },
         },
-
         scales: {
-          x: { ticks: { callback: (v) => `${fmtYen(v)}円` } },
+          x: {
+            ticks: { callback: (v) => `${fmtYen(v)}円` },
+            grid: { color: "rgba(148,163,184,.18)" },
+          },
           y: {
             beginAtZero: true,
             suggestedMax: 100,
             ticks: { callback: (v) => `${v}%` },
+            grid: { color: "rgba(148,163,184,.18)" },
           },
         },
-
         onClick(evt) {
           const hit = focusChart.getElementsAtEventForMode(
             evt,
@@ -582,7 +552,6 @@ export function renderWidget3ScatterFocus(mount, state) {
       plugins: [AvgLinesPlugin],
     });
 
-    // フィルタ変更で「選択中」表示はリセット
     titleArea.textContent = "選択中：—";
     clear(cardArea);
     cardArea.appendChild(
