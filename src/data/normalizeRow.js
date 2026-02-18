@@ -1,4 +1,9 @@
 // src/data/normalizeRow.js
+// 入口で1回だけ正規化（B案）
+// - 列名揺れ吸収
+// - 固定キー（boothId / labelId / machineName）
+// - 数値化（sales / claw / costRate01）
+// - genreKey / genreLabel を確定（取れなければ other/その他）
 
 import { GENRES } from "../constants.js";
 
@@ -21,43 +26,56 @@ function pickFirst(obj, keys) {
 }
 
 function resolveGenreKey(row) {
-  // 1) genreKeyがあれば優先
+  // 1) 既に genreKey があればそれを優先
   const gk = asStr(pickFirst(row, ["genreKey", "genre_key", "genre"]));
   if (gk) return gk;
 
-  // 2) label側（"食品" 等）から GENRES を逆引き
-  const gl = asStr(pickFirst(row, ["genreLabel", "genre_label", "ジャンル", "景品ジャンル", "genre_label_jp"]));
+  // 2) ラベル（"食品" 等）から GENRES を逆引き
+  const gl = asStr(
+    pickFirst(row, ["genreLabel", "genre_label", "ジャンル", "景品ジャンル", "genre_label_jp"])
+  );
   if (gl) {
-    const found = (Array.isArray(GENRES) ? GENRES : []).find((x) => asStr(x?.label) === gl);
+    const found = (Array.isArray(GENRES) ? GENRES : []).find(
+      (x) => asStr(x?.label) === gl
+    );
     if (found?.key) return String(found.key);
   }
 
-  // 3) decodeSymbol 等で入っている可能性があるキーっぽいもの
-  //    （ここはプロジェクト都合で後で足せる）
-  return "";
+  // 3) 取れなければ other に落とす（運用で見直し）
+  return "other";
 }
 
 function resolveGenreLabel(genreKey) {
-  const found = (Array.isArray(GENRES) ? GENRES : []).find((x) => String(x?.key) === String(genreKey));
-  return found?.label ? String(found.label) : "";
+  const found = (Array.isArray(GENRES) ? GENRES : []).find(
+    (x) => String(x?.key) === String(genreKey)
+  );
+  if (found?.label) return String(found.label);
+  if (String(genreKey) === "other") return "その他";
+  return "";
 }
 
 /**
  * normalizeRow(rawRow) -> 固定キーに変換
  * - boothId, labelId, machineName
  * - prizeName, genreKey, genreLabel
- * - sales, claw, costRate01 (0..1)
+ * - sales, claw, costRate01（0..1）
  * - _raw
  */
 export function normalizeRow(rawRow) {
   const boothId = asStr(pickFirst(rawRow, ["boothId", "booth_id", "ブースID", "booth"]));
   const labelId = asStr(pickFirst(rawRow, ["labelId", "label_id", "ラベルID", "label"]));
-  const machineName = asStr(pickFirst(rawRow, ["machineName", "machine_name", "対応マシン名", "マシン名"]));
+  const machineName = asStr(
+    pickFirst(rawRow, ["machineName", "machine_name", "対応マシン名", "マシン名"])
+  );
 
   const prizeName = asStr(pickFirst(rawRow, ["prizeName", "prize_name", "景品名", "name"]));
 
   const genreKey = resolveGenreKey(rawRow);
-  const genreLabel = resolveGenreLabel(genreKey) || asStr(pickFirst(rawRow, ["genreLabel", "genre_label", "ジャンル", "景品ジャンル"]));
+
+  const genreLabel =
+    resolveGenreLabel(genreKey) ||
+    asStr(pickFirst(rawRow, ["genreLabel", "genre_label", "ジャンル", "景品ジャンル"])) ||
+    (genreKey === "other" ? "その他" : "");
 
   const sales = asNum(pickFirst(rawRow, ["sales", "総売上", "売上"]));
   const claw = asNum(pickFirst(rawRow, ["claw", "消化額", "cost", "原価"]));
