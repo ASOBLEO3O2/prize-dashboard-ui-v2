@@ -9,14 +9,13 @@ import { buildByAxis } from "./logic/byAxis.js";
 
 import { MOCK } from "./constants.js";
 import { fmtDate } from "./utils/format.js";
-
-import { loadRawData } from "./data/load.js";
 import { decodeSymbol } from "./logic/decodeSymbol.js";
 
-import { normalizeRow } from "./data/normalizeRow.js";
+import { loadRawData } from "./data/load.js";
 import { applyFilters } from "./logic/filter.js"; // ✅ normRows前提
-import { buildViewModel } from "./logic/aggregate.js";
+import { buildViewModel } from "./logic/aggregate.js"; // 既存のtopKpi等（必要なら後でnormRowsに寄せる）
 
+import { normalizeRow } from "./data/normalizeRow.js";
 import { renderFocusOverlay } from "./ui/focusOverlay.js";
 
 const DEFAULT_MID_SLOTS = ["widget1", "widget2", "dummyA", "dummyB"];
@@ -29,43 +28,31 @@ const initialState = {
 
   widget1Axis: "景品ジャンル",
 
-  /**
-   * 互換（旧ルート）
-   * - 既存ウィジェットが参照している可能性があるため残す
-   * - 中身は「表示対象（=normRows）」と同一にして “効かないフィルタ” を潰す
-   */
-  filteredRows: [],
-
-  /** ✅ B案：正規化済み（全件） */
+  // ✅ B案：正規化済み（全件）
   normRowsAll: [],
 
-  /** ✅ B案：正規化済み（フィルタ適用後＝表示対象） */
+  // ✅ B案：正規化済み（フィルタ適用後＝表示対象）
   normRows: [],
 
-  /** 集計（表示対象に合わせて生成） */
+  // ✅ 既存の階層集計（ウィジェット①のドリル等で使用）
   byAxis: {},
 
-  // --- mid state（既存） ---
   midAxis: "ジャンル",
   midParentKey: null,
   midSortKey: "sales",
   midSortDir: "desc",
 
-  /**
-   * ✅ appフィルタ（上層→下層にも対応）
-   * - UIがまだ無くても、状態とapplyFiltersはここで固定
-   */
+  // ✅ appフィルタ（上層→下層にも対応）
   filters: {
-    machineNames: [], // 対応マシン名（複数）
-    feeKeys: [],      // 料金（複数）
-    prizeGenreKey: "", // 景品ジャンル（親）
-    subGenreKey: "",   // 子ジャンル（親に応じて food/plush/goods）
-    charaKey: "",      // キャラ（親：キャラ/ノンキャラ）
-    charaSubKey: "",   // 子（キャラ→charaGenre / ノンキャラ→nonCharaGenre）
-    flags: { movie: null, reserve: null, wl: null }, // null/true/false
+    machineNames: [],
+    feeKeys: [],
+    prizeGenreKey: "",
+    subGenreKey: "",
+    charaKey: "",
+    charaSubKey: "",
+    flags: { movie: null, reserve: null, wl: null },
   },
 
-  // --- UI state（既存） ---
   focusGenre: null,
   openDetailGenre: null,
   drawerOpen: false,
@@ -196,7 +183,6 @@ const actions = {
   },
 
   requestRender: () => {
-    // store実装次第で同値更新がまとめられることがあるため、明示的に叩けるよう残す
     store.set((s) => ({ ...s }));
   },
 
@@ -219,6 +205,7 @@ const actions = {
     store.set((s) => ({
       ...s,
       widget1Axis: axisKey || s.widget1Axis,
+      focus: { ...s.focus, parentKey: null }, // 軸変更でドリル戻し
     }));
   },
 
@@ -349,7 +336,7 @@ async function hydrateFromRaw() {
   }
 
   // enrich（master合流 + decode）
-  const rawEnrichedRows = rows.map((r) => {
+  const enriched = rows.map((r) => {
     const key = String(r?.symbol_raw ?? r?.raw ?? "").trim();
     const m = key ? masterDict?.[key] : null;
     const decoded = key ? decodeSymbol(key, codebook) : {};
@@ -359,7 +346,7 @@ async function hydrateFromRaw() {
       ...(m || {}),
       ...decoded,
 
-      // raw側の値は“明示的に残す”（列の揺れに負けない）
+      // raw側の値は明示的に保持
       booth_id: r?.booth_id,
       machine_name: r?.machine_name,
       machine_key: r?.machine_key,
@@ -374,20 +361,17 @@ async function hydrateFromRaw() {
   });
 
   // ✅ B案：正規化は入口で1回（全件）
-  const normRowsAll = rawEnrichedRows.map(normalizeRow);
+  const normRowsAll = enriched.map(normalizeRow);
 
-  // ✅ appフィルタ：正規化済みだけを対象にする（表示対象）
+  // ✅ appフィルタ：正規化済みだけを対象にする
   const st = store.get();
   const normRows = applyFilters(normRowsAll, st.filters);
 
-  // ✅ 互換：旧UIが filteredRows を見てもフィルタが効くように「同じ対象」を入れる
-  const filteredRows = normRows;
-
-  // ✅ ViewModel/集計も「表示対象」に揃える（B方針）
-  const vm = buildViewModel(normRows, summary);
-
-  // ✅ byAxis も “表示対象” に合わせる
+  // ✅ byAxis は “表示対象” に合わせる（フィルタ反映）
   const axis = buildByAxis(normRows);
+
+  // 既存topKpi等（必要なら後でnormRowsに寄せる）
+  const vm = buildViewModel(enriched, summary);
 
   store.set((s) => ({
     ...s,
@@ -396,11 +380,8 @@ async function hydrateFromRaw() {
     byGenre: vm.byGenre,
     details: vm.details,
     byAxis: axis,
-
-    filteredRows,
     normRowsAll,
     normRows,
-
     loadError: null,
   }));
 }
