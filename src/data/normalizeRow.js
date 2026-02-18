@@ -174,3 +174,17 @@ export function normalizeRow(rawRow) {
     isWlOriginal,
   };
 }
+/**
+ * フィルタ用ユーティリティ
+ * rows から key のユニーク値を取得
+ */
+export function uniqueOptions(rows, key) {
+  const set = new Set();
+  for (const r of rows || []) {
+    const v = r?.[key];
+    if (v != null && String(v).trim() !== "") {
+      set.add(String(v).trim());
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
+}
