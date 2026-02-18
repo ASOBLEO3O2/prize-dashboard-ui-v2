@@ -1,32 +1,36 @@
 // src/logic/byAxis.js
 // rows（1行=1台）から「中段KPIの軸別カード用データ」を作る
 //
-// 修正方針（重要）
+// ✅ 修正方針（重要）
+// - 入力は normRows（正規化済み）前提。raw列（r["景品ジャンル"] 等）を参照しない。
 // - 親→子のドリルダウンは「親値に応じた子列」を必ず使う（列混在を避ける）
-// - 子カテゴリは "label" を優先し、code へ逃げず「未分類」に寄せる（親跨ぎ混在の原因になりやすい）
+// - 子カテゴリは "label" を優先し、code へ逃げず「未分類」に寄せる
 // - 親・子ともに売上降順で安定ソート（描画差分で「違う」に見えるのを防ぐ）
 
 export function buildByAxis(rows) {
-  console.log("[BYAXIS] LOADED v2026-01-22", rows?.length);
+  console.log("[BYAXIS] LOADED v2026-02-18", rows?.length);
+
+  const safeRows = Array.isArray(rows) ? rows : [];
+
   return {
     // フラット軸
-    年代: buildFlatAxis(rows, r => r["年代"]),
-    マシン: buildFlatAxis(rows, r => r["machine_key"] || r["machine_name"] || r["booth_id"]),
+    年代: buildFlatAxis(safeRows, (r) => r?.ageLabel),
+    マシン: buildFlatAxis(safeRows, (r) => r?.machineName || r?.boothId),
 
     // 階層軸（カード内展開）
-    投入法: buildHierAxis(rows, {
-      parent: r => r["投入法"],            // "2本爪" / "3本爪"
-      child:  r => pickTounyuuChild(r),   // "3本爪"列 or "2本爪"列
+    投入法: buildHierAxis(safeRows, {
+      parent: (r) => r?.methodLabel,       // "2本爪" / "3本爪"
+      child: (r) => pickTounyuuChild(r),   // claw3Label / claw2Label
     }),
 
-    ジャンル: buildHierAxis(rows, {
-      parent: r => r["景品ジャンル"],      // 食品/ぬいぐるみ/雑貨...
-      child:  r => pickGenreChild(r),      // 食品ジャンル/ぬいぐるみジャンル/雑貨ジャンル
+    ジャンル: buildHierAxis(safeRows, {
+      parent: (r) => r?.prizeGenreLabel,   // 食品/ぬいぐるみ/雑貨...
+      child: (r) => pickGenreChild(r),     // foodLabel/plushLabel/goodsLabel
     }),
 
-    キャラ: buildHierAxis(rows, {
-      parent: r => r["キャラ"],            // ノンキャラ/ポケモン...
-      child:  r => pickCharaChild(r),      // キャラジャンル or ノンキャラジャンル
+    キャラ: buildHierAxis(safeRows, {
+      parent: (r) => r?.charaLabel,        // ノンキャラ/ポケモン...
+      child: (r) => pickCharaChild(r),     // charaGenreLabel / nonCharaGenreLabel
     }),
   };
 }
@@ -68,7 +72,7 @@ function buildHierAxis(rows, { parent, child }) {
   }
 
   // 親リスト化 → 子も同様に finalize + ソート
-  const outParents = Array.from(parents.values()).map(p => {
+  const outParents = Array.from(parents.values()).map((p) => {
     const out = finalizeAggOne(p);
 
     if (p._children) {
@@ -81,7 +85,12 @@ function buildHierAxis(rows, { parent, child }) {
   });
 
   // 親も売上降順で安定化
-  outParents.sort((a, b) => (b.sales - a.sales) || (b.machines - a.machines) || a.label.localeCompare(b.label, "ja"));
+  outParents.sort(
+    (a, b) =>
+      b.sales - a.sales ||
+      b.machines - a.machines ||
+      a.label.localeCompare(b.label, "ja")
+  );
   return outParents;
 }
 
@@ -120,62 +129,65 @@ function finalizeAggOne(a) {
     sales: a.sales,
     consume: a.consume,
     // sales=0 の場合は 0 固定にせず null にして「計算不能」を区別（UIで "-" にできる）
-    costRate: (a._costDen > 0) ? (a._costNum / a._costDen) : null,
+    costRate: a._costDen > 0 ? a._costNum / a._costDen : null,
   };
 }
 
 function finalizeAggList(list) {
   const out = list.map(finalizeAggOne);
   // 売上降順→台数→ラベルで安定ソート（表示がブレない）
-  out.sort((a, b) => (b.sales - a.sales) || (b.machines - a.machines) || a.label.localeCompare(b.label, "ja"));
+  out.sort(
+    (a, b) =>
+      b.sales - a.sales ||
+      b.machines - a.machines ||
+      a.label.localeCompare(b.label, "ja")
+  );
   return out;
 }
 
 function safeKey(v) {
-  const s = (v == null) ? "" : String(v).trim();
+  const s = v == null ? "" : String(v).trim();
   return s || "";
 }
 
 /* =========================
-   下層の選び方（あなたの列仕様）
+   下層の選び方（normRows仕様）
    ========================= */
 
 function pickTounyuuChild(r) {
-  const p = safeKey(r["投入法"]);
-  if (p === "3本爪") return safeKey(r["3本爪"]) || "未分類";
-  if (p === "2本爪") return safeKey(r["2本爪"]) || "未分類";
+  const p = safeKey(r?.methodLabel);
+  if (p === "3本爪") return safeKey(r?.claw3Label) || "未分類";
+  if (p === "2本爪") return safeKey(r?.claw2Label) || "未分類";
   return "";
 }
 
 /**
- * 重要：子カテゴリは "label"（日本語ラベル）を優先して統一。
+ * 重要：子カテゴリは label（日本語ラベル）を優先して統一。
  * code へフォールバックすると、親切替時に「別親の子が混ざって見える」原因になりやすい。
  * ここでは label が空なら "未分類" に寄せる。
  */
-
 function pickGenreChild(r) {
-  const p = safeKey(r["景品ジャンル"]);
+  const p = safeKey(r?.prizeGenreLabel);
 
-  // 3種類の子列を全部取っておく（ラベル優先→code）
-  const food  = safeKey(r["食品ジャンル"])       || safeKey(r["食品ジャンル_code"]);
-  const plush = safeKey(r["ぬいぐるみジャンル"]) || safeKey(r["ぬいぐるみジャンル_code"]);
-  const goods = safeKey(r["雑貨ジャンル"])       || safeKey(r["雑貨ジャンル_code"]);
+  // 子列は label のみ（codeへ逃げない）
+  const food = safeKey(r?.foodLabel);
+  const plush = safeKey(r?.plushLabel);
+  const goods = safeKey(r?.goodsLabel);
 
   // 親に応じて「本命列」を最優先
-  // ただし実データが列混在してても未分類固定にならないように、他列へフォールバック
-  if (p === "食品")       return food  || plush || goods || "未分類";
-  if (p === "ぬいぐるみ") return plush || food  || goods || "未分類";
-  if (p === "雑貨")       return goods || food  || plush || "未分類";
+  // ただし実データが混在してても未分類固定にならないように、他列へフォールバック
+  if (p === "食品") return food || plush || goods || "未分類";
+  if (p === "ぬいぐるみ") return plush || food || goods || "未分類";
+  if (p === "雑貨") return goods || food || plush || "未分類";
 
   // 親が想定外/空の場合も、とにかく拾えるものを拾う
   return plush || food || goods || "未分類";
 }
 
-
 function pickCharaChild(r) {
-  const p = safeKey(r["キャラ"]);
+  const p = safeKey(r?.charaLabel);
   if (!p) return "";
 
-  if (p === "ノンキャラ") return safeKey(r["ノンキャラジャンル"]) || "未分類";
-  return safeKey(r["キャラジャンル"]) || "未分類";
+  if (p === "ノンキャラ") return safeKey(r?.nonCharaGenreLabel) || "未分類";
+  return safeKey(r?.charaGenreLabel) || "未分類";
 }
