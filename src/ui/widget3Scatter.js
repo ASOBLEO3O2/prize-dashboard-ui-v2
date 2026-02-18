@@ -12,10 +12,11 @@ import { GENRES } from "../constants.js";
  *
  * 2026-02（調整）
  * - tooltip：重なり多数でも「1行 + (+n件)」にして大量列挙を抑止
- * - midでもブースID（=表示ID）を出す
+ * - midでもID（ブースID等）を出す
  * - focus：右カードのみスクロール、縦長/狭幅は縦積み（CSS側）
  * - カード情報を normRows 情報で濃くする
  * - 点/軸/グリッドのコントラストを上げる
+ * - ✅ Y軸は常に 0〜100% 固定
  */
 
 /* =========================================================
@@ -101,6 +102,21 @@ function computeAverageFromPoints(points) {
   }
   if (!n) return { avgX: null, avgY: null };
   return { avgX: sx / n, avgY: sy / n };
+}
+
+/* =========================================================
+ * ✅ Y軸固定スケール（共通）
+ * ========================================================= */
+function fixedYAxis100_() {
+  return {
+    min: 0,
+    max: 100, // ✅ 100% 固定
+    ticks: {
+      stepSize: 10,
+      callback: (v) => `${v}%`,
+    },
+    grid: { color: "rgba(148,163,184,.18)" },
+  };
 }
 
 /* =========================================================
@@ -223,12 +239,7 @@ function ensureMid(canvas) {
             ticks: { callback: (v) => `${fmtYen(v)}円` },
             grid: { color: "rgba(148,163,184,.18)" },
           },
-          y: {
-            beginAtZero: true,
-            suggestedMax: 100,
-            ticks: { callback: (v) => `${v}%` },
-            grid: { color: "rgba(148,163,184,.18)" },
-          },
+          y: fixedYAxis100_(), // ✅ ここで固定
         },
       },
     });
@@ -242,9 +253,13 @@ function ensureMid(canvas) {
 
 function updateMid(normRows) {
   if (!midChart) return;
+
   const pts = buildPoints(normRows);
+
+  // 過負荷保険
   const MAX = 2500;
   midChart.data.datasets[0].data = pts.length > MAX ? pts.slice(0, MAX) : pts;
+
   midChart.update();
 }
 
@@ -260,7 +275,7 @@ export function renderWidget3Scatter(body, state, actions) {
     clear(body);
     body.classList.add("chartBody");
 
-    // 軸説明（midでも最低限）
+    // 軸説明（mid）
     body.appendChild(
       el("div", {
         class: "w3AxisHint",
@@ -525,16 +540,7 @@ export function renderWidget3ScatterFocus(mount, state) {
             ticks: { callback: (v) => `${fmtYen(v)}円` },
             grid: { color: "rgba(148,163,184,.18)" },
           },
-         y: {
-  min: 0,
-  max: 100,                 // ✅ 上限固定
-  ticks: {
-    stepSize: 10,
-    callback: (v) => `${v}%`,
-  },
-  grid: { color: "rgba(148,163,184,.18)" },
-},
-
+          y: fixedYAxis100_(), // ✅ ここで固定
         },
         onClick(evt) {
           const hit = focusChart.getElementsAtEventForMode(
