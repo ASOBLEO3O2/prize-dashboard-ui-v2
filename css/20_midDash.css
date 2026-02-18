@@ -59,3 +59,23 @@
     aspect-ratio: var(--midRatioSP);
   }
 }
+
+/* Widget③(mid) “カード固定のまま” 内側だけ整える */
+#midDash .chartBody{
+  display:flex;
+  flex-direction:column;
+  min-height:0;              /* これが無いと切れやすい */
+}
+
+#midDash .chartBody .w3AxisHint{
+  flex:0 0 auto;             /* 説明は固定高さ */
+  margin:0 0 6px 0;
+}
+
+#midDash .chartBody canvas{
+  flex:1 1 auto;             /* 残り全部をcanvasに渡す */
+  min-height:0;              /* これが無いと下が切れることがある */
+  width:100%;
+  height:100%;
+  display:block;
+}
