@@ -5,9 +5,18 @@ function asStr(v) {
   return String(v ?? "").trim();
 }
 function asNum(v) {
-  if (v == null || v === "") return 0;
-  const n = Number(String(v).replace(/,/g, "").trim());
+  if (v == null) return 0;
+  const s = String(v).replace(/,/g, "").trim();
+  if (s === "") return 0;
+  const n = Number(s);
   return Number.isFinite(n) ? n : 0;
+}
+function asNumOrNull(v) {
+  if (v == null) return null;
+  const s = String(v).replace(/,/g, "").trim();
+  if (s === "") return null;          // ✅ 空欄は null
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
 }
 function pickFirst(obj, keys) {
   for (const k of keys) {
@@ -26,12 +35,19 @@ function asBoolTri(v) {
   return null;
 }
 
-// code優先ではなく label優先で吸収したい場合
-function pickLabel(obj, labelKeys, codeKeys) {
-  const label = asStr(pickFirst(obj, labelKeys));
-  if (label) return { label, code: asStr(pickFirst(obj, codeKeys)) };
-  const code = asStr(pickFirst(obj, codeKeys));
-  return { label: code ? "" : "", code }; // labelが無いなら空（UI側で未分類へ）
+// 原価率を 0..1（01）に正規化して返す
+// - 空欄 → null
+// - 0.28 など → そのまま
+// - 28 や 28.5 など → % とみなして /100
+function parseCostRate01(v) {
+  const n = asNumOrNull(v);
+  if (n == null) return null;
+
+  // 例えば 27.9（%）が来ることがあるなら /100
+  if (n > 1.5) return n / 100;
+
+  // 0..1.5 は比率として扱う（1.1 などが来ても一応許容）
+  return n;
 }
 
 export function normalizeRow(rawRow) {
@@ -41,7 +57,6 @@ export function normalizeRow(rawRow) {
   const labelId = asStr(pickFirst(rawRow, ["labelId", "ラベルID", "label_id"]));
 
   // ✅ 重要：machineName はマスタの「対応マシン名」を最優先
-  // （ここで raw の machine_name を優先すると、左/右などが混入しやすい）
   const machineName = asStr(
     pickFirst(rawRow, ["対応マシン名", "machineName", "マシン名", "machine_name"])
   );
@@ -50,18 +65,21 @@ export function normalizeRow(rawRow) {
 
   // 売上/消化額（あなたのデータでは claw が消化額）
   const sales = asNum(pickFirst(rawRow, ["sales", "総売上", "売上", "売上合計"]));
-  const claw = asNum(pickFirst(rawRow, ["claw", "消化額", "消化金額"]));
-
-  // 原価率（0..1）
-  // 既に入っていればそれを優先。無ければ claw*1.1/sales
-  let costRate01 = Number(pickFirst(rawRow, ["costRate01", "原価率01"]));
-  if (!Number.isFinite(costRate01)) costRate01 = null;
-  if (costRate01 == null) {
-    costRate01 = sales > 0 ? (claw * 1.1) / sales : null;
-  }
+  const claw = asNum(pickFirst(rawRow, ["claw", "消化額", "消化金額", "消化額合計"]));
 
   // 更新日
   const updatedDate = asStr(pickFirst(rawRow, ["updatedDate", "更新日"]));
+
+  // ==== 原価率（0..1） ====
+  // 既にあるなら吸収（空欄は0にしない！）
+  let costRate01 =
+    parseCostRate01(pickFirst(rawRow, ["costRate01", "原価率01"])) ??
+    parseCostRate01(pickFirst(rawRow, ["costRate", "原価率"])); // 互換：別名も拾う
+
+  // 無ければ計算（消化額×1.1÷売上）
+  if (costRate01 == null) {
+    costRate01 = sales > 0 ? (claw * 1.1) / sales : null;
+  }
 
   // ==== フィルタ用の正規化キー群（設計B案） ====
 
@@ -88,8 +106,10 @@ export function normalizeRow(rawRow) {
   const claw3Key = asStr(pickFirst(rawRow, ["3本爪_code", "claw3Key"])) || "";
 
   // 景品ジャンル（親）
-  const prizeGenreLabel = asStr(pickFirst(rawRow, ["景品ジャンル", "prizeGenreLabel"])) || "その他";
-  const prizeGenreKey = asStr(pickFirst(rawRow, ["景品ジャンル_code", "prizeGenreKey"])) || "other";
+  const prizeGenreLabel =
+    asStr(pickFirst(rawRow, ["景品ジャンル", "prizeGenreLabel"])) || "その他";
+  const prizeGenreKey =
+    asStr(pickFirst(rawRow, ["景品ジャンル_code", "prizeGenreKey"])) || "other";
 
   // 景品ジャンル（子：label優先）
   const foodLabel = asStr(pickFirst(rawRow, ["食品ジャンル", "foodLabel"])) || "";
@@ -106,8 +126,10 @@ export function normalizeRow(rawRow) {
   // キャラ（子）
   const charaGenreLabel = asStr(pickFirst(rawRow, ["キャラジャンル", "charaGenreLabel"])) || "";
   const charaGenreKey = asStr(pickFirst(rawRow, ["キャラジャンル_code", "charaGenreKey"])) || "";
-  const nonCharaGenreLabel = asStr(pickFirst(rawRow, ["ノンキャラジャンル", "nonCharaGenreLabel"])) || "";
-  const nonCharaGenreKey = asStr(pickFirst(rawRow, ["ノンキャラジャンル_code", "nonCharaGenreKey"])) || "";
+  const nonCharaGenreLabel =
+    asStr(pickFirst(rawRow, ["ノンキャラジャンル", "nonCharaGenreLabel"])) || "";
+  const nonCharaGenreKey =
+    asStr(pickFirst(rawRow, ["ノンキャラジャンル_code", "nonCharaGenreKey"])) || "";
 
   // ターゲット
   const targetLabel = asStr(pickFirst(rawRow, ["ターゲット", "targetLabel"])) || "—";
@@ -174,17 +196,15 @@ export function normalizeRow(rawRow) {
     isWlOriginal,
   };
 }
+
 /**
- * フィルタ用ユーティリティ
- * rows から key のユニーク値を取得
+ * drawer等で使う：rows から key のユニーク値を取得（正規化済み前提）
  */
 export function uniqueOptions(rows, key) {
   const set = new Set();
   for (const r of rows || []) {
     const v = r?.[key];
-    if (v != null && String(v).trim() !== "") {
-      set.add(String(v).trim());
-    }
+    if (v != null && String(v).trim() !== "") set.add(String(v).trim());
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
 }
