@@ -12,13 +12,10 @@ import { fmtDate } from "./utils/format.js";
 import { decodeSymbol } from "./logic/decodeSymbol.js";
 
 import { loadRawData } from "./data/load.js";
-import { applyFilters } from "./logic/filter.js"; // ★ normRows前提のフィルタに置き換える
+import { applyFilters } from "./logic/filter.js";     // ✅ normRows前提
 import { buildViewModel } from "./logic/aggregate.js";
 
 import { normalizeRow } from "./data/normalizeRow.js";
-
-// ❌ charts はウィジェットが自分で描く（枠に干渉させない）
-// import { renderCharts } from "./ui/charts.js";
 import { renderFocusOverlay } from "./ui/focusOverlay.js";
 
 const DEFAULT_MID_SLOTS = ["widget1", "widget2", "dummyA", "dummyB"];
@@ -31,7 +28,7 @@ const initialState = {
 
   widget1Axis: "景品ジャンル",
 
-  // 互換（必要なら残す）：enrich済み
+  // 互換（必要なら残す）：enrich済みraw（旧ルート）
   filteredRows: [],
 
   // ✅ B案：正規化済み（全件）
@@ -47,7 +44,7 @@ const initialState = {
   midSortKey: "sales",
   midSortDir: "desc",
 
-  // appフィルタ（上層→下層にも対応）
+  // ✅ appフィルタ（上層→下層にも対応）
   filters: {
     machineNames: [],
     feeKeys: [],
@@ -87,7 +84,7 @@ window.getState = () => store.get();
 
 // ===== actions =====
 const actions = {
-  // ----- app filter setters（UIから呼ぶ想定） -----
+  // ===== app filters =====
   onSetMachineNames: (names) => {
     store.set((s) => ({
       ...s,
@@ -174,7 +171,7 @@ const actions = {
     actions.requestRender();
   },
 
-  // ----- 既存アクション（UI挙動） -----
+  // ===== existing =====
   onPickGenre: (genreOrNull) => {
     store.set((s) => ({ ...s, focusGenre: genreOrNull }));
   },
@@ -333,9 +330,7 @@ async function hydrateFromRaw() {
   // codebook（decodeSymbol 用）
   let codebook = {};
   try {
-    const res = await fetch("./data/master/codebook.json", {
-      cache: "no-store",
-    });
+    const res = await fetch("./data/master/codebook.json", { cache: "no-store" });
     if (res.ok) codebook = await res.json();
   } catch (e) {
     codebook = {};
@@ -352,6 +347,7 @@ async function hydrateFromRaw() {
       ...(m || {}),
       ...decoded,
 
+      // raw側の値は“明示的に残す”（列の揺れに負けない）
       booth_id: r?.booth_id,
       machine_name: r?.machine_name,
       machine_key: r?.machine_key,
@@ -368,17 +364,16 @@ async function hydrateFromRaw() {
   // ✅ B案：正規化は入口で1回（全件）
   const normRowsAll = rawEnrichedRows.map(normalizeRow);
 
-  // ✅ appフィルタ：正規化済みだけを対象にする（列名揺れを持ち込まない）
+  // ✅ appフィルタ：正規化済みだけを対象にする
   const st = store.get();
   const normRows = applyFilters(normRowsAll, st.filters);
 
-  // 互換が要る場合のみ：filteredRows を残す（不要なら後で削除）
-  const filteredRows = rawEnrichedRows; // いまは “互換用” に全件保持
+  // 互換：VM側が旧 rows を見る場合に備えて残す（後で normRows に寄せる）
+  const filteredRows = rawEnrichedRows;
 
-  // 既存VM（トップ等）が filteredRows を見ている前提があるなら維持
   const vm = buildViewModel(filteredRows, summary);
 
-  // byAxis は “表示対象” に合わせて作る（フィルタ反映）
+  // byAxis は “表示対象” に合わせる（フィルタ反映）
   const axis = buildByAxis(normRows);
 
   store.set((s) => ({
