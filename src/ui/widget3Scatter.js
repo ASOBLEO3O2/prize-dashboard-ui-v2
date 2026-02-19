@@ -106,12 +106,10 @@ function computeAverageFromPoints(points) {
 
 /* =========================================================
  * ✅ Y軸固定スケール（共通）
- * - 0%が床になり点が沈んで見えるのを避けるため min=-2
- * - ただし目盛り表示は 0〜100 のみ
  * ========================================================= */
 function fixedYAxis100_() {
   return {
-    min: -2, // ✅ 見た目の床上げ
+    min: -2,
     max: 100,
     ticks: {
       stepSize: 10,
@@ -122,8 +120,7 @@ function fixedYAxis100_() {
 }
 
 /* =========================================================
- * 平均線プラグイン
- * - beforeDatasetsDraw にして「点より後ろ」に回す（点が最前面）
+ * 平均線プラグイン（点より後ろ）
  * ========================================================= */
 const AvgLinesPlugin = {
   id: "avgLinesPlugin",
@@ -161,7 +158,7 @@ const AvgLinesPlugin = {
 };
 
 /* =========================================================
- * Tooltip（密集でも崩れない：1行 + 追加件数）
+ * Tooltip（1行）
  * ========================================================= */
 function tooltipTitleOneLine_(items) {
   if (!items?.length) return "";
@@ -175,7 +172,7 @@ function tooltipTitleOneLine_(items) {
 }
 
 /* =========================================================
- * MID（拡大前）
+ * MID
  * ========================================================= */
 let midChart = null;
 let midCanvas = null;
@@ -223,7 +220,7 @@ function ensureMid(canvas) {
         interaction: { mode: "nearest", intersect: true },
         plugins: {
           legend: { display: false },
-          avgLinesPlugin: { avgX: null, avgY: null }, // ✅ midでも平均線
+          avgLinesPlugin: { avgX: null, avgY: null },
           tooltip: {
             displayColors: false,
             callbacks: {
@@ -259,21 +256,16 @@ function updateMid(normRows) {
   const data = pts.length > MAX ? pts.slice(0, MAX) : pts;
   midChart.data.datasets[0].data = data;
 
-  // ✅ midでも平均線
   const { avgX, avgY } = computeAverageFromPoints(data);
   midChart.options.plugins.avgLinesPlugin = { avgX, avgY };
 
   midChart.update();
 
-  // 初回計測ズレ保険（見た目だけ）
   try {
     midChart.resize();
   } catch {}
 }
 
-/**
- * kpiMid.js から呼ばれる
- */
 export function renderWidget3Scatter(body, state, actions) {
   if (!body) return;
 
@@ -283,7 +275,6 @@ export function renderWidget3Scatter(body, state, actions) {
     clear(body);
     body.classList.add("chartBody");
 
-    // 軸説明（mid）
     body.appendChild(
       el("div", {
         class: "w3AxisHint",
@@ -297,7 +288,6 @@ export function renderWidget3Scatter(body, state, actions) {
     cv.style.display = "block";
     body.appendChild(cv);
 
-    // ✅ クリックで拡大へ（カードどこでも）
     const openFocus = () => {
       if (typeof actions?.onOpenFocus === "function") actions.onOpenFocus("scatter");
       else console.warn("[W3] actions.onOpenFocus が未定義です");
@@ -333,7 +323,7 @@ export function renderWidget3Scatter(body, state, actions) {
 }
 
 /* =========================================================
- * FOCUS（拡大後）
+ * FOCUS
  * ========================================================= */
 let focusChart = null;
 
@@ -352,9 +342,7 @@ export function renderWidget3ScatterFocus(mount, state) {
   const Chart = window.Chart;
   if (!Chart) {
     clear(mount);
-    mount.appendChild(
-      el("div", { class: "focusPlaceholder", text: "Chart.js が未ロードです" })
-    );
+    mount.appendChild(el("div", { class: "focusPlaceholder", text: "Chart.js が未ロードです" }));
     return;
   }
 
@@ -363,12 +351,9 @@ export function renderWidget3ScatterFocus(mount, state) {
 
   const rowsAll = Array.isArray(state?.normRows) ? state.normRows : [];
 
-  // ===== tools =====
   const genreSel = el("select", { class: "select" }, buildGenreSelectOptions_());
 
-  const machineSet = new Set(
-    (rowsAll || []).map((r) => stripSideSuffix_(r?.machineName)).filter(Boolean)
-  );
+  const machineSet = new Set((rowsAll || []).map((r) => stripSideSuffix_(r?.machineName)).filter(Boolean));
   const machineSel = el("select", { class: "select" }, [
     el("option", { value: "ALL", text: "マシン：ALL" }),
     ...Array.from(machineSet)
@@ -388,7 +373,6 @@ export function renderWidget3ScatterFocus(mount, state) {
 
   const panel = el("div", { class: "focusPanel w3Focus" }, [header, toolsRow]);
 
-  // ===== layout =====
   const chartWrap = el("div", { class: "w3ChartWrap" });
   const canvas = el("canvas");
   canvas.style.width = "100%";
@@ -397,9 +381,7 @@ export function renderWidget3ScatterFocus(mount, state) {
   chartWrap.appendChild(canvas);
 
   const titleArea = el("div", { class: "w3ListTitle", text: "選択中：—" });
-  const cardArea = el("div", { class: "w3CardArea" }, [
-    el("div", { class: "w3Hint", text: "点をクリックするとカードが表示されます" }),
-  ]);
+  const cardArea = el("div", { class: "w3CardArea" }, [el("div", { class: "w3Hint", text: "点をクリックするとカードが表示されます" })]);
 
   const right = el("div", { class: "w3Right" }, [titleArea, cardArea]);
 
@@ -411,7 +393,6 @@ export function renderWidget3ScatterFocus(mount, state) {
   panel.appendChild(grid);
   mount.appendChild(panel);
 
-  // ===== filtering =====
   function filteredRows() {
     const g = genreSel.value;
     const m = machineSel.value;
@@ -431,12 +412,7 @@ export function renderWidget3ScatterFocus(mount, state) {
     if (parent === "食品") return asStr(r?.foodLabel) || "未分類";
     if (parent === "ぬいぐるみ") return asStr(r?.plushLabel) || "未分類";
     if (parent === "雑貨") return asStr(r?.goodsLabel) || "未分類";
-    return (
-      asStr(r?.plushLabel) ||
-      asStr(r?.foodLabel) ||
-      asStr(r?.goodsLabel) ||
-      "未分類"
-    );
+    return asStr(r?.plushLabel) || asStr(r?.foodLabel) || asStr(r?.goodsLabel) || "未分類";
   }
 
   function flagsText_(r) {
@@ -454,11 +430,9 @@ export function renderWidget3ScatterFocus(mount, state) {
     return el("div", { class: "w3ChipRow" }, items);
   }
 
-  // ===== card =====
   function renderCard(r) {
     clear(cardArea);
 
-    // ✅ 景品名は正規化側で prizeName に必ず入る想定
     const prize = asStr(r?.prizeName) || "（名称なし）";
     const updated = asStr(r?.updatedDate) || "—";
 
@@ -477,20 +451,15 @@ export function renderWidget3ScatterFocus(mount, state) {
 
     const method = asStr(r?.methodLabel) || "—";
     const clawDetail =
-      method === "3本爪"
-        ? asStr(r?.claw3Label) || "未分類"
-        : method === "2本爪"
-        ? asStr(r?.claw2Label) || "未分類"
-        : "—";
+      method === "3本爪" ? asStr(r?.claw3Label) || "未分類" :
+      method === "2本爪" ? asStr(r?.claw2Label) || "未分類" : "—";
 
     const age = asStr(r?.ageLabel) || "—";
     const target = asStr(r?.targetLabel) || "—";
 
     const chara = asStr(r?.charaLabel) || "—";
     const charaGenre =
-      chara === "ノンキャラ"
-        ? asStr(r?.nonCharaGenreLabel) || "未分類"
-        : asStr(r?.charaGenreLabel) || "未分類";
+      chara === "ノンキャラ" ? asStr(r?.nonCharaGenreLabel) || "未分類" : asStr(r?.charaGenreLabel) || "未分類";
 
     cardArea.appendChild(
       el("div", { class: "w3Card" }, [
@@ -510,7 +479,6 @@ export function renderWidget3ScatterFocus(mount, state) {
     );
   }
 
-  // ===== chart =====
   function renderChart() {
     const rows = filteredRows();
     const pts = buildPoints(rows);
@@ -552,7 +520,7 @@ export function renderWidget3ScatterFocus(mount, state) {
             displayColors: false,
             callbacks: {
               title: tooltipTitleOneLine_,
-              label: () => "", // focusでは右カードが主、tooltipは軽く
+              label: () => "",
             },
           },
         },
@@ -564,12 +532,7 @@ export function renderWidget3ScatterFocus(mount, state) {
           y: fixedYAxis100_(),
         },
         onClick(evt) {
-          const hit = focusChart.getElementsAtEventForMode(
-            evt,
-            "nearest",
-            { intersect: true },
-            true
-          );
+          const hit = focusChart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, true);
           if (!hit || hit.length === 0) return;
 
           const idx = hit[0].index;
@@ -585,9 +548,7 @@ export function renderWidget3ScatterFocus(mount, state) {
 
     titleArea.textContent = "選択中：—";
     clear(cardArea);
-    cardArea.appendChild(
-      el("div", { class: "w3Hint", text: "点をクリックするとカードが表示されます" })
-    );
+    cardArea.appendChild(el("div", { class: "w3Hint", text: "点をクリックするとカードが表示されます" }));
   }
 
   genreSel.addEventListener("change", renderChart);
