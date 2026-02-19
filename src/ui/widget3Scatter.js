@@ -8,19 +8,18 @@ import { GENRES } from "../constants.js";
  *
  * 表示：
  * - X軸：売上（円）
- * - Y軸：原価率（%）= costRate01 * 100
+ * - Y軸：原価率（%） = costRate01 * 100
  *
- * 2026-02（調整）
- * - tooltip：重なり多数でも「1行 + (+n件)」にして大量列挙を抑止
- * - midでもID（ブースID等）を出す
- * - focus：右カードのみスクロール、縦長/狭幅は縦積み（CSS側）
- * - カード情報を normRows 情報で濃くする
- * - 点/軸/グリッドのコントラストを上げる
- * - ✅ Y軸は常に 0〜100% 固定
+ * 2026-02 改修：
+ * - Y軸は 0〜100% 固定（ただし点が沈まないよう min=-2 で“床上げ”）
+ * - mid（通常）にも平均線（縦/横）を表示
+ * - focus（拡大）も平均線維持
+ * - tooltip は1行集約（密集でも崩れない）
+ * - クリックで focus 遷移（カード内のどこを押してもOK）
  */
 
 /* =========================================================
- * 表示IDの方針（どれか1つ）
+ * 表示ID方針（どれか1つに統一）
  * ========================================================= */
 const W3_ID_MODE = "booth"; // "booth" | "machine" | "label"
 
@@ -40,6 +39,7 @@ function fmtPct100(v) {
   if (!Number.isFinite(n)) return "—";
   return `${n.toFixed(1)}%`;
 }
+
 function canvasReady(cv) {
   if (!cv) return false;
   const rect = cv.getBoundingClientRect?.();
@@ -63,9 +63,9 @@ function pickIdText_(r) {
 
 function genresList_() {
   if (!Array.isArray(GENRES)) return [];
-  return GENRES.map((g) => ({ key: asStr(g?.key), label: asStr(g?.label) })).filter(
-    (g) => g.key
-  );
+  return GENRES
+    .map((g) => ({ key: asStr(g?.key), label: asStr(g?.label) }))
+    .filter((g) => g.key);
 }
 function buildGenreSelectOptions_() {
   const list = genresList_();
@@ -106,14 +106,16 @@ function computeAverageFromPoints(points) {
 
 /* =========================================================
  * ✅ Y軸固定スケール（共通）
+ * - 0%が床になり点が沈んで見えるのを避けるため min=-2
+ * - ただし目盛り表示は 0〜100 のみ
  * ========================================================= */
 function fixedYAxis100_() {
   return {
-    min: 0,
-    max: 100, // ✅ 100% 固定
+    min: -2, // ✅ 見た目の床上げ
+    max: 100,
     ticks: {
       stepSize: 10,
-      callback: (v) => `${v}%`,
+      callback: (v) => (v < 0 ? "" : `${v}%`),
     },
     grid: { color: "rgba(148,163,184,.18)" },
   };
@@ -121,10 +123,11 @@ function fixedYAxis100_() {
 
 /* =========================================================
  * 平均線プラグイン
+ * - beforeDatasetsDraw にして「点より後ろ」に回す（点が最前面）
  * ========================================================= */
 const AvgLinesPlugin = {
   id: "avgLinesPlugin",
-  afterDatasetsDraw(chart, args, pluginOptions) {
+  beforeDatasetsDraw(chart, args, pluginOptions) {
     const avgX = pluginOptions?.avgX;
     const avgY = pluginOptions?.avgY;
     if (avgX == null && avgY == null) return;
@@ -158,7 +161,7 @@ const AvgLinesPlugin = {
 };
 
 /* =========================================================
- * Tooltip（大量列挙抑止）
+ * Tooltip（密集でも崩れない：1行 + 追加件数）
  * ========================================================= */
 function tooltipTitleOneLine_(items) {
   if (!items?.length) return "";
@@ -169,12 +172,6 @@ function tooltipTitleOneLine_(items) {
   const y = fmtPct100(p0?.y);
   const extra = items.length > 1 ? `（+${items.length - 1}件）` : "";
   return `${id} ｜ 売上 ${x}円 / 原価率 ${y}${extra}`;
-}
-function tooltipLabelPrize_(item) {
-  const r = item?.raw?._row;
-  if (!r) return "";
-  const prize = asStr(r?.prizeName) || "—";
-  return `景品：${prize}`;
 }
 
 /* =========================================================
@@ -226,6 +223,7 @@ function ensureMid(canvas) {
         interaction: { mode: "nearest", intersect: true },
         plugins: {
           legend: { display: false },
+          avgLinesPlugin: { avgX: null, avgY: null }, // ✅ midでも平均線
           tooltip: {
             displayColors: false,
             callbacks: {
@@ -239,9 +237,10 @@ function ensureMid(canvas) {
             ticks: { callback: (v) => `${fmtYen(v)}円` },
             grid: { color: "rgba(148,163,184,.18)" },
           },
-          y: fixedYAxis100_(), // ✅ ここで固定
+          y: fixedYAxis100_(),
         },
       },
+      plugins: [AvgLinesPlugin],
     });
 
     midCanvas = canvas;
@@ -256,11 +255,20 @@ function updateMid(normRows) {
 
   const pts = buildPoints(normRows);
 
-  // 過負荷保険
   const MAX = 2500;
-  midChart.data.datasets[0].data = pts.length > MAX ? pts.slice(0, MAX) : pts;
+  const data = pts.length > MAX ? pts.slice(0, MAX) : pts;
+  midChart.data.datasets[0].data = data;
+
+  // ✅ midでも平均線
+  const { avgX, avgY } = computeAverageFromPoints(data);
+  midChart.options.plugins.avgLinesPlugin = { avgX, avgY };
 
   midChart.update();
+
+  // 初回計測ズレ保険（見た目だけ）
+  try {
+    midChart.resize();
+  } catch {}
 }
 
 /**
@@ -289,10 +297,22 @@ export function renderWidget3Scatter(body, state, actions) {
     cv.style.display = "block";
     body.appendChild(cv);
 
+    // ✅ クリックで拡大へ（カードどこでも）
+    const openFocus = () => {
+      if (typeof actions?.onOpenFocus === "function") actions.onOpenFocus("scatter");
+      else console.warn("[W3] actions.onOpenFocus が未定義です");
+    };
+
+    cv.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openFocus();
+    });
+
     body.addEventListener("click", (e) => {
       const tag = (e.target?.tagName || "").toLowerCase();
       if (tag === "select" || tag === "option" || tag === "button") return;
-      actions?.onOpenFocus?.("scatter");
+      openFocus();
     });
 
     body.__w3_built = true;
@@ -352,14 +372,14 @@ export function renderWidget3ScatterFocus(mount, state) {
   const machineSel = el("select", { class: "select" }, [
     el("option", { value: "ALL", text: "マシン：ALL" }),
     ...Array.from(machineSet)
-      .sort()
+      .sort((a, b) => a.localeCompare(b, "ja"))
       .map((m) => el("option", { value: m, text: `マシン：${m}` })),
   ]);
 
   const toolsRow = el("div", { class: "w3ToolsRow" }, [genreSel, machineSel]);
 
   const header = el("div", { class: "focusPanelTop" }, [
-    el("div", { class: "focusPanelTitle", text: "売上 × 原価率" }),
+    el("div", { class: "focusPanelTitle", text: "売上 × 原価率（マトリクス）" }),
     el("div", {
       class: "focusPanelNote",
       text: "X軸=売上（円） / Y軸=原価率（%）｜ジャンル・マシンで絞込｜平均線｜点クリックでカード",
@@ -438,6 +458,7 @@ export function renderWidget3ScatterFocus(mount, state) {
   function renderCard(r) {
     clear(cardArea);
 
+    // ✅ 景品名は正規化側で prizeName に必ず入る想定
     const prize = asStr(r?.prizeName) || "（名称なし）";
     const updated = asStr(r?.updatedDate) || "—";
 
@@ -531,7 +552,7 @@ export function renderWidget3ScatterFocus(mount, state) {
             displayColors: false,
             callbacks: {
               title: tooltipTitleOneLine_,
-              label: tooltipLabelPrize_,
+              label: () => "", // focusでは右カードが主、tooltipは軽く
             },
           },
         },
@@ -540,7 +561,7 @@ export function renderWidget3ScatterFocus(mount, state) {
             ticks: { callback: (v) => `${fmtYen(v)}円` },
             grid: { color: "rgba(148,163,184,.18)" },
           },
-          y: fixedYAxis100_(), // ✅ ここで固定
+          y: fixedYAxis100_(),
         },
         onClick(evt) {
           const hit = focusChart.getElementsAtEventForMode(
