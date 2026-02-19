@@ -1,137 +1,59 @@
-/* =========================================================
-   Widget③：売上 × 原価率（Scatter）
-   ========================================================= */
-
-/* ===== ツールバー ===== */
 .w3ToolsRow{
   display:flex;
   gap:10px;
   padding:10px 12px;
-  flex-wrap:wrap;
 }
-
-/* ===== 軸説明（mid） ===== */
-.w3AxisHint{
-  font-size:12px;
-  opacity:.85;
-  padding:6px 8px;
-  margin-bottom:6px;
-  letter-spacing:.02em;
-}
-
-/* =========================================================
-   Focus 共通パネル
-   ========================================================= */
-
-.w3Focus{
-  display:flex;
-  flex-direction:column;
-  min-height:0;
-}
-
-.w3Grid{
-  display:grid;
-  grid-template-columns: 1.6fr 1fr;
-  gap:16px;
-  padding:12px;
-  min-height:0;
-}
-
-/* 左：チャート */
-.w3Left{
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-}
-
-/* 右：カード */
-.w3Right{
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-}
-
-/* =========================================================
-   チャート枠
-   ========================================================= */
 
 .w3ChartWrap{
   border:1px solid rgba(148,163,184,.28);
   border-radius:16px;
   padding:12px;
-  background:rgba(15,21,29,.75);
-  display:flex;
-  flex-direction:column;
-  flex:1;
-  min-height:0;
+  background:rgba(15,21,29,.68);
 }
-
-.w3ChartWrap canvas{
-  flex:1;
-  min-height:0;
-}
-
-/* =========================================================
-   選択中タイトル
-   ========================================================= */
-
-.w3ListTitle{
-  font-weight:800;
-  padding:10px 12px;
-  border:1px solid rgba(148,163,184,.25);
-  border-radius:14px;
-  background:rgba(18,26,34,.85);
-  margin-bottom:10px;
-}
-
-/* =========================================================
-   カードエリア（右）
-   ========================================================= */
 
 .w3CardArea{
-  flex:1;
-  min-height:0;
-  overflow:auto;        /* ✅ カードだけスクロール */
-  padding:6px 2px 6px 2px;
+  padding:10px;
 }
-
-.w3Hint{
-  opacity:.8;
-  font-size:12px;
-  padding:10px 12px;
-  border:1px dashed rgba(148,163,184,.35);
-  border-radius:14px;
-}
-
-/* =========================================================
-   カード本体
-   ========================================================= */
 
 .w3Card{
-  border:1px solid rgba(148,163,184,.28);
-  border-radius:16px;
-  padding:14px;
+  border:1px solid rgba(148,163,184,.26);
+  border-radius:14px;
+  padding:12px;
   display:flex;
   flex-direction:column;
-  gap:10px;
-  background:rgba(18,26,34,.9);
-  box-shadow:0 4px 16px rgba(0,0,0,.35);
+  gap:6px;
+  background:rgba(18,26,34,.78);
 }
 
 .w3CardTitle{
-  font-weight:900;
+  font-weight:800;
+  letter-spacing:.04em;
   font-size:16px;
-  letter-spacing:.02em;
+  color:rgba(241,245,249,.95);
 }
 
 .w3CardSub{
   font-size:12px;
-  opacity:.85;
+  color:rgba(226,232,240,.78);
 }
 
-/* =========================================================
-   チップ（情報ブロック）
-   ========================================================= */
+.w3Hint{
+  padding:10px 12px;
+  border:1px dashed rgba(148,163,184,.32);
+  border-radius:12px;
+  color:rgba(226,232,240,.78);
+  background:rgba(15,21,29,.45);
+}
+
+.w3ListTitle{
+  padding:10px 12px;
+  border:1px solid rgba(148,163,184,.26);
+  border-radius:14px;
+  margin:12px 0 10px;
+  font-weight:800;
+  color:rgba(241,245,249,.92);
+  background:rgba(15,21,29,.55);
+}
 
 .w3ChipRow{
   display:flex;
@@ -140,69 +62,43 @@
 }
 
 .w3Chip{
-  font-size:12px;
-  padding:6px 10px;
+  border:1px solid rgba(148,163,184,.26);
   border-radius:999px;
-  background:rgba(30,41,59,.85);
-  border:1px solid rgba(148,163,184,.35);
-  white-space:nowrap;
-  letter-spacing:.02em;
-}
-
-/* KPIチップを少し強調 */
-.w3ChipRow:last-of-type .w3Chip{
-  background:rgba(59,130,246,.25);
-  border:1px solid rgba(96,165,250,.5);
-}
-
-/* =========================================================
-   フォーカスパネルヘッダー
-   ========================================================= */
-
-.focusPanelTop{
-  padding:14px 16px 8px 16px;
-}
-
-.focusPanelTitle{
-  font-size:18px;
-  font-weight:900;
-}
-
-.focusPanelNote{
+  padding:6px 10px;
   font-size:12px;
-  opacity:.8;
-  margin-top:4px;
+  color:rgba(241,245,249,.9);
+  background:rgba(2,6,23,.25);
 }
 
-/* =========================================================
-   縦長 / 狭幅対策
-   ========================================================= */
-
-@media (max-width: 1100px){
-  .w3Grid{
-    grid-template-columns: 1fr;
-  }
-
-  .w3ChartWrap{
-    height:52vh;      /* 上：チャートをしっかり見せる */
-  }
-
-  .w3CardArea{
-    max-height:38vh;  /* 下：カードだけスクロール */
-  }
+.w3Grid{
+  width:100%;
 }
 
-@media (max-width: 720px){
-  .w3ChartWrap{
-    height:48vh;
-  }
+.w3Left{
+  min-width:0;
+  min-height:0;
+}
 
-  .w3CardArea{
-    max-height:42vh;
-  }
+.w3Right{
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
 
-  .w3Chip{
-    font-size:11px;
-    padding:5px 8px;
-  }
+.w3AxisHint{
+  margin:0 0 6px 0;
+  font-size:12px;
+  color:rgba(226,232,240,.82);
+}
+
+/* 縦長でも「カードだけスクロール」 */
+.w3CardArea{
+  min-height:0;
+  overflow:auto;
+}
+
+/* クリックを通す（保険） */
+.w3Focus canvas{
+  pointer-events:auto;
 }
