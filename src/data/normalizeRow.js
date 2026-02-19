@@ -5,18 +5,9 @@ function asStr(v) {
   return String(v ?? "").trim();
 }
 function asNum(v) {
-  if (v == null) return 0;
-  const s = String(v).replace(/,/g, "").trim();
-  if (s === "") return 0;
-  const n = Number(s);
+  if (v == null || v === "") return 0;
+  const n = Number(String(v).replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : 0;
-}
-function asNumOrNull(v) {
-  if (v == null) return null;
-  const s = String(v).replace(/,/g, "").trim();
-  if (s === "") return null;          // ✅ 空欄は null
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
 }
 function pickFirst(obj, keys) {
   for (const k of keys) {
@@ -26,198 +17,142 @@ function pickFirst(obj, keys) {
   return "";
 }
 
-// 0/1/true/false/○/× etc を boolean に寄せる
-function asBoolTri(v) {
-  const s = asStr(v);
-  if (!s) return null;
-  if (s === "1" || s.toLowerCase() === "true" || s === "○" || s === "〇") return true;
-  if (s === "0" || s.toLowerCase() === "false" || s === "×" || s === "✕") return false;
-  return null;
-}
-
-// 原価率を 0..1（01）に正規化して返す
-// - 空欄 → null
-// - 0.28 など → そのまま
-// - 28 や 28.5 など → % とみなして /100
-function parseCostRate01(v) {
-  const n = asNumOrNull(v);
-  if (n == null) return null;
-
-  // 例えば 27.9（%）が来ることがあるなら /100
-  if (n > 1.5) return n / 100;
-
-  // 0..1.5 は比率として扱う（1.1 などが来ても一応許容）
-  return n;
+function toKeyLabel(obj, labelKeys, codeKeys, fallbackLabel = "", fallbackKey = "") {
+  const label = asStr(pickFirst(obj, labelKeys));
+  const key = asStr(pickFirst(obj, codeKeys));
+  return {
+    key: key || (label ? label : fallbackKey),
+    label: label || (key ? key : fallbackLabel),
+  };
 }
 
 export function normalizeRow(rawRow) {
-  // ==== 基本キー（rawの揺れを吸収） ====
-
-  const boothId = asStr(pickFirst(rawRow, ["boothId", "ブースID", "booth_id"]));
-  const labelId = asStr(pickFirst(rawRow, ["labelId", "ラベルID", "label_id"]));
-
-  // ✅ 重要：machineName はマスタの「対応マシン名」を最優先
+  // ===== ID =====
+  const boothId = asStr(pickFirst(rawRow, ["boothId", "booth_id", "ブースID"]));
+  const labelId = asStr(pickFirst(rawRow, ["labelId", "label_id", "ラベルID"]));
   const machineName = asStr(
-    pickFirst(rawRow, ["対応マシン名", "machineName", "マシン名", "machine_name"])
+    pickFirst(rawRow, ["machineName", "machine_name", "対応マシン名", "マシン名"])
   );
 
+  // ✅ 景品名（enrichで item_name が入る想定）
   const prizeName = asStr(
-  pickFirst(rawRow, [
-    "prizeName",
-    "景品名",
-    "景品名_表示",
-    "景品名（表示）",
-    "景品",
-    "景品名称",
-    "prize_name",
-    "prize",
-    "name",
-  ])
-);
+    pickFirst(rawRow, [
+      "prizeName",
+      "item_name",
+      "景品名",
+      "景品",
+      "name",
+      "prize_name",
+    ])
+  );
 
+  // ===== 数値 =====
+  const sales = asNum(pickFirst(rawRow, ["sales", "総売上", "売上"]));
+  const claw = asNum(pickFirst(rawRow, ["claw", "消化額"]));
 
-  // 売上/消化額（あなたのデータでは claw が消化額）
-  const sales = asNum(pickFirst(rawRow, ["sales", "総売上", "売上", "売上合計"]));
-  const claw = asNum(pickFirst(rawRow, ["claw", "消化額", "消化金額", "消化額合計"]));
-
-  // 更新日
-  const updatedDate = asStr(pickFirst(rawRow, ["updatedDate", "更新日"]));
-
-  // ==== 原価率（0..1） ====
-  // 既にあるなら吸収（空欄は0にしない！）
-  let costRate01 =
-    parseCostRate01(pickFirst(rawRow, ["costRate01", "原価率01"])) ??
-    parseCostRate01(pickFirst(rawRow, ["costRate", "原価率"])); // 互換：別名も拾う
-
-  // 無ければ計算（消化額×1.1÷売上）
-  if (costRate01 == null) {
-    costRate01 = sales > 0 ? (claw * 1.1) / sales : null;
+  // costRate01 は「0.0〜1.0」で統一
+  // raw側に cost_rate(%) が来る場合もあるので両対応
+  const cost_rate = pickFirst(rawRow, ["costRate01", "cost_rate", "原価率"]);
+  let costRate01 = 0;
+  if (typeof cost_rate === "number") costRate01 = cost_rate;
+  else {
+    const s = String(cost_rate ?? "").trim();
+    const n = Number(s.replace(/%/g, ""));
+    if (Number.isFinite(n)) costRate01 = n > 1 ? n / 100 : n;
   }
 
-  // ==== フィルタ用の正規化キー群（設計B案） ====
+  const updatedDate = asStr(pickFirst(rawRow, ["updatedDate", "updated_date", "更新日"]));
 
-  // 年代
-  const ageLabel = asStr(pickFirst(rawRow, ["年代", "ageLabel"])) || "—";
-  const ageKey = asStr(pickFirst(rawRow, ["年代_code", "ageKey"])) || "";
+  // ===== デコード済み（*_code or 日本語ラベル） =====
+  const age = toKeyLabel(rawRow, ["年代"], ["年代_code"], "", "");
+  const fee = toKeyLabel(rawRow, ["料金"], ["料金_code"], "", "");
+  const plays = toKeyLabel(rawRow, ["回数"], ["回数_code"], "", "");
 
-  // 料金
-  const feeLabel = asStr(pickFirst(rawRow, ["料金", "feeLabel"])) || "—";
-  const feeKey = asStr(pickFirst(rawRow, ["料金_code", "feeKey"])) || "";
+  const method = toKeyLabel(rawRow, ["投入法"], ["投入法_code"], "", "");
 
-  // 回数
-  const playsLabel = asStr(pickFirst(rawRow, ["回数", "playsLabel"])) || "—";
-  const playsKey = asStr(pickFirst(rawRow, ["回数_code", "playsKey"])) || "";
+  const claw2 = toKeyLabel(rawRow, ["2本爪"], ["2本爪_code"], "", "");
+  const claw3 = toKeyLabel(rawRow, ["3本爪"], ["3本爪_code"], "", "");
 
-  // 投入法（親）
-  const methodLabel = asStr(pickFirst(rawRow, ["投入法", "methodLabel"])) || "その他";
-  const methodKey = asStr(pickFirst(rawRow, ["投入法_code", "methodKey"])) || "";
+  const prizeGenre = toKeyLabel(rawRow, ["景品ジャンル"], ["景品ジャンル_code"], "その他", "other");
+  const food = toKeyLabel(rawRow, ["食品ジャンル"], ["食品ジャンル_code"], "未分類", "misc");
+  const plush = toKeyLabel(rawRow, ["ぬいぐるみジャンル"], ["ぬいぐるみジャンル_code"], "未分類", "misc");
+  const goods = toKeyLabel(rawRow, ["雑貨ジャンル"], ["雑貨ジャンル_code"], "未分類", "misc");
 
-  // 投入法（子）
-  const claw2Label = asStr(pickFirst(rawRow, ["2本爪", "claw2Label"])) || "";
-  const claw2Key = asStr(pickFirst(rawRow, ["2本爪_code", "claw2Key"])) || "";
-  const claw3Label = asStr(pickFirst(rawRow, ["3本爪", "claw3Label"])) || "";
-  const claw3Key = asStr(pickFirst(rawRow, ["3本爪_code", "claw3Key"])) || "";
+  const chara = toKeyLabel(rawRow, ["キャラ"], ["キャラ_code"], "その他", "other");
+  const charaGenre = toKeyLabel(rawRow, ["キャラジャンル"], ["キャラジャンル_code"], "未分類", "misc");
+  const nonCharaGenre = toKeyLabel(rawRow, ["ノンキャラジャンル"], ["ノンキャラジャンル_code"], "未分類", "misc");
 
-  // 景品ジャンル（親）
-  const prizeGenreLabel =
-    asStr(pickFirst(rawRow, ["景品ジャンル", "prizeGenreLabel"])) || "その他";
-  const prizeGenreKey =
-    asStr(pickFirst(rawRow, ["景品ジャンル_code", "prizeGenreKey"])) || "other";
-
-  // 景品ジャンル（子：label優先）
-  const foodLabel = asStr(pickFirst(rawRow, ["食品ジャンル", "foodLabel"])) || "";
-  const foodKey = asStr(pickFirst(rawRow, ["食品ジャンル_code", "foodKey"])) || "";
-  const plushLabel = asStr(pickFirst(rawRow, ["ぬいぐるみジャンル", "plushLabel"])) || "";
-  const plushKey = asStr(pickFirst(rawRow, ["ぬいぐるみジャンル_code", "plushKey"])) || "";
-  const goodsLabel = asStr(pickFirst(rawRow, ["雑貨ジャンル", "goodsLabel"])) || "";
-  const goodsKey = asStr(pickFirst(rawRow, ["雑貨ジャンル_code", "goodsKey"])) || "";
-
-  // キャラ（親）
-  const charaLabel = asStr(pickFirst(rawRow, ["キャラ", "charaLabel"])) || "その他";
-  const charaKey = asStr(pickFirst(rawRow, ["キャラ_code", "charaKey"])) || "";
-
-  // キャラ（子）
-  const charaGenreLabel = asStr(pickFirst(rawRow, ["キャラジャンル", "charaGenreLabel"])) || "";
-  const charaGenreKey = asStr(pickFirst(rawRow, ["キャラジャンル_code", "charaGenreKey"])) || "";
-  const nonCharaGenreLabel =
-    asStr(pickFirst(rawRow, ["ノンキャラジャンル", "nonCharaGenreLabel"])) || "";
-  const nonCharaGenreKey =
-    asStr(pickFirst(rawRow, ["ノンキャラジャンル_code", "nonCharaGenreKey"])) || "";
-
-  // ターゲット
-  const targetLabel = asStr(pickFirst(rawRow, ["ターゲット", "targetLabel"])) || "—";
-  const targetKey = asStr(pickFirst(rawRow, ["ターゲット_code", "targetKey"])) || "";
-
-  // flags（tri）
-  const isMovie = asBoolTri(pickFirst(rawRow, ["映画", "movie"])) === true;
-  const isReserve = asBoolTri(pickFirst(rawRow, ["予約", "reserve"])) === true;
-  const isWlOriginal = asBoolTri(pickFirst(rawRow, ["WL", "wl"])) === true;
+  // flags（正規化済みキーで扱う）
+  const isMovie = !!rawRow?.isMovie;
+  const isReserve = !!rawRow?.isReserve;
+  const isWlOriginal = !!rawRow?.isWlOriginal;
 
   return {
-    // ===== ID/基本 =====
     boothId,
     labelId,
     machineName,
+
     prizeName,
     updatedDate,
 
-    // ===== 数値 =====
     sales,
     claw,
     costRate01,
 
-    // ===== 正規化済みキー群 =====
-    ageLabel,
-    ageKey,
+    ageLabel: age.label,
+    ageKey: age.key,
 
-    feeLabel,
-    feeKey,
+    feeLabel: fee.label,
+    feeKey: fee.key,
 
-    playsLabel,
-    playsKey,
+    playsLabel: plays.label,
+    playsKey: plays.key,
 
-    methodLabel,
-    methodKey,
+    methodLabel: method.label,
+    methodKey: method.key,
 
-    claw2Label,
-    claw2Key,
-    claw3Label,
-    claw3Key,
+    claw2Label: claw2.label,
+    claw2Key: claw2.key,
 
-    prizeGenreLabel,
-    prizeGenreKey,
+    claw3Label: claw3.label,
+    claw3Key: claw3.key,
 
-    foodLabel,
-    foodKey,
-    plushLabel,
-    plushKey,
-    goodsLabel,
-    goodsKey,
+    prizeGenreLabel: prizeGenre.label,
+    prizeGenreKey: prizeGenre.key,
 
-    charaLabel,
-    charaKey,
-    charaGenreLabel,
-    charaGenreKey,
-    nonCharaGenreLabel,
-    nonCharaGenreKey,
+    foodLabel: food.label,
+    foodKey: food.key,
 
-    targetLabel,
-    targetKey,
+    plushLabel: plush.label,
+    plushKey: plush.key,
+
+    goodsLabel: goods.label,
+    goodsKey: goods.key,
+
+    charaLabel: chara.label,
+    charaKey: chara.key,
+
+    charaGenreLabel: charaGenre.label,
+    charaGenreKey: charaGenre.key,
+
+    nonCharaGenreLabel: nonCharaGenre.label,
+    nonCharaGenreKey: nonCharaGenre.key,
 
     isMovie,
     isReserve,
     isWlOriginal,
+
+    _raw: rawRow,
   };
 }
 
-/**
- * drawer等で使う：rows から key のユニーク値を取得（正規化済み前提）
- */
-export function uniqueOptions(rows, key) {
+export function uniqueOptions(normRows, field, opts = {}) {
+  const includeEmpty = !!opts.includeEmpty;
   const set = new Set();
-  for (const r of rows || []) {
-    const v = r?.[key];
-    if (v != null && String(v).trim() !== "") set.add(String(v).trim());
+  for (const r of normRows || []) {
+    const v = asStr(r?.[field]);
+    if (!includeEmpty && !v) continue;
+    set.add(v);
   }
-  return Array.from(set).sort((a, b) => a.localeCompare(b, "ja"));
+  return [...set];
 }
