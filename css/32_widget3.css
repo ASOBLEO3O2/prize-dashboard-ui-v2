@@ -102,3 +102,60 @@
 .w3Focus canvas{
   pointer-events:auto;
 }
+
+/* =========================
+   Widget③ Focus：グラフ潰れ対策
+   ========================= */
+
+/* focusPanel全体が高さを持つ前提。なければここで確保 */
+.focusPanel.w3Focus{
+  min-height: 0;
+  height: 100%;
+}
+
+/* ツール列より下を“残り全部”使う */
+.focusPanel.w3Focus .focusDonutGrid.w3Grid{
+  min-height: 0;
+  height: calc(100vh - 170px); /* ←ヘッダ+ツールの分。合わなければ 150〜200で微調整 */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px; /* 右カード幅は固定 */
+  gap: 14px;
+  align-items: stretch;
+}
+
+/* 左：縦に伸びる */
+.focusPanel.w3Focus .w3Left{
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* グラフ枠：高さを“必ず”確保（これが効く） */
+.focusPanel.w3Focus .w3ChartWrap{
+  flex: 1 1 auto;
+  min-height: 340px;          /* 潰れない最低高さ */
+  height: 100%;
+}
+
+/* canvasは親いっぱい */
+.focusPanel.w3Focus .w3ChartWrap canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+/* 右：タイトル固定＋カードだけスクロール */
+.focusPanel.w3Focus .w3Right{
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.focusPanel.w3Focus .w3ListTitle{
+  flex: 0 0 auto;
+}
+.focusPanel.w3Focus .w3CardArea{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
