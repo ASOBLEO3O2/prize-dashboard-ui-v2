@@ -61,7 +61,20 @@ export function normalizeRow(rawRow) {
     pickFirst(rawRow, ["対応マシン名", "machineName", "マシン名", "machine_name"])
   );
 
-  const prizeName = asStr(pickFirst(rawRow, ["prizeName", "景品名", "prize_name"]));
+  const prizeName = asStr(
+  pickFirst(rawRow, [
+    "prizeName",
+    "景品名",
+    "景品名_表示",
+    "景品名（表示）",
+    "景品",
+    "景品名称",
+    "prize_name",
+    "prize",
+    "name",
+  ])
+);
+
 
   // 売上/消化額（あなたのデータでは claw が消化額）
   const sales = asNum(pickFirst(rawRow, ["sales", "総売上", "売上", "売上合計"]));
