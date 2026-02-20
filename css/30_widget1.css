@@ -307,3 +307,10 @@
 .widget1-expanded .widget1Canvas{
   height:100% !important;
 }
+
+@media (max-width: 600px){
+  .w1LegendPinned{ flex:0 0 auto; margin-bottom:10px; }
+  .w1LegendScroll{ flex:1 1 auto; min-height:0; overflow:auto; padding-right:8px; }
+  .w1LegendItem.isPinned{ border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.04); }
+  .w1LegendItem.isSelected{ outline:2px solid rgba(255,255,255,.10); outline-offset:0; }
+}
