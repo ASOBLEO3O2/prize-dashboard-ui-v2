@@ -153,3 +153,59 @@
   background: rgba(255,255,255,.15);
   border-radius: 999px;
 }
+/* =========================================================
+   W1 安定化パッチ（pinned無し・旧legend前提）
+   - tooltipを枠内に固定（カードに被らない）
+   - legendはこの領域だけスクロール
+   ========================================================= */
+
+/* 全体：縦積み＋高さ計算ができるように */
+.widget1 .widget1Body{
+  display:flex;
+  flex-direction:column;
+  min-height:0;      /* ← overflow が効く必須条件 */
+  gap:12px;
+}
+
+/* ドーナツ枠：高さを安定化（端末差のコロコロ抑制） */
+.widget1 .widget1ChartWrap{
+  position:relative; /* ← tooltip絶対配置の基準 */
+  flex:0 0 auto;
+  height: clamp(260px, 32vh, 360px);
+  min-height:240px;
+  max-height:360px;
+}
+
+/* canvas は枠いっぱい */
+.widget1 .widget1Canvas{
+  width:100% !important;
+  height:100% !important;
+  display:block;
+}
+
+/* tooltip：枠内の下中央に固定（カードに被せない） */
+.widget1 .w1Tip{
+  position:absolute;
+  left:50%;
+  bottom:10px;
+  transform:translateX(-50%);
+  max-width:min(92%, 360px);
+  z-index:5;
+  pointer-events:none;
+}
+
+/* legend（=カード一覧）：この領域だけスクロール */
+.widget1 .widget1ABC{
+  flex:1 1 auto;
+  min-height:0;      /* ← overflow が効く必須条件 */
+  overflow:auto;
+  padding-right:6px;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ついでにモバイルで文字が小さすぎるのを軽減（任意） */
+@media (max-width:600px){
+  .widget1 .w1LegendLabel{ font-size:16px; font-weight:800; }
+  .widget1 .w1LegendSales{ font-size:16px; font-weight:800; }
+  .widget1 .w1LegendShare{ font-size:13px; }
+}
