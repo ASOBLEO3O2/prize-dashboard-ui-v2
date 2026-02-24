@@ -1,12 +1,10 @@
-/* =========================================
-   Widget① 固定レイアウト版
-   レスポンシブ完全廃止
-========================================= */
+/* =====================================================
+   Widget① Share Donut
+   安定レスポンシブ版（潰れない設計）
+===================================================== */
 
 .widget1{
-  width: 900px;          /* 固定幅 */
-  max-width: 900px;
-  margin: 0 auto;
+  width: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -28,7 +26,6 @@
 
 .widget1HeaderRight{
   display: flex;
-  align-items: center;
   gap: 8px;
 }
 
@@ -36,18 +33,18 @@
 
 .widget1Body{
   display: flex;
-  gap: 16px;
-  height: 500px;          /* 高さ固定 */
-  min-height: 500px;
+  gap: 20px;
+  align-items: stretch;
+  min-height: 0;
 }
 
 /* ---------------- Chart ---------------- */
 
 .widget1ChartWrap{
-  flex: 0 0 50%;
+  flex: 1 1 480px;       /* 伸びるが最低確保 */
+  min-width: 380px;      /* ← 55px潰れ防止 */
+  aspect-ratio: 1 / 1;   /* 常に正円 */
   position: relative;
-  aspect-ratio: 1 / 1;     /* 常に正円 */
-  min-width: 0;
 }
 
 .widget1Canvas{
@@ -56,14 +53,14 @@
   display: block;
 }
 
-/* 中央売上表示 */
+/* 中央表示 */
 .w1Center{
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   pointer-events: none;
 }
 
@@ -74,22 +71,23 @@
 
 .w1CenterValue{
   font-size: 20px;
-  font-weight: bold;
+  font-weight: 700;
 }
 
-/* Tooltip */
+/* Tooltip（カードに被らない） */
 .w1Tip{
   position: absolute;
   left: 50%;
   bottom: 12px;
   transform: translateX(-50%);
-  background: rgba(20,20,20,.95);
+  background: rgba(0,0,0,.9);
   padding: 8px 10px;
   border-radius: 8px;
   font-size: 12px;
-  display: none;
-  z-index: 5;
+  z-index: 10;
   max-width: 320px;
+  pointer-events: none;
+  display: none;
 }
 
 .w1Tip.show{
@@ -99,30 +97,32 @@
 /* ---------------- Legend ---------------- */
 
 .widget1ABC{
-  flex: 0 0 50%;
+  flex: 1 1 480px;
+  min-width: 380px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;      /* ← カードだけスクロール */
+  gap: 12px;
+  overflow-y: auto;       /* ← カード側だけスクロール */
   min-height: 0;
   padding-right: 6px;
 }
 
-/* スクロールが効くための重要指定 */
+/* スクロールバー */
+
 .widget1ABC::-webkit-scrollbar{
   width: 6px;
 }
 .widget1ABC::-webkit-scrollbar-thumb{
-  background: rgba(0,0,0,.3);
-  border-radius: 4px;
+  background: rgba(255,255,255,.15);
+  border-radius: 6px;
 }
 
 /* カード */
 
 .w1LegendItem{
-  background: #111;
-  border-radius: 8px;
-  padding: 10px;
+  background: rgba(255,255,255,.05);
+  border-radius: 10px;
+  padding: 12px;
   font-size: 13px;
   display: flex;
   flex-direction: column;
@@ -132,16 +132,22 @@
 .w1LegendHead{
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .w1LegendSwatch{
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.w1LegendLabel{
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .w1LegendSales{
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -150,7 +156,7 @@
   flex-direction: column;
   gap: 2px;
   font-size: 12px;
-  opacity: .8;
+  opacity: .85;
 }
 
 .w1LegendMeta{
@@ -158,56 +164,29 @@
   opacity: .7;
 }
 
+/* ノート */
+
 .widget1Note{
   font-size: 11px;
   opacity: .6;
   margin-top: 8px;
 }
-/* ===== 正常レスポンシブ安定版 ===== */
 
-.widget1{
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
+/* ---------------- 小画面用 ---------------- */
 
-/* 横並び */
-.widget1Body{
-  display: flex;
-  gap: 16px;
-  min-height: 0;
-}
+@media (max-width: 900px){
 
-/* チャート側 */
-.widget1ChartWrap{
-  flex: 1 1 420px;     /* 最低420pxは確保 */
-  min-width: 360px;    /* これが55px防止 */
-  aspect-ratio: 1 / 1;
-  position: relative;
-}
+  .widget1Body{
+    flex-direction: column;
+  }
 
-/* 凡例側 */
-.widget1ABC{
-  flex: 1 1 420px;
-  min-width: 360px;
-  overflow-y: auto;
-  min-height: 0;
-}
+  .widget1ChartWrap,
+  .widget1ABC{
+    min-width: 0;
+    width: 100%;
+  }
 
-/* canvas安定 */
-.widget1Canvas{
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
-}
-
-/* tooltip */
-.w1Tip{
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  z-index: 5;
-  max-width: 320px;
+  .widget1ChartWrap{
+    aspect-ratio: 1 / 1;
+  }
 }
