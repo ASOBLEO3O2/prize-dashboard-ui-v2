@@ -202,10 +202,20 @@
   padding-right:6px;
   padding-bottom: env(safe-area-inset-bottom);
 }
+.widget1 .widget1ChartWrap{
+  width: 100%;
+  min-width: 0;
+}
 
-/* ついでにモバイルで文字が小さすぎるのを軽減（任意） */
+.widget1 .widget1Canvas{
+  width: 100% !important;
+  height: 100% !important;
+}/* ついでにモバイルで文字が小さすぎるのを軽減（任意） */
 @media (max-width:600px){
   .widget1 .w1LegendLabel{ font-size:16px; font-weight:800; }
   .widget1 .w1LegendSales{ font-size:16px; font-weight:800; }
   .widget1 .w1LegendShare{ font-size:13px; }
+}
+.widget1 .widget1ChartWrap{
+  aspect-ratio: 1 / 1;
 }
