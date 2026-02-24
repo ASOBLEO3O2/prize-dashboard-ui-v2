@@ -163,3 +163,51 @@
   opacity: .6;
   margin-top: 8px;
 }
+/* ===== 正常レスポンシブ安定版 ===== */
+
+.widget1{
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 横並び */
+.widget1Body{
+  display: flex;
+  gap: 16px;
+  min-height: 0;
+}
+
+/* チャート側 */
+.widget1ChartWrap{
+  flex: 1 1 420px;     /* 最低420pxは確保 */
+  min-width: 360px;    /* これが55px防止 */
+  aspect-ratio: 1 / 1;
+  position: relative;
+}
+
+/* 凡例側 */
+.widget1ABC{
+  flex: 1 1 420px;
+  min-width: 360px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* canvas安定 */
+.widget1Canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+/* tooltip */
+.w1Tip{
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: 320px;
+}
