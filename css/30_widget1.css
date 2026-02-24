@@ -387,3 +387,90 @@
     font-size:13px;
   }
 }
+/* ===== Widget① Mobile: 縦（portrait） ===== */
+@media (max-width: 600px) and (orientation: portrait){
+  .widget1Body{
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+
+  /* ドーナツは縦で “大きすぎない” ように上限を作る */
+  .widget1ChartWrap{
+    flex:0 0 auto;
+    max-height: 48vh; /* ←縦でカードが消えない上限 */
+  }
+
+  /* カードは最低1枚見える高さ */
+  .widget1ABC{
+    flex: 1 1 auto;
+    min-height: 280px;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .w1LegendPinned{
+    flex:0 0 auto;
+  }
+  .w1LegendScroll{
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    padding-right:8px;
+  }
+}
+
+/* ===== Widget① Mobile: 横（landscape） ===== */
+@media (max-width: 900px) and (orientation: landscape){
+  .widget1Body{
+    display:flex;
+    flex-direction:row;   /* ←横は2カラム */
+    gap:12px;
+    min-height:0;
+    align-items:stretch;
+  }
+
+  /* 左：ドーナツ */
+  .widget1ChartWrap{
+    flex: 0 0 52%;
+    min-width: 0;
+    min-height: 0;
+
+    /* Safariのアドレスバー差を吸収しつつ “縦に収まる” */
+    max-height: calc(100dvh - 220px);
+  }
+
+  /* 右：カード（固定＋スクロール） */
+  .widget1ABC{
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .w1LegendPinned{
+    flex:0 0 auto;
+  }
+  .w1LegendScroll{
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    padding-right:8px;
+  }
+
+  /* 横はカード文字も少しだけ詰める（高さが短いので） */
+  .w1LegendItem{
+    padding: 12px 12px;
+  }
+  .w1LegendLabel,
+  .w1LegendSales{
+    font-size: 16px;
+  }
+}
