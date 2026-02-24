@@ -17,13 +17,10 @@
 /* ---- ドーナツ領域：揺れ止め（準統一） ---- */
 /* 小さすぎず・大きすぎず・画面に応じて少し伸びる */
 .widget1 .widget1ChartWrap{
-  height: clamp(260px, 32vh, 360px);
-  max-height: 360px;
+  height: clamp(240px, 30dvh, 340px); /* ←スマホでの暴れを抑える */
+  max-height: 340px;
   min-height: 240px;
-  flex: 0 0 auto;     /* 伸び縮みさせない */
-  position: relative; /* 中央ラベル用 */
 }
-
 /* キャンバスは枠いっぱい使う */
 .widget1 .widget1Canvas{
   width: 100% !important;
@@ -56,7 +53,7 @@
 /* ---- カード領域（固定1枚＋スクロール） ---- */
 .widget1 .widget1ABC{
   flex: 1 1 auto;
-  min-height: 240px;   /* ←最低1枚は見える */
+  min-height: 300px;   /* ←最低1枚は見える */
   display: flex;
   flex-direction: column;
   overflow: hidden;    /* スクロールは下段だけ */
