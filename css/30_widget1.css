@@ -115,6 +115,8 @@
 
 /* =========================
    Legend（現行DOM：w1LegendItem系）
+   - PC: 右カラムをスクロール
+   - Mobile: pinned + scroll（JS側が w1LegendPinned / w1LegendScroll を出す想定）
    ========================= */
 
 .widget1ABC{
@@ -210,55 +212,6 @@
 }
 
 /* =========================
-   Expanded 最適化（focus overlay での見え方）
-   - 右が余白になる問題は 60_focusOverlay.css で解消済み
-   - ここでは “拡大なら読みやすく大きめ” に寄せる
-   ========================= */
-
-.widget1-expanded .widget1Header{
-  padding:14px 14px 0;
-}
-.widget1-expanded .widget1Title{
-  font-size:16px;
-}
-.widget1-expanded .widget1Body{
-  padding:14px;
-  gap:14px;
-}
-.widget1-expanded .widget1ChartWrap{
-  /* 拡大時はドーナツ領域をしっかり確保 */
-  min-height: 520px;
-}
-.widget1-expanded .w1CenterValue{
-  font-size:20px;
-}
-
-/* =========================
-   Responsive
-   ========================= */
-
-@media (max-width: 900px){
-  .widget1Body{ grid-template-columns:1fr; }
-  .widget1ChartWrap{ min-height:320px; }
-}
-
-/* 縦が短い：情報は削らず “圧縮” */
-@media (max-height: 680px){
-  .widget1{ font-size:13px; }
-  .widget1Title{ font-size:14px; }
-  .w1LegendItem{ padding:10px 11px; margin-bottom:10px; }
-  .w1LegendShares{ gap:6px; }
-  .w1LegendShare{ font-size:12px; padding:4px 9px; }
-  .w1LegendMetaRow{ font-size:12px; }
-}
-
-/* さらに縦が短い：1列化して見やすさ優先（情報は残る） */
-@media (max-height: 560px){
-  .widget1Body{ grid-template-columns:1fr; }
-  .widget1ChartWrap{ min-height:260px; }
-}
-
-/* =========================
    Tooltip（領域内・下部固定）
    ========================= */
 
@@ -286,16 +239,25 @@
 .w1TipLine{ opacity:.85; }
 
 /* =========================
-   拡大時：ドーナツを縦いっぱいに使う
+   Expanded 最適化（focus overlay）
    ========================= */
 
+.widget1-expanded .widget1Header{
+  padding:14px 14px 0;
+}
+.widget1-expanded .widget1Title{
+  font-size:16px;
+}
 .widget1-expanded .widget1Body{
+  padding:14px;
+  gap:14px;
+
+  /* 拡大時：左右で安定 */
   height:100%;
   display:grid;
   grid-template-columns: 1fr 480px; /* 右固定幅で安定 */
   align-items:stretch;
 }
-
 .widget1-expanded .widget1ChartWrap{
   height:100%;
   min-height:0;
@@ -303,41 +265,125 @@
   align-items:center;
   justify-content:center;
 }
-
 .widget1-expanded .widget1Canvas{
   height:100% !important;
 }
-
-@media (max-width: 600px){
-  .w1LegendPinned{ flex:0 0 auto; margin-bottom:10px; }
-  .w1LegendScroll{ flex:1 1 auto; min-height:0; overflow:auto; padding-right:8px; }
-  .w1LegendItem.isPinned{ border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.04); }
-  .w1LegendItem.isSelected{ outline:2px solid rgba(255,255,255,.10); outline-offset:0; }
+.widget1-expanded .w1CenterValue{
+  font-size:20px;
 }
 
+/* =========================
+   Responsive（幅）
+   ========================= */
+
+@media (max-width: 900px){
+  .widget1Body{
+    grid-template-columns:1fr;
+  }
+  .widget1ChartWrap{
+    min-height:320px;
+  }
+}
+
+/* =========================
+   Responsive（縦が短い）
+   - 情報は削らず “圧縮”
+   ========================= */
+
+@media (max-height: 680px){
+  .widget1{ font-size:13px; }
+  .widget1Title{ font-size:14px; }
+  .w1LegendItem{ padding:10px 11px; margin-bottom:10px; }
+  .w1LegendShares{ gap:6px; }
+  .w1LegendShare{ font-size:12px; padding:4px 9px; }
+  .w1LegendMetaRow{ font-size:12px; }
+}
+
+/* さらに縦が短い：1列化して見やすさ優先（情報は残る） */
+@media (max-height: 560px){
+  .widget1Body{ grid-template-columns:1fr; }
+  .widget1ChartWrap{ min-height:260px; }
+}
+
+/* =========================
+   Mobile（<=600px）
+   - 目的：カードが小さすぎて読めない問題を解消
+   - pinned(固定)は必ず “読めるサイズ” を確保
+   - スクロールは下段だけ
+   ========================= */
+
 @media (max-width: 600px){
+
+  /* ヘッダの詰まり軽減 */
+  .widget1Header{
+    padding:12px 12px 0;
+  }
+  .widget1Title{
+    font-size:15px;
+  }
+
+  /* 1列にして、ドーナツ + 凡例に縦を割り当てる */
+  .widget1Body{
+    grid-template-columns:1fr;
+    grid-template-rows: auto 1fr; /* 上=ドーナツ(必要分), 下=凡例(残り) */
+    gap:12px;
+  }
+
+  /* ドーナツは最低限の高さを確保（カードを潰しすぎない） */
+  .widget1ChartWrap{
+    min-height:280px;
+  }
+
+  /* 凡例は “最低でも固定カード1枚” が読める高さを確保 */
   .widget1ABC{
     display:flex;
     flex-direction:column;
-    min-height:0;
-    overflow:hidden; /* スクロールは下段だけ */
+    min-height:260px;     /* ← ここが効く（見えない問題の主因） */
+    overflow:hidden;      /* スクロールは下段だけ */
+    padding-right:0;
   }
+
+  /* 上段：固定カード（pinned） */
   .w1LegendPinned{
     flex:0 0 auto;
     margin-bottom:10px;
   }
+
+  /* pinnedカード自体を大きく（読める） */
+  .w1LegendPinned .w1LegendItem,
+  .w1LegendItem.isPinned{
+    padding:14px 14px;
+    min-height:140px;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.04);
+  }
+
+  /* 下段：リスト（スクロール） */
   .w1LegendScroll{
     flex:1 1 auto;
     min-height:0;
     overflow:auto;
     padding-right:8px;
   }
-  .w1LegendItem.isPinned{
-    border:1px solid rgba(255,255,255,.14);
-    background:rgba(255,255,255,.04);
-  }
+
+  /* “選択中”の見た目 */
   .w1LegendItem.isSelected{
     outline:2px solid rgba(255,255,255,.10);
     outline-offset:0;
+  }
+
+  /* モバイルは文字も少し大きく */
+  .w1LegendLabel{
+    font-size:16px;
+  }
+  .w1LegendSales{
+    font-size:16px;
+  }
+  .w1LegendShare{
+    font-size:13px;
+    padding:6px 10px;
+  }
+  .w1LegendMetaRow{
+    font-size:13px;
   }
 }
