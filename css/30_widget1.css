@@ -474,3 +474,14 @@
     font-size: 16px;
   }
 }
+@media (max-width:600px){
+  .widget1ChartWrap{
+    height: 42vh;   /* ←ここが核心 */
+  }
+}
+
+@media (max-width:600px){
+  .widget1ChartWrap{
+    height: 42dvh;
+  }
+}
