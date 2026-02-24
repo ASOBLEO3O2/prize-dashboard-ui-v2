@@ -1,221 +1,165 @@
-/* =========================================================
-   Widget① Share Donut
-   準統一レイアウト（全端末ほぼ同じ表示）
-   - 構造は常に「ドーナツ上 / カード下」
-   - ドーナツ高さは clamp で安定
-   - カードは最低1枚見える＋下はスクロール
-   ========================================================= */
+/* =========================================
+   Widget① 固定レイアウト版
+   レスポンシブ完全廃止
+========================================= */
 
-/* ---- レイアウトは常に縦積み（端末差で構造を変えない） ---- */
-.widget1 .widget1Body{
+.widget1{
+  width: 900px;          /* 固定幅 */
+  max-width: 900px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: 12px;
 }
 
-/* ---- ドーナツ領域：揺れ止め（準統一） ---- */
-/* 小さすぎず・大きすぎず・画面に応じて少し伸びる */
-.widget1 .widget1ChartWrap{
-  height: clamp(240px, 30dvh, 340px); /* ←スマホでの暴れを抑える */
-  max-height: 340px;
-  min-height: 240px;
+/* ---------------- Header ---------------- */
+
+.widget1Header{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
-/* キャンバスは枠いっぱい使う */
-.widget1 .widget1Canvas{
+
+.widget1Title{
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.widget1HeaderRight{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------------- Body ---------------- */
+
+.widget1Body{
+  display: flex;
+  gap: 16px;
+  height: 500px;          /* 高さ固定 */
+  min-height: 500px;
+}
+
+/* ---------------- Chart ---------------- */
+
+.widget1ChartWrap{
+  flex: 0 0 50%;
+  position: relative;
+  aspect-ratio: 1 / 1;     /* 常に正円 */
+  min-width: 0;
+}
+
+.widget1Canvas{
   width: 100% !important;
   height: 100% !important;
   display: block;
 }
 
-/* ---- 合計売上（中央表示）を安定配置 ---- */
-.widget1 .w1Center{
+/* 中央売上表示 */
+.w1Center{
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
   flex-direction: column;
+  justify-content: center;
+  align-items: center;
   pointer-events: none;
 }
 
-.widget1 .w1CenterLabel{
+.w1CenterLabel{
   font-size: 12px;
-  opacity: .75;
+  opacity: .7;
 }
 
-.widget1 .w1CenterValue{
-  font-size: 18px;
-  font-weight: 800;
-  margin-top: 4px;
+.w1CenterValue{
+  font-size: 20px;
+  font-weight: bold;
 }
 
-/* ---- カード領域（固定1枚＋スクロール） ---- */
-.widget1 .widget1ABC{
-  flex: 1 1 auto;
-  min-height: 300px;   /* ←最低1枚は見える */
+/* Tooltip */
+.w1Tip{
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  background: rgba(20,20,20,.95);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  display: none;
+  z-index: 5;
+  max-width: 320px;
+}
+
+.w1Tip.show{
+  display: block;
+}
+
+/* ---------------- Legend ---------------- */
+
+.widget1ABC{
+  flex: 0 0 50%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;    /* スクロールは下段だけ */
-  gap: 12px;
-}
-
-/* 固定カード（上段） */
-.widget1 .w1LegendPinned{
-  flex: 0 0 auto;
-}
-
-/* スクロール領域（下段） */
-.widget1 .w1LegendScroll{
-  flex: 1 1 auto;
+  gap: 10px;
+  overflow-y: auto;      /* ← カードだけスクロール */
   min-height: 0;
-  overflow: auto;
   padding-right: 6px;
 }
 
-/* ---- カードデザイン（端末問わず読みやすいサイズ） ---- */
-.widget1 .w1LegendItem{
-  padding: 14px 14px;
-  border-radius: 14px;
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.08);
+/* スクロールが効くための重要指定 */
+.widget1ABC::-webkit-scrollbar{
+  width: 6px;
+}
+.widget1ABC::-webkit-scrollbar-thumb{
+  background: rgba(0,0,0,.3);
+  border-radius: 4px;
 }
 
-.widget1 .w1LegendItem.isPinned{
-  border: 1px solid rgba(255,255,255,.18);
-  background: rgba(255,255,255,.06);
+/* カード */
+
+.w1LegendItem{
+  background: #111;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.widget1 .w1LegendHead{
+.w1LegendHead{
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.widget1 .w1LegendSwatch{
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
-  flex: 0 0 auto;
-}
-
-.widget1 .w1LegendLabel{
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1.3;
-}
-
-.widget1 .w1LegendSales{
-  font-size: 16px;
-  font-weight: 800;
-  margin-top: 6px;
-}
-
-.widget1 .w1LegendShares{
-  display: flex;
-  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
 }
 
-.widget1 .w1LegendShare{
-  font-size: 13px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.06);
+.w1LegendSwatch{
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
 }
 
-.widget1 .w1LegendMeta{
-  margin-top: 8px;
-  font-size: 13px;
-  line-height: 1.4;
+.w1LegendSales{
+  font-weight: 600;
 }
 
-.widget1 .w1LegendMetaRow{
+.w1LegendShares{
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.widget1 .w1LegendMetaRow .k{
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
   opacity: .8;
 }
 
-.widget1 .w1LegendMetaRow .v{
-  font-weight: 700;
+.w1LegendMeta{
+  font-size: 12px;
+  opacity: .7;
 }
 
-/* ---- スクロールバー軽量化（任意） ---- */
-.widget1 .w1LegendScroll::-webkit-scrollbar{
-  width: 6px;
-}
-.widget1 .w1LegendScroll::-webkit-scrollbar-thumb{
-  background: rgba(255,255,255,.15);
-  border-radius: 999px;
-}
-/* =========================================================
-   W1 安定化パッチ（pinned無し・旧legend前提）
-   - tooltipを枠内に固定（カードに被らない）
-   - legendはこの領域だけスクロール
-   ========================================================= */
-
-/* 全体：縦積み＋高さ計算ができるように */
-.widget1 .widget1Body{
-  display:flex;
-  flex-direction:column;
-  min-height:0;      /* ← overflow が効く必須条件 */
-  gap:12px;
-}
-
-/* ドーナツ枠：高さを安定化（端末差のコロコロ抑制） */
-.widget1 .widget1ChartWrap{
-  position:relative; /* ← tooltip絶対配置の基準 */
-  flex:0 0 auto;
-  height: clamp(260px, 32vh, 360px);
-  min-height:240px;
-  max-height:360px;
-}
-
-/* canvas は枠いっぱい */
-.widget1 .widget1Canvas{
-  width:100% !important;
-  height:100% !important;
-  display:block;
-}
-
-/* tooltip：枠内の下中央に固定（カードに被せない） */
-.widget1 .w1Tip{
-  position:absolute;
-  left:50%;
-  bottom:10px;
-  transform:translateX(-50%);
-  max-width:min(92%, 360px);
-  z-index:5;
-  pointer-events:none;
-}
-
-/* legend（=カード一覧）：この領域だけスクロール */
-.widget1 .widget1ABC{
-  flex:1 1 auto;
-  min-height:0;      /* ← overflow が効く必須条件 */
-  overflow:auto;
-  padding-right:6px;
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.widget1 .widget1ChartWrap{
-  width: 100%;
-  min-width: 0;
-}
-
-.widget1 .widget1Canvas{
-  width: 100% !important;
-  height: 100% !important;
-}/* ついでにモバイルで文字が小さすぎるのを軽減（任意） */
-@media (max-width:600px){
-  .widget1 .w1LegendLabel{ font-size:16px; font-weight:800; }
-  .widget1 .w1LegendSales{ font-size:16px; font-weight:800; }
-  .widget1 .w1LegendShare{ font-size:13px; }
-}
-.widget1 .widget1ChartWrap{
-  aspect-ratio: 1 / 1;
+.widget1Note{
+  font-size: 11px;
+  opacity: .6;
+  margin-top: 8px;
 }
