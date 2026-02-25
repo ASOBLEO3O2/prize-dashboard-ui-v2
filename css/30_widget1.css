@@ -281,3 +281,97 @@
     display:none !important;
   }
 }
+
+/* =========================================================
+   W1 モバイル対策：凡例の「先頭1枚は見える」をCSSだけで実現
+   - DOMを増やさず、先頭カードを sticky にする
+   - 残りは凡例枠内スクロール
+   ========================================================= */
+
+/* まず「縮められる」前提を作る（スクロール不発の典型対策） */
+.widget1Body{
+  min-height: 0;
+  min-width: 0;
+}
+.widget1ChartWrap{
+  min-width: 0;
+  min-height: 0;
+}
+.widget1ABC{
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ツールチップは必ず chart 内に留める（下の凡例に被らせない） */
+.widget1ChartWrap{
+  position: relative;
+  overflow: hidden; /* ← 外に出さない */
+}
+.w1Tip{
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ===== モバイル/狭幅：縦積み + グラフ高さ固定 + 凡例スクロール ===== */
+@media (max-width: 900px){
+
+  /* 縦積み */
+  .widget1Body{
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ドーナツの高さを “画面に対して” 安定化（横幅で潰れない） */
+  .widget1ChartWrap{
+    height: clamp(240px, 42vh, 360px);
+  }
+  .widget1Canvas{
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* 凡例：枠内スクロール（下のウィジェットへ押し出しすぎない） */
+  .widget1ABC{
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: clamp(180px, 28vh, 320px);
+    padding-right: 8px; /* スクロールバー逃がし */
+  }
+
+  /* 先頭カードを “常に見える” ように固定 */
+  .widget1ABC .w1LegendItem:first-of-type{
+    position: sticky;
+    top: 0;
+    z-index: 2;
+
+    /* 固定部が透けると読めないので背景を強める */
+    background: rgba(12, 18, 26, .92);
+    backdrop-filter: blur(6px);
+    border-color: rgba(255,255,255,.18);
+  }
+
+  /* 先頭固定カードの下に薄い区切り（視認性） */
+  .widget1ABC .w1LegendItem:first-of-type::after{
+    content: "";
+    display: block;
+    height: 1px;
+    margin-top: 10px;
+    background: rgba(255,255,255,.10);
+  }
+
+  /* 注釈が sticky に巻き込まれて邪魔なら小さく */
+  .widget1Note{
+    font-size: 12px;
+    opacity: .75;
+  }
+}
+
+/* ===== PC側：凡例幅を固定しすぎない（横幅コロコロ対策の保険） ===== */
+@media (min-width: 901px){
+  .widget1ABC{
+    flex: 0 0 360px;
+    max-width: 420px;
+  }
+}
