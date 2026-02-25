@@ -1,192 +1,283 @@
-/* =====================================================
-   Widget① Share Donut
-   安定レスポンシブ版（潰れない設計）
-===================================================== */
+/* =========================================
+   Widget① : Share Donut
+   ========================================= */
 
 .widget1{
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  border:1px solid var(--border);
+  background:rgba(18,26,34,.55);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  min-width:0;
 }
 
-/* ---------------- Header ---------------- */
+/* =========================
+   Header
+   ========================= */
 
 .widget1Header{
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:14px 14px 10px;
+  border-bottom:1px solid var(--border);
+  min-width:0;
+}
+
+.widget1HeaderLeft{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
 }
 
 .widget1Title{
-  font-size: 16px;
-  font-weight: 600;
+  font-weight:700;
+  letter-spacing:.02em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 .widget1HeaderRight{
-  display: flex;
-  gap: 8px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex:0 0 auto;
 }
 
-/* ---------------- Body ---------------- */
+.widget1Select{
+  height:34px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:rgba(10,15,20,.35);
+  color:var(--text);
+}
+
+/* =========================
+   Body layout
+   ========================= */
 
 .widget1Body{
-  display: flex;
-  gap: 20px;
-  align-items: stretch;
-  min-height: 0;
+  padding:12px;
+  display:flex;
+  gap:12px;
+  min-width:0;
+  min-height:0;
 }
 
-/* ---------------- Chart ---------------- */
+/* =========================
+   Chart area
+   ========================= */
 
 .widget1ChartWrap{
-  flex: 1 1 480px;       /* 伸びるが最低確保 */
-  min-width: 380px;      /* ← 55px潰れ防止 */
-  aspect-ratio: 1 / 1;   /* 常に正円 */
-  position: relative;
+  position:relative;
+  flex:1 1 0;
+  min-width:0;
+  min-height:280px; /* グラフ最低高さ確保 */
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:rgba(10,15,20,.25);
+  overflow:hidden;
+  display:flex;
 }
 
 .widget1Canvas{
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
+  width:100% !important;
+  height:100% !important;
+  display:block;
 }
 
-/* 中央表示 */
 .w1Center{
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  text-align:center;
+  pointer-events:none;
+  padding:8px 10px;
 }
 
 .w1CenterLabel{
-  font-size: 12px;
-  opacity: .7;
+  font-size:12px;
+  opacity:.8;
 }
 
 .w1CenterValue{
-  font-size: 20px;
-  font-weight: 700;
+  font-size:20px;
+  font-weight:800;
+  letter-spacing:.02em;
+  margin-top:2px;
 }
 
-/* Tooltip（カードに被らない） */
+/* =========================
+   Tooltip
+   ========================= */
+
 .w1Tip{
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  background: rgba(0,0,0,.9);
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  z-index: 10;
-  max-width: 320px;
-  pointer-events: none;
-  display: none;
+  position:absolute;
+  left:12px;
+  top:12px;
+  max-width:min(260px, 80%);
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(0,0,0,.60);
+  backdrop-filter: blur(6px);
+  box-shadow:0 10px 24px rgba(0,0,0,.25);
+  color:rgba(255,255,255,.92);
+  opacity:0;
+  transform:translateY(-4px);
+  transition:opacity .12s ease, transform .12s ease;
+  pointer-events:none;
+  z-index:5;
 }
 
 .w1Tip.show{
-  display: block;
+  opacity:1;
+  transform:translateY(0);
 }
 
-/* ---------------- Legend ---------------- */
+.w1TipTitle{
+  font-weight:800;
+  margin-bottom:6px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.w1TipLine{
+  font-size:12px;
+  opacity:.9;
+  line-height:1.25;
+}
+
+/* =========================
+   Legend layout
+   ========================= */
 
 .widget1ABC{
-  flex: 1 1 480px;
-  min-width: 380px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;       /* ← カード側だけスクロール */
-  min-height: 0;
-  padding-right: 6px;
+  flex:0 0 340px;   /* PC時の幅 */
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
 }
 
-/* スクロールバー */
-
-.widget1ABC::-webkit-scrollbar{
-  width: 6px;
-}
-.widget1ABC::-webkit-scrollbar-thumb{
-  background: rgba(255,255,255,.15);
-  border-radius: 6px;
+/* 先頭1枚は常に表示 */
+.w1LegendPinned{
+  flex:0 0 auto;
+  min-height:140px;
 }
 
-/* カード */
+/* 残りはスクロール */
+.w1LegendScroll{
+  flex:1 1 auto;
+  min-height:120px;
+  overflow-y:auto;
+  padding-right:6px;
+}
+
+/* =========================
+   Legend card
+   ========================= */
 
 .w1LegendItem{
-  background: rgba(255,255,255,.05);
-  border-radius: 10px;
-  padding: 12px;
-  font-size: 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:12px 14px;
+  background:rgba(10,15,20,.35);
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.w1LegendItem.isPinned{
+  background:rgba(18,30,45,.55);
+  border-color:rgba(255,255,255,.2);
 }
 
 .w1LegendHead{
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display:flex;
+  align-items:center;
+  gap:8px;
 }
 
 .w1LegendSwatch{
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  flex:0 0 auto;
 }
 
 .w1LegendLabel{
-  font-size: 15px;
-  font-weight: 700;
+  font-weight:700;
 }
 
 .w1LegendSales{
-  font-size: 14px;
-  font-weight: 600;
+  font-size:18px;
+  font-weight:800;
+  letter-spacing:.02em;
 }
 
 .w1LegendShares{
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
-  opacity: .85;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+
+.w1LegendShare{
+  font-size:12px;
+  padding:3px 8px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
 }
 
 .w1LegendMeta{
-  font-size: 12px;
-  opacity: .7;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  font-size:12px;
+  opacity:.9;
 }
 
-/* ノート */
-
-.widget1Note{
-  font-size: 11px;
-  opacity: .6;
-  margin-top: 8px;
+.w1LegendMetaRow{
+  display:flex;
+  justify-content:space-between;
 }
 
-/* ---------------- 小画面用 ---------------- */
+.w1LegendMetaRow .k{
+  opacity:.7;
+}
+
+/* =========================
+   モバイル対策
+   ========================= */
 
 @media (max-width: 900px){
 
   .widget1Body{
-    flex-direction: column;
+    flex-direction:column;
   }
 
-  .widget1ChartWrap,
   .widget1ABC{
-    min-width: 0;
-    width: 100%;
+    flex:0 0 auto;
   }
 
-  .widget1ChartWrap{
-    aspect-ratio: 1 / 1;
+  .w1LegendPinned{
+    min-height:160px; /* スマホでも1枚読める高さ */
+  }
+
+  .w1LegendScroll{
+    max-height:220px;
+    overflow-y:auto;
+  }
+
+  /* 狭いときはツールチップを消す（カード被り防止） */
+  .w1Tip{
+    display:none !important;
   }
 }
