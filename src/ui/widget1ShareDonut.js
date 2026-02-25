@@ -10,10 +10,10 @@ import { el, clear } from "../utils/dom.js";
  * - state.normRows（固定キー）だけを見る
  * - 列名揺れ吸収は normalizeRow が責務
  *
- * ★追加（今回）：
- * - スマホ(<=600px)時：凡例を「固定カード1枚 + リスト（スクロール）」にする
- * - 初期固定は「売上最大」
- * - pinned状態は mount単位で保持（複数Widget①でも干渉しない）
+ * 追加仕様（今回）:
+ * - 狭幅/縦長でも「カード(凡例)が最低1枚は読める」ようにする
+ *   └ 先頭(売上最大)を pinned で固定表示
+ *   └ 残りはスクロール
  */
 
 const AXES = [
@@ -295,7 +295,12 @@ function ensureDom_(mount, actions, mode) {
   chartWrap.appendChild(center);
   chartWrap.appendChild(tip);
 
+  // ★ここが今回の変更点：凡例を pinned + scroll に分割
   const legendWrap = el("div", { class: "widget1ABC" });
+  const legendPinned = el("div", { class: "w1LegendPinned" });
+  const legendScroll = el("div", { class: "w1LegendScroll" });
+  legendWrap.appendChild(legendPinned);
+  legendWrap.appendChild(legendScroll);
 
   body.appendChild(chartWrap);
   body.appendChild(legendWrap);
@@ -311,7 +316,10 @@ function ensureDom_(mount, actions, mode) {
   mount.__w1_select = select;
   mount.__w1_back = btnBack;
   mount.__w1_canvas = canvas;
+
   mount.__w1_legend = legendWrap;
+  mount.__w1_legendPinned = legendPinned;
+  mount.__w1_legendScroll = legendScroll;
 
   mount.__w1_center = center;
   mount.__w1_centerValue = center.querySelector(".w1CenterValue");
@@ -321,11 +329,6 @@ function ensureDom_(mount, actions, mode) {
     const axisKey = select.value;
     actions.onSetWidget1Axis?.(axisKey);
     actions.onSetFocusParentKey?.(null);
-
-    // ★追加：mount単位 pinned をリセット（初期=売上最大に戻す）
-    mount.__w1_lastAxis = axisKey;
-    mount.__w1_pinnedKey = null;
-
     actions.requestRender?.();
   });
 
@@ -518,123 +521,78 @@ function upsertChart_(mount, items, totalSales, totalBooths, opt = {}) {
 
 /* =========================================================
    Legend（カード）
-   - PC：従来どおり全件表示
-   - Mobile(<=600px)：固定カード1枚 + リスト（スクロール）
-   - 初期固定：売上最大（items[0]）
-   - pinnedKey は mount 単位で保持
+   - pinned(先頭1枚) + scroll(残り)
    ========================================================= */
+function buildLegendItem_(it, totalSales, totalBooths, opt = {}) {
+  const salesShare = totalSales ? it.sales / totalSales : null;
+  const boothShare = totalBooths ? it.booths / totalBooths : null;
+
+  return el(
+    "div",
+    {
+      class: "w1LegendItem",
+      onClick: opt.canDrill && it._hasChildren ? () => opt.onDrill?.(it.key) : null,
+      style: opt.canDrill && it._hasChildren ? "cursor:pointer;" : null,
+    },
+    [
+      el("div", { class: "w1LegendHead" }, [
+        el("span", { class: "w1LegendSwatch", style: `background:${it.color};` }),
+        el("span", { class: "w1LegendLabel", text: it.label }),
+      ]),
+      el("div", { class: "w1LegendSales", text: fmtMaybeYen_(it.sales, "—") }),
+      el("div", { class: "w1LegendShares" }, [
+        el("span", { class: "w1LegendShare", text: `売上構成比：${fmtMaybePct_(salesShare, "—")}` }),
+        el("span", { class: "w1LegendShare", text: `マシン構成比：${fmtMaybePct_(boothShare, "—")}` }),
+      ]),
+      el("div", { class: "w1LegendMeta" }, [
+        el("div", { class: "w1LegendMetaRow" }, [
+          el("span", { class: "k", text: "平均売上：" }),
+          el("span", { class: "v", text: fmtMaybeYen_(it.avgSales, "—") }),
+        ]),
+        el("div", { class: "w1LegendMetaRow" }, [
+          el("span", { class: "k", text: "消化額合計：" }),
+          el("span", { class: "v", text: fmtMaybeYen_(it.consume, "—") }),
+        ]),
+        el("div", { class: "w1LegendMetaRow" }, [
+          el("span", { class: "k", text: "原価率：" }),
+          el("span", { class: "v", text: fmtMaybePct_(it.costRate, "—") }),
+        ]),
+      ]),
+    ]
+  );
+}
+
 function renderLegend_(mount, items, totalSales, totalBooths, opt = {}) {
+  const pinned = mount.__w1_legendPinned;
+  const scroller = mount.__w1_legendScroll;
   const box = mount.__w1_legend;
-  if (!box) return;
 
-  const isMobile = !!(window.matchMedia && window.matchMedia("(max-width: 600px)").matches);
+  if (!pinned || !scroller || !box) return;
 
-  clear(box);
+  clear(pinned);
+  clear(scroller);
 
-  const canDrill = !!opt.canDrill;
-
-  const renderCard = (it, { pinned = false, selected = false } = {}) => {
-    const salesShare = totalSales ? it.sales / totalSales : null;
-    const boothShare = totalBooths ? it.booths / totalBooths : null;
-
-    const isDrillItem = canDrill && !!it._hasChildren;
-
-    // クリック挙動：
-    // - drill可能 & childrenあり → drill（従来仕様維持）
-    // - それ以外 & mobile → pinned差し替え
-    const onClick = () => {
-      if (isDrillItem) {
-        opt.onDrill?.(it.key);
-        return;
-      }
-      if (isMobile) {
-        mount.__w1_pinnedKey = it.key;
-        renderLegend_(mount, items, totalSales, totalBooths, opt);
-      }
-    };
-
-    return el(
-      "div",
-      {
-        class: [
-          "w1LegendItem",
-          pinned ? "isPinned" : "",
-          selected ? "isSelected" : "",
-          isDrillItem ? "isDrill" : "",
-        ].filter(Boolean).join(" "),
-        onClick: (isMobile || isDrillItem) ? onClick : null,
-        style: (isMobile || isDrillItem) ? "cursor:pointer;" : null,
-      },
-      [
-        el("div", { class: "w1LegendHead" }, [
-          el("span", { class: "w1LegendSwatch", style: `background:${it.color};` }),
-          el("span", { class: "w1LegendLabel", text: it.label }),
-        ]),
-        el("div", { class: "w1LegendSales", text: fmtMaybeYen_(it.sales, "—") }),
-        el("div", { class: "w1LegendShares" }, [
-          el("span", { class: "w1LegendShare", text: `売上構成比：${fmtMaybePct_(salesShare, "—")}` }),
-          el("span", { class: "w1LegendShare", text: `マシン構成比：${fmtMaybePct_(boothShare, "—")}` }),
-        ]),
-        el("div", { class: "w1LegendMeta" }, [
-          el("div", { class: "w1LegendMetaRow" }, [
-            el("span", { class: "k", text: "平均売上：" }),
-            el("span", { class: "v", text: fmtMaybeYen_(it.avgSales, "—") }),
-          ]),
-          el("div", { class: "w1LegendMetaRow" }, [
-            el("span", { class: "k", text: "消化額合計：" }),
-            el("span", { class: "v", text: fmtMaybeYen_(it.consume, "—") }),
-          ]),
-          el("div", { class: "w1LegendMetaRow" }, [
-            el("span", { class: "k", text: "原価率：" }),
-            el("span", { class: "v", text: fmtMaybePct_(it.costRate, "—") }),
-          ]),
-        ]),
-      ]
-    );
-  };
-
-  // ===== PC：従来どおり =====
-  if (!isMobile) {
-    items.forEach((it) => box.appendChild(renderCard(it)));
-
-    box.appendChild(
-      el("div", {
-        class: "widget1Note",
-        text: `台数は 1ステーション（ブースID）単位で集計` + (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""),
-      })
-    );
-    return;
+  // 先頭(売上最大)を pinned 表示
+  const top = items?.[0] || null;
+  if (top) {
+    const node = buildLegendItem_(top, totalSales, totalBooths, opt);
+    node.classList.add("isPinned");
+    pinned.appendChild(node);
   }
 
-  // ===== Mobile：固定カード1枚 + リスト（スクロール） =====
-  // pinnedKey の整合（無ければ売上最大へ）
-  const topKey = items?.[0]?.key ?? null;
-  const pinnedExists = items.some((x) => x.key === mount.__w1_pinnedKey);
-  if (!mount.__w1_pinnedKey || !pinnedExists) {
-    mount.__w1_pinnedKey = topKey;
+  // 残りは scroll へ
+  const rest = Array.isArray(items) ? items.slice(1) : [];
+  for (const it of rest) {
+    scroller.appendChild(buildLegendItem_(it, totalSales, totalBooths, opt));
   }
 
-  const pinnedItem = items.find((x) => x.key === mount.__w1_pinnedKey) || items[0] || null;
-
-  const pinnedWrap = el("div", { class: "w1LegendPinned" });
-  const scrollWrap = el("div", { class: "w1LegendScroll" });
-
-  if (pinnedItem) pinnedWrap.appendChild(renderCard(pinnedItem, { pinned: true, selected: false }));
-
-  items.forEach((it) => {
-    const selected = it.key === mount.__w1_pinnedKey;
-    scrollWrap.appendChild(renderCard(it, { pinned: false, selected }));
-  });
-
-  scrollWrap.appendChild(
+  // note は最後に scroll 側へ
+  scroller.appendChild(
     el("div", {
       class: "widget1Note",
       text: `台数は 1ステーション（ブースID）単位で集計` + (Number.isFinite(totalBooths) ? `（合計 ${totalBooths}）` : ""),
     })
   );
-
-  box.appendChild(pinnedWrap);
-  box.appendChild(scrollWrap);
 }
 
 /* =========================
@@ -650,13 +608,6 @@ export function renderWidget1ShareDonut(mount, state, actions, opts = {}) {
   const rows = Array.isArray(state?.normRows) ? state.normRows : [];
 
   const axisKey = getAxisFromState_(state);
-
-  // ★追加：mount単位 pinned の軸同期（軸が変わったら pinned を初期化）
-  if (mount.__w1_lastAxis !== axisKey) {
-    mount.__w1_lastAxis = axisKey;
-    mount.__w1_pinnedKey = null;
-  }
-
   updateSelect_(mount, axisKey);
   updateTitle_(mount, axisKey);
 
